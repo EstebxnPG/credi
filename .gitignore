@@ -11,17 +11,17 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+dist/
+build/
 
 # Node
 node_modules/
-dist/
-build/
 
 # Base de datos local
 *.sqlite
 *.db
 
-# Notebooks (outputs, no el notebook en sí)
+# Notebooks outputs
 .ipynb_checkpoints/
 
 # OS
