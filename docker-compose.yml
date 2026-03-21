@@ -41,6 +41,7 @@ services:
     env_file: .env
     volumes:
       - ./backend:/app
+      - ./data/migrations:/app/data/migrations
     ports:
       - "8000:8000"
     depends_on:
