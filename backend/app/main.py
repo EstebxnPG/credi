@@ -19,3 +19,8 @@ app.add_middleware(
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "crediconfiemos-backend"}
+
+# En app/main.py, agrega:
+from app.api.v1 import pensionados
+
+app.include_router(pensionados.router, prefix="/api/v1")
