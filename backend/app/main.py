@@ -24,3 +24,8 @@ def health_check():
 from app.api.v1 import pensionados
 
 app.include_router(pensionados.router, prefix="/api/v1")
+
+from app.api.v1 import auth, usuarios
+
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(usuarios.router, prefix="/api/v1")
