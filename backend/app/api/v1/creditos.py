@@ -9,6 +9,7 @@ from typing import Optional
 from app.core.dependencies import get_db, get_current_user, solo_admin
 from app.db.models.usuario import Usuario
 from app.schemas.credito import CreditoCreate, CreditoUpdate, CreditoCambioEstado, CreditoRead
+from app.schemas.historial_credito import HistorialCreditoRead
 from app.services import credito_service
 
 router = APIRouter(prefix="/creditos", tags=["Créditos"])
@@ -33,6 +34,15 @@ def listar_creditos(
     _: Usuario = Depends(get_current_user),
 ):
     return credito_service.listar_creditos(db, pensionado_id, asesor_id, oficina_id, estado)
+
+
+@router.get("/{credito_id}/historial", response_model=list[HistorialCreditoRead])
+def obtener_historial_credito(
+    credito_id: int,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    return credito_service.obtener_historial_credito(db, credito_id)
 
 
 @router.get("/{credito_id}", response_model=CreditoRead)
@@ -72,7 +82,7 @@ def cambiar_estado(
 def desactivar_credito(
     credito_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(solo_admin),
+    usuario_actual: Usuario = Depends(solo_admin),
 ):
     """Soft delete. Solo administrador."""
-    return credito_service.desactivar_credito(db, credito_id)
+    return credito_service.desactivar_credito(db, credito_id, usuario_actual)

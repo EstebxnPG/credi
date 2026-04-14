@@ -1,144 +1,467 @@
-from pydantic import BaseModel, field_validator, model_validator
-from typing import Optional
-from datetime import date, datetime
+"""
+credito_service.py
+Lógica de negocio de Créditos.
+Implementa CRUD, validación contra cooperativa y máquina de estados.
+"""
+from datetime import date
 
-# Estados válidos definidos en el SRS
-ESTADOS_VALIDOS = {
-    "Prospecto",
-    "Enviado a cooperativa",
-    "Devuelto por corrección",
-    "Reenviado",
-    "Aprobado",
-    "Rechazado",
-}
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 
-# Transiciones permitidas: desde → {hacia donde puede ir}
-TRANSICIONES_VALIDAS: dict[str, set[str]] = {
-    "Prospecto":              {"Enviado a cooperativa"},
-    "Enviado a cooperativa":  {"Devuelto por corrección", "Aprobado", "Rechazado"},
-    "Devuelto por corrección":{"Reenviado"},
-    "Reenviado":              {"Devuelto por corrección", "Aprobado", "Rechazado"},
-    "Aprobado":               set(),   # estado final
-    "Rechazado":              set(),   # estado final
-}
-
-
-# ─── Create ──────────────────────────────────────────────────────────────────
-class CreditoCreate(BaseModel):
-    pensionado_id: int
-    asesor_id: int
-    oficina_id: int
-    cooperativa_id: int
-    pagaduria_id: int
-    monto_solicitado: float
-    plazo: int
-    nro_libranza: Optional[str] = None
-    tipo_credito: Optional[str] = None
-    nro_afiliacion: Optional[str] = None
-    observaciones: Optional[str] = None
-
-    @field_validator("monto_solicitado")
-    @classmethod
-    def monto_positivo(cls, v: float) -> float:
-        if v <= 0:
-            raise ValueError("El monto solicitado debe ser mayor a 0")
-        return v
-
-    @field_validator("plazo")
-    @classmethod
-    def plazo_positivo(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("El plazo debe ser mayor a 0")
-        return v
+from app.db.models.cooperativa import Cooperativa
+from app.db.models.credito import Credito
+from app.db.models.historial_credito import HistorialCredito
+from app.db.models.oficina import Oficina
+from app.db.models.pagaduria import Pagaduria
+from app.db.models.pensionado import Pensionado
+from app.db.models.usuario import Usuario
+from app.schemas.credito import (
+    CreditoCambioEstado,
+    CreditoCreate,
+    CreditoUpdate,
+    TRANSICIONES_VALIDAS,
+)
+from app.schemas.historial_credito import HistorialCreditoRead
+from app.services.cooperativa_service import validar_credito_contra_cooperativa
+from app.services.log_service import registrar_log
 
 
-# ─── Update (campos editables por asesora) ───────────────────────────────────
-class CreditoUpdate(BaseModel):
-    """
-    Solo se pueden editar créditos en estado Prospecto o Devuelto por corrección.
-    El servicio valida eso. Aquí solo definimos qué campos son modificables.
-    """
-    monto_solicitado: Optional[float] = None
-    plazo: Optional[int] = None
-    nro_libranza: Optional[str] = None
-    tipo_credito: Optional[str] = None
-    nro_afiliacion: Optional[str] = None
-    observaciones: Optional[str] = None
-    pagaduria_id: Optional[int] = None
-    cooperativa_id: Optional[int] = None
-
-    @field_validator("monto_solicitado")
-    @classmethod
-    def monto_positivo(cls, v):
-        if v is not None and v <= 0:
-            raise ValueError("El monto solicitado debe ser mayor a 0")
-        return v
-
-    @field_validator("plazo")
-    @classmethod
-    def plazo_positivo(cls, v):
-        if v is not None and v <= 0:
-            raise ValueError("El plazo debe ser mayor a 0")
-        return v
+ESTADOS_EDITABLES = {"Prospecto", "Devuelto por corrección"}
+ESTADOS_FINALES = {"Aprobado", "Rechazado"}
 
 
-# ─── Cambio de estado ────────────────────────────────────────────────────────
-class CreditoCambioEstado(BaseModel):
-    """
-    Endpoint dedicado para cambiar el estado de un crédito.
-    Al aprobar, monto_aprobado es obligatorio.
-    """
-    estado_nuevo: str
-    observaciones: Optional[str] = None
+def _calcular_edad(fecha_nacimiento: date, fecha_referencia: date | None = None) -> int:
+    fecha_referencia = fecha_referencia or date.today()
+    return fecha_referencia.year - fecha_nacimiento.year - (
+        (fecha_referencia.month, fecha_referencia.day)
+        < (fecha_nacimiento.month, fecha_nacimiento.day)
+    )
 
-    # Campos solo relevantes al aprobar
-    monto_aprobado: Optional[float] = None
-    tasa_mensual: Optional[float] = None
-    valor_cuota: Optional[float] = None
-    fecha_desembolso: Optional[date] = None
-    fecha_fin_estimada: Optional[date] = None
 
-    @field_validator("estado_nuevo")
-    @classmethod
-    def estado_valido(cls, v: str) -> str:
-        if v not in ESTADOS_VALIDOS:
-            raise ValueError(
-                f"Estado '{v}' no válido. Opciones: {', '.join(sorted(ESTADOS_VALIDOS))}"
+def _calcular_meses_desde(fecha_inicio: date, fecha_referencia: date | None = None) -> int:
+    fecha_referencia = fecha_referencia or date.today()
+    meses = (fecha_referencia.year - fecha_inicio.year) * 12 + (
+        fecha_referencia.month - fecha_inicio.month
+    )
+    if fecha_referencia.day < fecha_inicio.day:
+        meses -= 1
+    return max(meses, 0)
+
+
+def _get_credito_or_404(db: Session, credito_id: int) -> Credito:
+    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    if not credito:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Crédito con id {credito_id} no encontrado",
+        )
+    return credito
+
+
+def _get_pensionado_activo_or_404(db: Session, pensionado_id: int) -> Pensionado:
+    pensionado = (
+        db.query(Pensionado)
+        .filter(Pensionado.id == pensionado_id, Pensionado.is_active == True)  # noqa: E712
+        .first()
+    )
+    if not pensionado:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pensionado con id {pensionado_id} no encontrado",
+        )
+    return pensionado
+
+
+def _get_usuario_activo_or_404(db: Session, usuario_id: int) -> Usuario:
+    usuario = (
+        db.query(Usuario)
+        .filter(Usuario.id == usuario_id, Usuario.is_active == True)  # noqa: E712
+        .first()
+    )
+    if not usuario:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Usuario con id {usuario_id} no encontrado",
+        )
+    return usuario
+
+
+def _get_oficina_activa_or_404(db: Session, oficina_id: int) -> Oficina:
+    oficina = (
+        db.query(Oficina)
+        .filter(Oficina.id == oficina_id, Oficina.is_active == True)  # noqa: E712
+        .first()
+    )
+    if not oficina:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Oficina con id {oficina_id} no encontrada",
+        )
+    return oficina
+
+
+def _get_cooperativa_activa_or_404(db: Session, cooperativa_id: int) -> Cooperativa:
+    cooperativa = (
+        db.query(Cooperativa)
+        .filter(
+            Cooperativa.id == cooperativa_id,
+            Cooperativa.is_active == True,  # noqa: E712
+        )
+        .first()
+    )
+    if not cooperativa:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Cooperativa con id {cooperativa_id} no encontrada",
+        )
+    return cooperativa
+
+
+def _get_pagaduria_activa_or_404(db: Session, pagaduria_id: int) -> Pagaduria:
+    pagaduria = (
+        db.query(Pagaduria)
+        .filter(Pagaduria.id == pagaduria_id, Pagaduria.is_active == True)  # noqa: E712
+        .first()
+    )
+    if not pagaduria:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pagaduría con id {pagaduria_id} no encontrada",
+        )
+    return pagaduria
+
+
+def _registrar_historial(
+    db: Session,
+    credito_id: int,
+    usuario_id: int,
+    estado_anterior: str | None,
+    estado_nuevo: str,
+    observacion: str | None = None,
+) -> None:
+    historial = HistorialCredito(
+        credito_id=credito_id,
+        usuario_id=usuario_id,
+        estado_anterior=estado_anterior,
+        estado_nuevo=estado_nuevo,
+        observacion=observacion,
+    )
+    db.add(historial)
+
+
+def _validar_reglas_credito(
+    db: Session,
+    pensionado_id: int,
+    cooperativa_id: int,
+    monto: float,
+    plazo: int,
+) -> None:
+    pensionado = _get_pensionado_activo_or_404(db, pensionado_id)
+    cooperativa = _get_cooperativa_activa_or_404(db, cooperativa_id)
+
+    edad = _calcular_edad(pensionado.fecha_nacimiento)
+    meses_pensionado = _calcular_meses_desde(pensionado.fecha_inicio_pension)
+
+    errores = validar_credito_contra_cooperativa(
+        cooperativa=cooperativa,
+        edad_pensionado=edad,
+        monto=monto,
+        plazo=plazo,
+        meses_como_pensionado=meses_pensionado,
+    )
+
+    if errores:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=errores,
+        )
+
+
+def _validar_contexto_creacion(
+    data: CreditoCreate,
+    usuario_actual: Usuario,
+    asesor: Usuario,
+) -> None:
+    if asesor.rol != "asesora" and asesor.rol != "administrador":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El usuario asignado como asesor no tiene un rol válido",
+        )
+
+    if usuario_actual.rol == "asesora":
+        if data.asesor_id != usuario_actual.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Una asesora solo puede crear créditos a su nombre",
             )
-        return v
-
-    @model_validator(mode="after")
-    def monto_requerido_si_aprobado(self):
-        if self.estado_nuevo == "Aprobado" and not self.monto_aprobado:
-            raise ValueError("monto_aprobado es obligatorio cuando el estado es Aprobado")
-        if self.monto_aprobado is not None and self.monto_aprobado <= 0:
-            raise ValueError("monto_aprobado debe ser mayor a 0")
-        return self
+        if data.oficina_id != usuario_actual.oficina_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Una asesora solo puede crear créditos para su oficina",
+            )
 
 
-# ─── Read ────────────────────────────────────────────────────────────────────
-class CreditoRead(BaseModel):
-    id: int
-    pensionado_id: int
-    asesor_id: int
-    oficina_id: int
-    cooperativa_id: int
-    pagaduria_id: int
-    nro_libranza: Optional[str]
-    tipo_credito: Optional[str]
-    monto_solicitado: float
-    monto_aprobado: Optional[float]
-    plazo: int
-    estado: str
-    tasa_mensual: Optional[float]
-    valor_cuota: Optional[float]
-    fecha_desembolso: Optional[date]
-    fecha_fin_estimada: Optional[date]
-    nro_afiliacion: Optional[str]
-    observaciones: Optional[str]
-    fecha_registro: datetime
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+def _validar_credito_editable(credito: Credito) -> None:
+    if credito.estado in ESTADOS_FINALES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Un crédito aprobado o rechazado no puede editarse",
+        )
+    if credito.estado not in ESTADOS_EDITABLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden editar créditos en Prospecto o Devuelto por corrección",
+        )
 
-    model_config = {"from_attributes": True}
+
+def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> Credito:
+    asesor = _get_usuario_activo_or_404(db, data.asesor_id)
+    _get_oficina_activa_or_404(db, data.oficina_id)
+    _get_pagaduria_activa_or_404(db, data.pagaduria_id)
+    _validar_contexto_creacion(data, usuario_actual, asesor)
+    _validar_reglas_credito(
+        db=db,
+        pensionado_id=data.pensionado_id,
+        cooperativa_id=data.cooperativa_id,
+        monto=data.monto_solicitado,
+        plazo=data.plazo,
+    )
+
+    credito = Credito(**data.model_dump(), estado="Prospecto")
+    db.add(credito)
+    db.flush()
+
+    _registrar_historial(
+        db=db,
+        credito_id=credito.id,
+        usuario_id=usuario_actual.id,
+        estado_anterior=None,
+        estado_nuevo=credito.estado,
+        observacion="Crédito creado",
+    )
+
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="crear",
+        valores_despues={**data.model_dump(), "estado": "Prospecto"},
+    )
+
+    db.commit()
+    db.refresh(credito)
+    return credito
+
+
+def listar_creditos(
+    db: Session,
+    pensionado_id: int | None = None,
+    asesor_id: int | None = None,
+    oficina_id: int | None = None,
+    estado: str | None = None,
+) -> list[Credito]:
+    query = db.query(Credito).filter(Credito.is_active == True)  # noqa: E712
+
+    if pensionado_id is not None:
+        query = query.filter(Credito.pensionado_id == pensionado_id)
+    if asesor_id is not None:
+        query = query.filter(Credito.asesor_id == asesor_id)
+    if oficina_id is not None:
+        query = query.filter(Credito.oficina_id == oficina_id)
+    if estado is not None:
+        query = query.filter(Credito.estado == estado)
+
+    return query.order_by(Credito.created_at.desc()).all()
+
+
+def obtener_credito(db: Session, credito_id: int) -> Credito:
+    credito = _get_credito_or_404(db, credito_id)
+    if not credito.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Crédito con id {credito_id} no encontrado",
+        )
+    return credito
+
+
+def obtener_historial_credito(
+    db: Session, credito_id: int
+) -> list[HistorialCreditoRead]:
+    obtener_credito(db, credito_id)
+    historial = (
+        db.query(HistorialCredito)
+        .filter(HistorialCredito.credito_id == credito_id)
+        .order_by(HistorialCredito.created_at.asc(), HistorialCredito.id.asc())
+        .all()
+    )
+
+    return [
+        HistorialCreditoRead(
+            id=item.id,
+            credito_id=item.credito_id,
+            usuario_id=item.usuario_id,
+            usuario_nombre=item.usuario.nombre if item.usuario else None,
+            estado_anterior=item.estado_anterior,
+            estado_nuevo=item.estado_nuevo,
+            observacion=item.observacion,
+            created_at=item.created_at,
+        )
+        for item in historial
+    ]
+
+
+def actualizar_credito(
+    db: Session,
+    credito_id: int,
+    data: CreditoUpdate,
+    usuario_actual: Usuario,
+) -> Credito:
+    credito = obtener_credito(db, credito_id)
+    _validar_credito_editable(credito)
+
+    cambios = data.model_dump(exclude_unset=True)
+    if not cambios:
+        return credito
+
+    valores_antes = {
+        campo: getattr(credito, campo)
+        for campo in cambios.keys()
+    }
+
+    if "pagaduria_id" in cambios:
+        _get_pagaduria_activa_or_404(db, cambios["pagaduria_id"])
+    if "cooperativa_id" in cambios:
+        _get_cooperativa_activa_or_404(db, cambios["cooperativa_id"])
+
+    cooperativa_id = cambios.get("cooperativa_id", credito.cooperativa_id)
+    monto = cambios.get("monto_solicitado", float(credito.monto_solicitado))
+    plazo = cambios.get("plazo", credito.plazo)
+
+    _validar_reglas_credito(
+        db=db,
+        pensionado_id=credito.pensionado_id,
+        cooperativa_id=cooperativa_id,
+        monto=monto,
+        plazo=plazo,
+    )
+
+    for campo, valor in cambios.items():
+        setattr(credito, campo, valor)
+
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="actualizar",
+        valores_antes=valores_antes,
+        valores_despues=cambios,
+    )
+
+    db.commit()
+    db.refresh(credito)
+    return credito
+
+
+def cambiar_estado(
+    db: Session,
+    credito_id: int,
+    data: CreditoCambioEstado,
+    usuario_actual: Usuario,
+) -> Credito:
+    credito = obtener_credito(db, credito_id)
+    estado_actual = credito.estado
+    estado_nuevo = data.estado_nuevo
+
+    if estado_nuevo == estado_actual:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El crédito ya se encuentra en ese estado",
+        )
+
+    permitidos = TRANSICIONES_VALIDAS.get(estado_actual, set())
+    if estado_nuevo not in permitidos:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se permite pasar de '{estado_actual}' a '{estado_nuevo}'",
+        )
+
+    credito.estado = estado_nuevo
+
+    if estado_nuevo == "Aprobado":
+        cooperativa = _get_cooperativa_activa_or_404(db, credito.cooperativa_id)
+        credito.monto_aprobado = data.monto_aprobado
+        credito.tasa_mensual = data.tasa_mensual
+        credito.valor_cuota = data.valor_cuota
+        credito.fecha_desembolso = data.fecha_desembolso
+        credito.fecha_fin_estimada = data.fecha_fin_estimada
+
+        # Se calcula y se deja disponible al menos en observaciones mientras
+        # el modelo no tenga una columna explícita de comisión.
+        comision = float(data.monto_aprobado) * (
+            float(cooperativa.porcentaje_comision) / 100
+        )
+        nota_comision = f"Comisión calculada: {comision:.2f}"
+        if data.observaciones:
+            credito.observaciones = f"{data.observaciones}\n{nota_comision}"
+        elif not credito.observaciones:
+            credito.observaciones = nota_comision
+        elif nota_comision not in credito.observaciones:
+            credito.observaciones = f"{credito.observaciones}\n{nota_comision}"
+
+    _registrar_historial(
+        db=db,
+        credito_id=credito.id,
+        usuario_id=usuario_actual.id,
+        estado_anterior=estado_actual,
+        estado_nuevo=estado_nuevo,
+        observacion=data.observaciones,
+    )
+
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="cambiar_estado",
+        valores_antes={"estado": estado_actual},
+        valores_despues={
+            "estado": estado_nuevo,
+            "monto_aprobado": data.monto_aprobado,
+            "tasa_mensual": data.tasa_mensual,
+            "valor_cuota": data.valor_cuota,
+            "fecha_desembolso": data.fecha_desembolso,
+            "fecha_fin_estimada": data.fecha_fin_estimada,
+        },
+    )
+
+    db.commit()
+    db.refresh(credito)
+    return credito
+
+
+def desactivar_credito(
+    db: Session, credito_id: int, usuario_actual: Usuario
+) -> Credito:
+    credito = _get_credito_or_404(db, credito_id)
+    if not credito.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El crédito ya está desactivado",
+        )
+    credito.is_active = False
+
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="desactivar",
+        valores_antes={"is_active": True},
+        valores_despues={"is_active": False},
+    )
+
+    db.commit()
+    db.refresh(credito)
+    return credito

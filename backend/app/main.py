@@ -1,7 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import auth, usuarios, pensionados, oficinas, cooperativas
+# imports (arriba)
+from app.api.v1 import (
+    auth,
+    usuarios,
+    pensionados,
+    oficinas,
+    cooperativas,
+    creditos,
+    pagadurias,
+    refinanciaciones,
+    logs,
+    documentos,
+)
 
 app = FastAPI(
     title="Crediconfiemos API",
@@ -28,3 +40,10 @@ app.include_router(usuarios.router,     prefix="/api/v1")
 app.include_router(pensionados.router,  prefix="/api/v1")
 app.include_router(oficinas.router,     prefix="/api/v1")
 app.include_router(cooperativas.router, prefix="/api/v1")
+app.include_router(pagadurias.router,   prefix="/api/v1")
+app.include_router(refinanciaciones.router, prefix="/api/v1")
+app.include_router(logs.router, prefix="/api/v1")
+app.include_router(documentos.router, prefix="/api/v1")
+
+# include_router (abajo)
+app.include_router(creditos.router, prefix="/api/v1")
