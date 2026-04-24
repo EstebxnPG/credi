@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import String, Integer, Numeric, Date, DateTime, ForeignKey, Text
+from sqlalchemy import String, Integer, Numeric, Date, DateTime, ForeignKey, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.mixins import TimestampMixin, SoftDeleteMixin
@@ -27,7 +27,7 @@ class Credito(Base, TimestampMixin, SoftDeleteMixin):
     nro_afiliacion: Mapped[str | None] = mapped_column(String(50))
     observaciones: Mapped[str | None] = mapped_column(Text)
     fecha_registro: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="now()"
+        DateTime(timezone=True), server_default=text("now()")
     )
 
     pensionado: Mapped["Pensionado"] = relationship(back_populates="creditos")

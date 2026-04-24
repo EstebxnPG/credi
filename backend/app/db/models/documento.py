@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy import String, Integer, ForeignKey, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.mixins import SoftDeleteMixin
@@ -16,7 +16,7 @@ class Documento(Base, SoftDeleteMixin):
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="now()"
+        DateTime(timezone=True), server_default=text("now()")
     )
 
     credito: Mapped["Credito"] = relationship(back_populates="documentos")

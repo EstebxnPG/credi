@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, Numeric, ForeignKey, DateTime
+from sqlalchemy import String, Integer, Numeric, ForeignKey, DateTime, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
@@ -16,7 +16,7 @@ class Refinanciacion(Base):
     cuotas_recoge: Mapped[int | None] = mapped_column(Integer)
     nro_cuotas_anterior: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="now()"
+        DateTime(timezone=True), server_default=text("now()")
     )
 
     credito: Mapped["Credito"] = relationship(back_populates="refinanciaciones")

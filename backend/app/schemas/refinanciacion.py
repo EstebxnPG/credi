@@ -18,6 +18,7 @@ class RefinanciacionBase(BaseModel):
     def limpiar_textos(cls, value):
         if value is None:
             return value
+            
         value = str(value).strip()
         return value or None
 

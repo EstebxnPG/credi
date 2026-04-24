@@ -53,9 +53,14 @@ services:
     container_name: credi_frontend
     restart: unless-stopped
     env_file: .env
+    environment:
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - frontend_next:/app/.next
     ports:
       - "3000:3000"
     depends_on:
@@ -64,3 +69,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  frontend_next:
