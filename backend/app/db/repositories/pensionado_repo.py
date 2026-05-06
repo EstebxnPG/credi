@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, desc
 from app.db.models.pensionado import Pensionado
 from app.schemas.pensionado import PensionadoCreate, PensionadoUpdate
 from typing import Optional
@@ -10,23 +10,24 @@ class PensionadoRepository:
         self.db = db
 
     def get_by_id(self, pensionado_id: int) -> Optional[Pensionado]:
-        stmt = select(Pensionado).where(
-            Pensionado.id == pensionado_id,
-            Pensionado.is_active == True
-        )
+        stmt = select(Pensionado).where(Pensionado.id == pensionado_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
     def get_by_documento(self, documento: str) -> Optional[Pensionado]:
         stmt = select(Pensionado).where(Pensionado.documento == documento)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> list[Pensionado]:
+    def get_all(
+        self, skip: int = 0, limit: int = 100, solo_activos: bool = False
+    ) -> list[Pensionado]:
         stmt = (
             select(Pensionado)
-            .where(Pensionado.is_active == True)
+            .order_by(desc(Pensionado.is_active), Pensionado.id.desc())
             .offset(skip)
             .limit(limit)
         )
+        if solo_activos:
+            stmt = stmt.where(Pensionado.is_active == True)
         return list(self.db.execute(stmt).scalars().all())
 
     def create(self, data: PensionadoCreate) -> Pensionado:

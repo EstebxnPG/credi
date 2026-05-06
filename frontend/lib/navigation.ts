@@ -13,7 +13,7 @@ export const navItems: NavItem[] = [
   },
   {
     href: "/pensionados",
-    label: "Pensionados",
+    label: "Contactos",
     description: "Captacion y seguimiento",
   },
   {
@@ -34,7 +34,7 @@ export const navItems: NavItem[] = [
   {
     href: "/cooperativas",
     label: "Cooperativas",
-    description: "Reglas y comisiones",
+    description: "Reglas de aprobación",
     adminOnly: true,
   },
   {

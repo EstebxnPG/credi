@@ -26,6 +26,8 @@ class Credito(Base, TimestampMixin, SoftDeleteMixin):
     fecha_fin_estimada: Mapped[date | None] = mapped_column(Date)
     nro_afiliacion: Mapped[str | None] = mapped_column(String(50))
     observaciones: Mapped[str | None] = mapped_column(Text)
+    tiene_documentos_pendientes: Mapped[bool] = mapped_column(default=False, nullable=False)
+    documentos_pendientes: Mapped[str | None] = mapped_column(Text)
     fecha_registro: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

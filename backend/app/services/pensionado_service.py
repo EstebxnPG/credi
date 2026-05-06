@@ -26,8 +26,8 @@ class PensionadoService:
             )
         return pensionado
 
-    def listar(self, skip: int = 0, limit: int = 100):
-        return self.repo.get_all(skip=skip, limit=limit)
+    def listar(self, skip: int = 0, limit: int = 100, solo_activos: bool = False):
+        return self.repo.get_all(skip=skip, limit=limit, solo_activos=solo_activos)
 
     def actualizar(self, pensionado_id: int, data: PensionadoUpdate):
         pensionado = self.obtener_o_404(pensionado_id)

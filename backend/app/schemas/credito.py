@@ -36,6 +36,8 @@ class CreditoCreate(BaseModel):
     tipo_credito: Optional[str] = None
     nro_afiliacion: Optional[str] = None
     observaciones: Optional[str] = None
+    tiene_documentos_pendientes: bool = False
+    documentos_pendientes: Optional[str] = None
 
     @field_validator("monto_solicitado")
     @classmethod
@@ -66,6 +68,8 @@ class CreditoUpdate(BaseModel):
     observaciones: Optional[str] = None
     pagaduria_id: Optional[int] = None
     cooperativa_id: Optional[int] = None
+    tiene_documentos_pendientes: Optional[bool] = None
+    documentos_pendientes: Optional[str] = None
 
     @field_validator("monto_solicitado")
     @classmethod
@@ -136,6 +140,8 @@ class CreditoRead(BaseModel):
     fecha_fin_estimada: Optional[date]
     nro_afiliacion: Optional[str]
     observaciones: Optional[str]
+    tiene_documentos_pendientes: bool
+    documentos_pendientes: Optional[str]
     fecha_registro: datetime
     is_active: bool
     created_at: datetime

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { writeSession } from "@/lib/session";
@@ -14,6 +14,14 @@ type LoginResponse = {
 };
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const [correo, setCorreo] = useState("admin@crediconfiemos.com");
   const [contrasena, setContrasena] = useState("");
   const [loading, setLoading] = useState(false);

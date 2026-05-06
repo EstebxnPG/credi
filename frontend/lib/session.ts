@@ -33,3 +33,22 @@ export function writeSession(session: SessionUser) {
 export function clearSession() {
   window.localStorage.removeItem(SESSION_KEY);
 }
+
+export function readSessionUserId() {
+  const session = readSession();
+  const token = session?.accessToken;
+
+  if (!token || typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const payload = token.split(".")[1];
+    const normalized = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const decoded = window.atob(normalized);
+    const data = JSON.parse(decoded) as { sub?: string };
+    return data.sub ? Number(data.sub) : null;
+  } catch {
+    return null;
+  }
+}

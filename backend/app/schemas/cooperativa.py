@@ -13,7 +13,7 @@ class CooperativaBase(BaseModel):
     plazo_minimo: int
     plazo_maximo: int
     tiempo_minimo_pension: int   # en meses
-    porcentaje_comision: float   # ej: 3.5 → 3.5%
+    porcentaje_comision: float = 0.0   # reservado para uso futuro
 
     @field_validator("nombre")
     @classmethod
@@ -46,7 +46,7 @@ class CooperativaBase(BaseModel):
     @field_validator("porcentaje_comision")
     @classmethod
     def comision_valida(cls, v: float) -> float:
-        if not (0 < v <= 100):
+        if not (0 <= v <= 100):
             raise ValueError("El porcentaje de comisión debe estar entre 0 y 100")
         return v
 

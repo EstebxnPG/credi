@@ -61,7 +61,7 @@ textarea {
   }
 
   .card-panel {
-    @apply rounded-[24px] border bg-white/70;
+    @apply rounded-[18px] border bg-white/70;
     border-color: var(--line);
     box-shadow: 0 10px 30px rgba(67, 49, 24, 0.08);
   }

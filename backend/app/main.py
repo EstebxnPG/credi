@@ -13,6 +13,7 @@ from app.api.v1 import (
     refinanciaciones,
     logs,
     documentos,
+    reportes,
 )
 
 app = FastAPI(
@@ -44,6 +45,7 @@ app.include_router(pagadurias.router,   prefix="/api/v1")
 app.include_router(refinanciaciones.router, prefix="/api/v1")
 app.include_router(logs.router, prefix="/api/v1")
 app.include_router(documentos.router, prefix="/api/v1")
+app.include_router(reportes.router, prefix="/api/v1")
 
 # include_router (abajo)
 app.include_router(creditos.router, prefix="/api/v1")

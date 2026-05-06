@@ -214,6 +214,29 @@ def _validar_credito_editable(credito: Credito) -> None:
         )
 
 
+def _normalizar_pendientes_documentales(
+    tiene_documentos_pendientes: bool | None,
+    documentos_pendientes: str | None,
+) -> tuple[bool | None, str | None]:
+    if documentos_pendientes is not None:
+        lineas = [linea.strip() for linea in documentos_pendientes.splitlines() if linea.strip()]
+        documentos_pendientes = "\n".join(lineas) or None
+
+    if tiene_documentos_pendientes is False:
+        return False, None
+
+    if tiene_documentos_pendientes is True and not documentos_pendientes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debes indicar cuales documentos estan pendientes",
+        )
+
+    if tiene_documentos_pendientes is None:
+        return None, documentos_pendientes
+
+    return True, documentos_pendientes
+
+
 def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> Credito:
     asesor = _get_usuario_activo_or_404(db, data.asesor_id)
     _get_oficina_activa_or_404(db, data.oficina_id)
@@ -227,7 +250,16 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
         plazo=data.plazo,
     )
 
-    credito = Credito(**data.model_dump(), estado="Prospecto")
+    tiene_documentos_pendientes, documentos_pendientes = _normalizar_pendientes_documentales(
+        data.tiene_documentos_pendientes,
+        data.documentos_pendientes,
+    )
+
+    payload = data.model_dump()
+    payload["tiene_documentos_pendientes"] = bool(tiene_documentos_pendientes)
+    payload["documentos_pendientes"] = documentos_pendientes
+
+    credito = Credito(**payload, estado="Prospecto")
     db.add(credito)
     db.flush()
 
@@ -246,7 +278,7 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
         tabla_afectada="creditos",
         registro_afectado=credito.id,
         tipo_accion="crear",
-        valores_despues={**data.model_dump(), "estado": "Prospecto"},
+        valores_despues={**payload, "estado": "Prospecto"},
     )
 
     db.commit()
@@ -334,6 +366,15 @@ def actualizar_credito(
     if "cooperativa_id" in cambios:
         _get_cooperativa_activa_or_404(db, cambios["cooperativa_id"])
 
+    if "tiene_documentos_pendientes" in cambios or "documentos_pendientes" in cambios:
+        tiene_documentos_pendientes, documentos_pendientes = _normalizar_pendientes_documentales(
+            cambios.get("tiene_documentos_pendientes", credito.tiene_documentos_pendientes),
+            cambios.get("documentos_pendientes", credito.documentos_pendientes),
+        )
+        if tiene_documentos_pendientes is not None:
+            cambios["tiene_documentos_pendientes"] = tiene_documentos_pendientes
+        cambios["documentos_pendientes"] = documentos_pendientes
+
     cooperativa_id = cambios.get("cooperativa_id", credito.cooperativa_id)
     monto = cambios.get("monto_solicitado", float(credito.monto_solicitado))
     plazo = cambios.get("plazo", credito.plazo)
@@ -390,25 +431,11 @@ def cambiar_estado(
     credito.estado = estado_nuevo
 
     if estado_nuevo == "Aprobado":
-        cooperativa = _get_cooperativa_activa_or_404(db, credito.cooperativa_id)
         credito.monto_aprobado = data.monto_aprobado
         credito.tasa_mensual = data.tasa_mensual
         credito.valor_cuota = data.valor_cuota
         credito.fecha_desembolso = data.fecha_desembolso
         credito.fecha_fin_estimada = data.fecha_fin_estimada
-
-        # Se calcula y se deja disponible al menos en observaciones mientras
-        # el modelo no tenga una columna explícita de comisión.
-        comision = float(data.monto_aprobado) * (
-            float(cooperativa.porcentaje_comision) / 100
-        )
-        nota_comision = f"Comisión calculada: {comision:.2f}"
-        if data.observaciones:
-            credito.observaciones = f"{data.observaciones}\n{nota_comision}"
-        elif not credito.observaciones:
-            credito.observaciones = nota_comision
-        elif nota_comision not in credito.observaciones:
-            credito.observaciones = f"{credito.observaciones}\n{nota_comision}"
 
     _registrar_historial(
         db=db,
