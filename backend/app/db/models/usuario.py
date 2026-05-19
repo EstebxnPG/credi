@@ -22,3 +22,4 @@ class Usuario(Base, TimestampMixin, SoftDeleteMixin):
     creditos: Mapped[list["Credito"]] = relationship(back_populates="asesor")
     historial: Mapped[list["HistorialCredito"]] = relationship(back_populates="usuario")
     logs: Mapped[list["Log"]] = relationship(back_populates="usuario")
+    seguimientos: Mapped[list["Seguimiento"]] = relationship(back_populates="usuario")

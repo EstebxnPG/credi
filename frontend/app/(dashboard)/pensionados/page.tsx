@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ApiError, apiFetch } from "@/lib/api";
@@ -22,23 +22,16 @@ type Credito = {
   id: number;
   pensionado_id: number;
   asesor_id: number;
-  cooperativa_id: number;
   oficina_id: number;
+  cooperativa_id: number;
   pagaduria_id: number;
-  nro_libranza: string | null;
-  tipo_credito: string | null;
   monto_solicitado: number;
   monto_aprobado: number | null;
   plazo: number;
   estado: string;
-  tasa_mensual?: number | null;
-  valor_cuota?: number | null;
-  fecha_desembolso?: string | null;
-  fecha_fin_estimada?: string | null;
-  nro_afiliacion: string | null;
   observaciones: string | null;
-  tiene_documentos_pendientes?: boolean;
-  documentos_pendientes?: string | null;
+  tiene_documentos_pendientes: boolean;
+  documentos_pendientes: string | null;
   created_at: string;
 };
 
@@ -53,15 +46,18 @@ type Documento = {
   created_at: string;
 };
 
-type Refinanciacion = {
+type Seguimiento = {
   id: number;
-  credito_id: number;
-  obligacion_externa: string | null;
-  entidad: string | null;
-  valor_refinanciacion: number | null;
-  valor_cuota_recoge: number | null;
-  cuotas_recoge: number | null;
-  nro_cuotas_anterior: number | null;
+  pensionado_id: number;
+  pensionado_nombre: string | null;
+  pensionado_documento: string | null;
+  oficina_id: number;
+  oficina_nombre: string | null;
+  usuario_nombre: string | null;
+  tipo: string;
+  comentario: string;
+  resultado: string | null;
+  fecha_proximo_contacto: string | null;
   created_at: string;
 };
 
@@ -71,16 +67,7 @@ type CatalogItem = {
   is_active?: boolean;
 };
 
-type HistorialItem = {
-  id: number;
-  usuario_nombre: string | null;
-  estado_anterior: string | null;
-  estado_nuevo: string;
-  observacion: string | null;
-  created_at: string;
-};
-
-type PensionadoFormState = {
+type PensionadoForm = {
   nombre: string;
   documento: string;
   fecha_nacimiento: string;
@@ -90,42 +77,32 @@ type PensionadoFormState = {
   fecha_inicio_pension: string;
 };
 
-type CreditoFormState = {
+type CreditoForm = {
   oficina_id: string;
   cooperativa_id: string;
   pagaduria_id: string;
   monto_solicitado: string;
   plazo: string;
-  nro_libranza: string;
-  tipo_credito: string;
-  nro_afiliacion: string;
-  observaciones: string;
-};
-
-type CreditoEditFormState = {
-  cooperativa_id: string;
-  pagaduria_id: string;
-  monto_solicitado: string;
-  plazo: string;
-  nro_libranza: string;
-  tipo_credito: string;
-  nro_afiliacion: string;
   observaciones: string;
   tiene_documentos_pendientes: boolean;
   documentos_pendientes: string;
 };
 
-type CreditoEstadoFormState = {
+type SeguimientoForm = {
+  oficina_id: string;
+  tipo: string;
+  comentario: string;
+  resultado: string;
+  fecha_proximo_contacto: string;
+};
+
+type EstadoForm = {
   estado_nuevo: string;
   observaciones: string;
   monto_aprobado: string;
-  tasa_mensual: string;
-  valor_cuota: string;
-  fecha_desembolso: string;
-  fecha_fin_estimada: string;
 };
 
-const initialForm: PensionadoFormState = {
+const initialPensionadoForm: PensionadoForm = {
   nombre: "",
   documento: "",
   fecha_nacimiento: "",
@@ -135,80 +112,45 @@ const initialForm: PensionadoFormState = {
   fecha_inicio_pension: "",
 };
 
-const initialCreditoForm: CreditoFormState = {
+const initialCreditoForm: CreditoForm = {
   oficina_id: "",
   cooperativa_id: "",
   pagaduria_id: "",
   monto_solicitado: "",
   plazo: "",
-  nro_libranza: "",
-  tipo_credito: "",
-  nro_afiliacion: "",
-  observaciones: "",
-};
-
-const initialCreditoEditForm: CreditoEditFormState = {
-  cooperativa_id: "",
-  pagaduria_id: "",
-  monto_solicitado: "",
-  plazo: "",
-  nro_libranza: "",
-  tipo_credito: "",
-  nro_afiliacion: "",
   observaciones: "",
   tiene_documentos_pendientes: false,
   documentos_pendientes: "",
 };
 
-const initialCreditoEstadoForm: CreditoEstadoFormState = {
+const initialEstadoForm: EstadoForm = {
   estado_nuevo: "",
   observaciones: "",
   monto_aprobado: "",
-  tasa_mensual: "",
-  valor_cuota: "",
-  fecha_desembolso: "",
-  fecha_fin_estimada: "",
 };
 
-const estadoTransitions: Record<string, string[]> = {
+const tiposSeguimiento = [
+  "cotizacion",
+  "llamada",
+  "whatsapp",
+  "visita",
+  "documentos",
+  "objecion",
+  "seguimiento",
+  "cierre_perdido",
+];
+
+const transiciones: Record<string, string[]> = {
   Prospecto: ["Enviado a cooperativa"],
   "Enviado a cooperativa": ["Devuelto por corrección", "Aprobado", "Rechazado"],
   "Devuelto por corrección": ["Reenviado"],
   Reenviado: ["Devuelto por corrección", "Aprobado", "Rechazado"],
-  Aprobado: [],
-  Rechazado: [],
 };
-const ESTADOS_EDITABLES = new Set(["Prospecto", "Devuelto por corrección"]);
-
-const PAGE_SIZE = 5;
-
-function sortPensionados(items: Pensionado[]) {
-  return [...items].sort((left, right) => {
-    if (left.is_active !== right.is_active) {
-      return left.is_active ? -1 : 1;
-    }
-    return right.id - left.id;
-  });
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es-CO", {
-    dateStyle: "medium",
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("es-CO", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 
 function formatCurrency(value: number | null) {
   if (value === null) {
     return "Sin valor";
   }
-
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: "COP",
@@ -216,1728 +158,929 @@ function formatCurrency(value: number | null) {
   }).format(value);
 }
 
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Sin fecha";
+  }
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "medium",
+  }).format(new Date(value));
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Sin fecha";
+  }
+  return new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function normalizeText(value: string) {
+  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export default function PensionadosPage() {
   const router = useRouter();
   const session = readSession();
   const isAdmin = session?.rol === "administrador";
-  const [items, setItems] = useState<Pensionado[]>([]);
+  const userId = readSessionUserId();
+  const [pensionados, setPensionados] = useState<Pensionado[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedCreditoId, setSelectedCreditoId] = useState<number | null>(null);
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const [form, setForm] = useState<PensionadoFormState>(initialForm);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loadingRelacionados, setLoadingRelacionados] = useState(false);
-  const [loadingCreditoDetalle, setLoadingCreditoDetalle] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [creditos, setCreditos] = useState<Credito[]>([]);
+  const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
-  const [refinanciaciones, setRefinanciaciones] = useState<Refinanciacion[]>([]);
-  const [historial, setHistorial] = useState<HistorialItem[]>([]);
   const [oficinas, setOficinas] = useState<CatalogItem[]>([]);
   const [cooperativas, setCooperativas] = useState<CatalogItem[]>([]);
   const [pagadurias, setPagadurias] = useState<CatalogItem[]>([]);
-  const [showCreditoForm, setShowCreditoForm] = useState(false);
-  const [savingCredito, setSavingCredito] = useState(false);
-  const [creditoError, setCreditoError] = useState<string | null>(null);
-  const [creditoForm, setCreditoForm] = useState<CreditoFormState>(initialCreditoForm);
-  const [showCreditoEditForm, setShowCreditoEditForm] = useState(false);
-  const [showCreditoEstadoForm, setShowCreditoEstadoForm] = useState(false);
-  const [savingCreditoEdit, setSavingCreditoEdit] = useState(false);
-  const [savingCreditoEstado, setSavingCreditoEstado] = useState(false);
-  const [creditoEditError, setCreditoEditError] = useState<string | null>(null);
-  const [creditoEstadoError, setCreditoEstadoError] = useState<string | null>(null);
-  const [relacionadosError, setRelacionadosError] = useState<string | null>(null);
-  const [detalleError, setDetalleError] = useState<string | null>(null);
-  const [creditoEditForm, setCreditoEditForm] =
-    useState<CreditoEditFormState>(initialCreditoEditForm);
-  const [creditoEstadoForm, setCreditoEstadoForm] =
-    useState<CreditoEstadoFormState>(initialCreditoEstadoForm);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadingFicha, setLoadingFicha] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [showNewCredito, setShowNewCredito] = useState(false);
+  const [showNewSeguimiento, setShowNewSeguimiento] = useState(false);
+  const [showEstadoForm, setShowEstadoForm] = useState(false);
+  const [pensionadoForm, setPensionadoForm] =
+    useState<PensionadoForm>(initialPensionadoForm);
+  const [creditoForm, setCreditoForm] = useState<CreditoForm>(initialCreditoForm);
+  const [seguimientoForm, setSeguimientoForm] = useState<SeguimientoForm>({
+    oficina_id: "",
+    tipo: "seguimiento",
+    comentario: "",
+    resultado: "",
+    fecha_proximo_contacto: "",
+  });
+  const [estadoForm, setEstadoForm] = useState<EstadoForm>(initialEstadoForm);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   useEffect(() => {
-    const session = readSession();
     if (!session) {
-      router.replace("/login?message=Inicia sesion para consultar contactos");
+      router.replace("/login?message=Inicia sesion para trabajar contactos");
     }
-  }, [router]);
+  }, [router, session]);
+
+  async function loadCatalogs() {
+    const [oficinasData, cooperativasData, pagaduriasData] = await Promise.all([
+      apiFetch<CatalogItem[]>("/api/v1/oficinas/"),
+      apiFetch<CatalogItem[]>("/api/v1/cooperativas/"),
+      apiFetch<CatalogItem[]>("/api/v1/pagadurias/"),
+    ]);
+
+    setOficinas(oficinasData);
+    setCooperativas(cooperativasData);
+    setPagadurias(pagaduriasData);
+
+    const defaultOffice = isAdmin
+      ? String(oficinasData[0]?.id ?? "")
+      : String(session?.oficinaId ?? oficinasData[0]?.id ?? "");
+
+    setCreditoForm((current) => ({
+      ...current,
+      oficina_id: current.oficina_id || defaultOffice,
+      cooperativa_id: current.cooperativa_id || String(cooperativasData[0]?.id ?? ""),
+      pagaduria_id: current.pagaduria_id || String(pagaduriasData[0]?.id ?? ""),
+    }));
+    setSeguimientoForm((current) => ({
+      ...current,
+      oficina_id: current.oficina_id || defaultOffice,
+    }));
+  }
 
   async function loadPensionados() {
     setLoading(true);
     setError(null);
-
     try {
       const data = await apiFetch<Pensionado[]>("/api/v1/pensionados/");
-      const ordered = sortPensionados(data);
-      setItems(ordered);
-      setSelectedId((current) => {
-        if (current && ordered.some((item) => item.id === current)) {
-          return current;
-        }
-        return ordered[0]?.id ?? null;
-      });
+      const ordered = [...data].sort((left, right) => Number(right.is_active) - Number(left.is_active) || right.id - left.id);
+      setPensionados(ordered);
+      setSelectedId((current) =>
+        current && ordered.some((item) => item.id === current)
+          ? current
+          : ordered[0]?.id ?? null,
+      );
     } catch (loadError) {
       setError(
         loadError instanceof ApiError
           ? loadError.message
-          : "No se pudieron cargar los pensionados",
+          : "No se pudieron cargar los contactos",
       );
-      setItems([]);
-      setSelectedId(null);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    void loadPensionados();
-  }, []);
-
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadCatalogosCredito() {
-      try {
-        const [oficinasData, cooperativasData, pagaduriasData] = await Promise.all([
-          apiFetch<CatalogItem[]>("/api/v1/oficinas/"),
-          apiFetch<CatalogItem[]>("/api/v1/cooperativas/"),
-          apiFetch<CatalogItem[]>("/api/v1/pagadurias/"),
-        ]);
-
-        if (!ignore) {
-          setOficinas(oficinasData);
-          setCooperativas(cooperativasData);
-          setPagadurias(pagaduriasData);
-          setCreditoForm((current) => ({
-            ...current,
-            oficina_id: current.oficina_id || String(oficinasData[0]?.id ?? ""),
-            cooperativa_id: current.cooperativa_id || String(cooperativasData[0]?.id ?? ""),
-            pagaduria_id: current.pagaduria_id || String(pagaduriasData[0]?.id ?? ""),
-          }));
-        }
-      } catch {
-        if (!ignore) {
-          setOficinas([]);
-          setCooperativas([]);
-          setPagadurias([]);
-        }
-      }
+    if (!session) {
+      return;
     }
 
-    void loadCatalogosCredito();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const filteredItems = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return items;
-    }
-
-    return items.filter((item) =>
-      [item.nombre, item.documento, item.telefono, item.celular ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized),
-    );
-  }, [items, query]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-
-  const paginatedItems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filteredItems.slice(start, start + PAGE_SIZE);
-  }, [filteredItems, page]);
+    void Promise.all([loadCatalogs(), loadPensionados()]);
+  }, [session?.accessToken]);
 
   const selectedPensionado = useMemo(
-    () => items.find((item) => item.id === selectedId) ?? null,
-    [items, selectedId],
+    () => pensionados.find((item) => item.id === selectedId) ?? null,
+    [pensionados, selectedId],
   );
 
   const selectedCredito = useMemo(
-    () => creditos.find((credito) => credito.id === selectedCreditoId) ?? null,
+    () => creditos.find((item) => item.id === selectedCreditoId) ?? null,
     [creditos, selectedCreditoId],
   );
-  const canEditSelectedCredito = selectedCredito
-    ? ESTADOS_EDITABLES.has(selectedCredito.estado)
-    : false;
 
-  const pensionadoResumen = useMemo(() => {
-    const activos = creditos.filter((credito) =>
-      ["Prospecto", "Enviado a cooperativa", "Devuelto por corrección", "Reenviado", "Aprobado"].includes(
-        credito.estado,
-      ),
-    ).length;
-
-    return {
-      totalCreditos: creditos.length,
-      activos,
-      documentosActivos: documentos.filter((documento) => documento.is_active).length,
-      refinanciaciones: refinanciaciones.length,
-    };
-  }, [creditos, documentos, refinanciaciones]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query]);
-
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
+  const filteredPensionados = useMemo(() => {
+    const normalized = normalizeText(query.trim());
+    if (!normalized) {
+      return pensionados;
     }
-  }, [page, totalPages]);
 
-  useEffect(() => {
-    const pensionadoId = selectedPensionado?.id;
+    return pensionados.filter((item) =>
+      normalizeText(
+        [item.nombre, item.documento, item.telefono, item.celular ?? ""].join(" "),
+      ).includes(normalized),
+    );
+  }, [pensionados, query]);
 
-    if (!pensionadoId) {
+  async function loadFicha(pensionadoId: number) {
+    setLoadingFicha(true);
+    setError(null);
+
+    try {
+      const [creditosData, seguimientosData] = await Promise.all([
+        apiFetch<Credito[]>(`/api/v1/creditos/?pensionado_id=${pensionadoId}`),
+        apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?pensionado_id=${pensionadoId}`),
+      ]);
+      const orderedCreditos = [...creditosData].sort((left, right) => right.id - left.id);
+
+      setCreditos(orderedCreditos);
+      setSeguimientos(
+        [...seguimientosData].sort(
+          (left, right) =>
+            new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+        ),
+      );
+      setSelectedCreditoId((current) =>
+        current && orderedCreditos.some((credito) => credito.id === current)
+          ? current
+          : orderedCreditos[0]?.id ?? null,
+      );
+    } catch (loadError) {
+      setError(
+        loadError instanceof ApiError
+          ? loadError.message
+          : "No se pudo cargar la ficha del contacto",
+      );
       setCreditos([]);
+      setSeguimientos([]);
       setSelectedCreditoId(null);
-      return;
+    } finally {
+      setLoadingFicha(false);
     }
-
-    let ignore = false;
-
-    async function loadRelacionados() {
-      setLoadingRelacionados(true);
-      setRelacionadosError(null);
-
-      try {
-        const data = await apiFetch<Credito[]>(`/api/v1/creditos/?pensionado_id=${pensionadoId}`);
-        const ordered = [...data].sort((left, right) => right.id - left.id);
-
-        if (!ignore) {
-          setCreditos(ordered);
-          setSelectedCreditoId((current) => {
-            if (current && ordered.some((credito) => credito.id === current)) {
-              return current;
-            }
-            return ordered[0]?.id ?? null;
-          });
-        }
-      } catch {
-        if (!ignore) {
-          setCreditos([]);
-          setSelectedCreditoId(null);
-          setRelacionadosError("No se pudieron cargar los creditos del contacto.");
-        }
-      } finally {
-        if (!ignore) {
-          setLoadingRelacionados(false);
-        }
-      }
-    }
-
-    void loadRelacionados();
-
-    return () => {
-      ignore = true;
-    };
-  }, [selectedPensionado]);
+  }
 
   useEffect(() => {
-    const creditoId = selectedCredito?.id;
-
-    if (!creditoId) {
+    if (selectedId) {
+      void loadFicha(selectedId);
+    } else {
+      setCreditos([]);
+      setSeguimientos([]);
       setDocumentos([]);
-      setHistorial([]);
-      setRefinanciaciones([]);
-      return;
+      setSelectedCreditoId(null);
     }
+  }, [selectedId]);
 
-    let ignore = false;
-
-    async function loadCreditoDetalle() {
-      setLoadingCreditoDetalle(true);
-      setDetalleError(null);
-
-      try {
-        const [documentosData, historialData, refinanciacionesData] = await Promise.all([
-          apiFetch<Documento[]>(`/api/v1/documentos/?credito_id=${creditoId}&solo_activos=false`),
-          apiFetch<HistorialItem[]>(`/api/v1/creditos/${creditoId}/historial`),
-          apiFetch<Refinanciacion[]>(`/api/v1/refinanciaciones/?credito_id=${creditoId}`),
-        ]);
-
-        if (!ignore) {
-          setDocumentos([...documentosData].sort((left, right) => right.id - left.id));
-          setHistorial(historialData);
-          setRefinanciaciones(
-            [...refinanciacionesData].sort((left, right) => right.id - left.id),
-          );
-        }
-      } catch {
-        if (!ignore) {
-          setDocumentos([]);
-          setHistorial([]);
-          setRefinanciaciones([]);
-          setDetalleError("No se pudo cargar el detalle del credito seleccionado.");
-        }
-      } finally {
-        if (!ignore) {
-          setLoadingCreditoDetalle(false);
-        }
-      }
+  async function loadDocumentos(creditoId: number) {
+    try {
+      const data = await apiFetch<Documento[]>(
+        `/api/v1/documentos/?credito_id=${creditoId}&solo_activos=false`,
+      );
+      setDocumentos([...data].sort((left, right) => right.id - left.id));
+    } catch {
+      setDocumentos([]);
     }
-
-    void loadCreditoDetalle();
-
-    return () => {
-      ignore = true;
-    };
-  }, [selectedCredito]);
-
-  function resetForm() {
-    setForm(initialForm);
-    setEditingId(null);
-    setShowForm(false);
   }
+
+  useEffect(() => {
+    if (selectedCreditoId) {
+      void loadDocumentos(selectedCreditoId);
+    } else {
+      setDocumentos([]);
+    }
+  }, [selectedCreditoId]);
 
   function resetCreditoForm() {
-    setCreditoForm({
-      ...initialCreditoForm,
-      oficina_id: String(oficinas[0]?.id ?? ""),
-      cooperativa_id: String(cooperativas[0]?.id ?? ""),
-      pagaduria_id: String(pagadurias[0]?.id ?? ""),
-    });
-    setShowCreditoForm(false);
-    setCreditoError(null);
-  }
-
-  function resetCreditoEditForm() {
-    setCreditoEditForm(initialCreditoEditForm);
-    setShowCreditoEditForm(false);
-    setCreditoEditError(null);
-  }
-
-  function resetCreditoEstadoForm() {
-    setCreditoEstadoForm(initialCreditoEstadoForm);
-    setShowCreditoEstadoForm(false);
-    setCreditoEstadoError(null);
-  }
-
-  function startCreate() {
-    setEditingId(null);
-    setForm(initialForm);
-    setShowForm(true);
-    setError(null);
-    setSuccess(null);
-  }
-
-  function startEdit(item: Pensionado) {
-    setEditingId(item.id);
-    setForm({
-      nombre: item.nombre,
-      documento: item.documento,
-      fecha_nacimiento: item.fecha_nacimiento,
-      telefono: item.telefono,
-      celular: item.celular ?? "",
-      direccion: item.direccion,
-      fecha_inicio_pension: item.fecha_inicio_pension,
-    });
-    setShowForm(true);
-    setError(null);
-    setSuccess(null);
-  }
-
-  function startCreateCredito() {
-    setShowCreditoForm(true);
-    setCreditoError(null);
     setCreditoForm((current) => ({
       ...initialCreditoForm,
-      oficina_id: current.oficina_id || String(oficinas[0]?.id ?? ""),
+      oficina_id: isAdmin
+        ? current.oficina_id || String(oficinas[0]?.id ?? "")
+        : String(session?.oficinaId ?? current.oficina_id),
       cooperativa_id: current.cooperativa_id || String(cooperativas[0]?.id ?? ""),
       pagaduria_id: current.pagaduria_id || String(pagadurias[0]?.id ?? ""),
     }));
+    setShowNewCredito(false);
   }
 
-  function startEditCredito() {
-    if (!selectedCredito) {
-      return;
-    }
-
-    setCreditoEditError(null);
-    setShowCreditoEditForm(true);
-    setCreditoEditForm({
-      cooperativa_id: String(selectedCredito.cooperativa_id),
-      pagaduria_id: String(selectedCredito.pagaduria_id),
-      monto_solicitado: String(selectedCredito.monto_solicitado),
-      plazo: String(selectedCredito.plazo),
-      nro_libranza: selectedCredito.nro_libranza ?? "",
-      tipo_credito: selectedCredito.tipo_credito ?? "",
-      nro_afiliacion: selectedCredito.nro_afiliacion ?? "",
-      observaciones: selectedCredito.observaciones ?? "",
-      tiene_documentos_pendientes: selectedCredito.tiene_documentos_pendientes ?? false,
-      documentos_pendientes: selectedCredito.documentos_pendientes ?? "",
-    });
-  }
-
-  function startChangeCreditoEstado() {
-    if (!selectedCredito) {
-      return;
-    }
-
-    const nextOptions = estadoTransitions[selectedCredito.estado] ?? [];
-    if (nextOptions.length === 0) {
-      setCreditoEstadoError("Este credito ya esta en un estado final y no puede cambiar.");
-      return;
-    }
-
-    setCreditoEstadoError(null);
-    setShowCreditoEstadoForm(true);
-    setCreditoEstadoForm({
-      ...initialCreditoEstadoForm,
-      estado_nuevo: nextOptions[0],
-      observaciones: "",
-      monto_aprobado: selectedCredito.monto_aprobado ? String(selectedCredito.monto_aprobado) : "",
-      tasa_mensual: selectedCredito.tasa_mensual ? String(selectedCredito.tasa_mensual) : "",
-      valor_cuota: selectedCredito.valor_cuota ? String(selectedCredito.valor_cuota) : "",
-      fecha_desembolso: selectedCredito.fecha_desembolso ?? "",
-      fecha_fin_estimada: selectedCredito.fecha_fin_estimada ?? "",
-    });
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleCreatePensionado(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError(null);
-    setSuccess(null);
+    setMessage(null);
 
     try {
-      if (editingId) {
-        const updated = await apiFetch<Pensionado>(`/api/v1/pensionados/${editingId}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            nombre: form.nombre,
-            telefono: form.telefono,
-            celular: form.celular || null,
-            direccion: form.direccion,
-          }),
-        });
-
-        setItems((current) =>
-          sortPensionados(current.map((item) => (item.id === updated.id ? updated : item))),
-        );
-        setSelectedId(updated.id);
-        setSuccess("Contacto actualizado correctamente.");
-      } else {
-        const created = await apiFetch<Pensionado>("/api/v1/pensionados/", {
-          method: "POST",
-          body: JSON.stringify({
-            ...form,
-            celular: form.celular || null,
-          }),
-        });
-
-        setItems((current) => sortPensionados([created, ...current]));
-        setSelectedId(created.id);
-        setSuccess("Contacto creado correctamente.");
-      }
-
-      resetForm();
+      const created = await apiFetch<Pensionado>("/api/v1/pensionados/", {
+        method: "POST",
+        body: JSON.stringify({
+          ...pensionadoForm,
+          celular: pensionadoForm.celular || null,
+        }),
+      });
+      setPensionados((current) => [created, ...current]);
+      setSelectedId(created.id);
+      setPensionadoForm(initialPensionadoForm);
+      setShowNewContact(false);
+      setMessage("Contacto creado correctamente.");
     } catch (submitError) {
       setError(
-        submitError instanceof ApiError
-          ? submitError.message
-          : "No se pudo guardar el contacto",
+        submitError instanceof ApiError ? submitError.message : "No se pudo crear el contacto",
       );
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(item: Pensionado) {
-    const confirmed = window.confirm(
-      `Vas a desactivar a ${item.nombre}. Esta accion no elimina fisicamente el registro. Deseas continuar?`,
-    );
-    if (!confirmed) {
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const deleted = await apiFetch<Pensionado>(`/api/v1/pensionados/${item.id}`, {
-        method: "DELETE",
-      });
-
-      setItems((current) =>
-        sortPensionados(
-          current.map((currentItem) =>
-            currentItem.id === deleted.id ? deleted : currentItem,
-          ),
-        ),
-      );
-      setSelectedId(deleted.id);
-      setSuccess("Contacto desactivado correctamente.");
-    } catch (deleteError) {
-      setError(
-        deleteError instanceof ApiError
-          ? deleteError.message
-          : "No se pudo desactivar el contacto",
-      );
-    }
-  }
-
-  async function handleCreateCredito(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateSeguimiento(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedPensionado) {
       return;
     }
 
-    setSavingCredito(true);
-    setCreditoError(null);
+    setSaving(true);
     setError(null);
-    setSuccess(null);
+    setMessage(null);
 
     try {
-      const asesorId = readSessionUserId();
-      if (!asesorId) {
-        throw new Error("No se pudo identificar el usuario actual");
-      }
+      const created = await apiFetch<Seguimiento>("/api/v1/seguimientos/", {
+        method: "POST",
+        body: JSON.stringify({
+          pensionado_id: selectedPensionado.id,
+          oficina_id: Number(seguimientoForm.oficina_id),
+          tipo: seguimientoForm.tipo,
+          comentario: seguimientoForm.comentario,
+          resultado: seguimientoForm.resultado || null,
+          fecha_proximo_contacto: seguimientoForm.fecha_proximo_contacto || null,
+        }),
+      });
+      setSeguimientos((current) => [created, ...current]);
+      setSeguimientoForm((current) => ({
+        oficina_id: current.oficina_id,
+        tipo: "seguimiento",
+        comentario: "",
+        resultado: "",
+        fecha_proximo_contacto: "",
+      }));
+      setShowNewSeguimiento(false);
+      setMessage("Seguimiento agregado.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof ApiError
+          ? submitError.message
+          : "No se pudo crear el seguimiento",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
+  async function handleCreateCredito(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPensionado || !userId) {
+      setError("No se pudo identificar el contacto o el usuario actual.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+
+    try {
       const created = await apiFetch<Credito>("/api/v1/creditos/", {
         method: "POST",
         body: JSON.stringify({
           pensionado_id: selectedPensionado.id,
-          asesor_id: asesorId,
+          asesor_id: userId,
           oficina_id: Number(creditoForm.oficina_id),
           cooperativa_id: Number(creditoForm.cooperativa_id),
           pagaduria_id: Number(creditoForm.pagaduria_id),
           monto_solicitado: Number(creditoForm.monto_solicitado),
           plazo: Number(creditoForm.plazo),
-          nro_libranza: creditoForm.nro_libranza || null,
-          tipo_credito: creditoForm.tipo_credito || null,
-          nro_afiliacion: creditoForm.nro_afiliacion || null,
           observaciones: creditoForm.observaciones || null,
-        }),
-      });
-
-      setCreditos((current) => [created, ...current].sort((left, right) => right.id - left.id));
-      setSelectedCreditoId(created.id);
-      setSuccess("Credito creado correctamente desde la ficha del contacto.");
-      resetCreditoForm();
-    } catch (submitError) {
-      setCreditoError(
-        submitError instanceof ApiError
-          ? submitError.message
-          : submitError instanceof Error
-            ? submitError.message
-            : "No se pudo crear el credito",
-      );
-    } finally {
-      setSavingCredito(false);
-    }
-  }
-
-  async function handleUpdateCredito(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedCredito) {
-      return;
-    }
-
-    setSavingCreditoEdit(true);
-    setCreditoEditError(null);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const updated = await apiFetch<Credito>(`/api/v1/creditos/${selectedCredito.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          cooperativa_id: Number(creditoEditForm.cooperativa_id),
-          pagaduria_id: Number(creditoEditForm.pagaduria_id),
-          monto_solicitado: Number(creditoEditForm.monto_solicitado),
-          plazo: Number(creditoEditForm.plazo),
-          nro_libranza: creditoEditForm.nro_libranza || null,
-          tipo_credito: creditoEditForm.tipo_credito || null,
-          nro_afiliacion: creditoEditForm.nro_afiliacion || null,
-          observaciones: creditoEditForm.observaciones || null,
-          tiene_documentos_pendientes: creditoEditForm.tiene_documentos_pendientes,
-          documentos_pendientes: creditoEditForm.tiene_documentos_pendientes
-            ? creditoEditForm.documentos_pendientes || null
+          tiene_documentos_pendientes: creditoForm.tiene_documentos_pendientes,
+          documentos_pendientes: creditoForm.tiene_documentos_pendientes
+            ? creditoForm.documentos_pendientes || null
             : null,
         }),
       });
-
-      setCreditos((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)).sort((a, b) => b.id - a.id),
-      );
-      setSelectedCreditoId(updated.id);
-      setSuccess("Credito actualizado correctamente.");
-      resetCreditoEditForm();
+      setCreditos((current) => [created, ...current]);
+      setSelectedCreditoId(created.id);
+      resetCreditoForm();
+      setMessage("Credito creado para el contacto.");
     } catch (submitError) {
-      setCreditoEditError(
-        submitError instanceof ApiError
-          ? submitError.message
-          : "No se pudo actualizar el credito",
+      setError(
+        submitError instanceof ApiError ? submitError.message : "No se pudo crear el credito",
       );
     } finally {
-      setSavingCreditoEdit(false);
+      setSaving(false);
     }
   }
 
-  async function handleChangeCreditoEstado(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function openEstadoForm() {
     if (!selectedCredito) {
       return;
     }
+    const next = transiciones[selectedCredito.estado] ?? [];
+    setEstadoForm({
+      estado_nuevo: next[0] ?? "",
+      observaciones: "",
+      monto_aprobado: selectedCredito.monto_solicitado
+        ? String(selectedCredito.monto_solicitado)
+        : "",
+    });
+    setShowEstadoForm(true);
+  }
 
-    setSavingCreditoEstado(true);
-    setCreditoEstadoError(null);
+  async function handleChangeEstado(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedCredito || !estadoForm.estado_nuevo) {
+      return;
+    }
+
+    setSaving(true);
     setError(null);
-    setSuccess(null);
+    setMessage(null);
 
     try {
-      const isAprobado = creditoEstadoForm.estado_nuevo === "Aprobado";
-      const updated = await apiFetch<Credito>(
-        `/api/v1/creditos/${selectedCredito.id}/estado`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            estado_nuevo: creditoEstadoForm.estado_nuevo,
-            observaciones: creditoEstadoForm.observaciones || null,
-            monto_aprobado: isAprobado && creditoEstadoForm.monto_aprobado
-              ? Number(creditoEstadoForm.monto_aprobado)
+      const updated = await apiFetch<Credito>(`/api/v1/creditos/${selectedCredito.id}/estado`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          estado_nuevo: estadoForm.estado_nuevo,
+          observaciones: estadoForm.observaciones || null,
+          monto_aprobado:
+            estadoForm.estado_nuevo === "Aprobado"
+              ? Number(estadoForm.monto_aprobado)
               : null,
-            tasa_mensual: isAprobado && creditoEstadoForm.tasa_mensual
-              ? Number(creditoEstadoForm.tasa_mensual)
-              : null,
-            valor_cuota: isAprobado && creditoEstadoForm.valor_cuota
-              ? Number(creditoEstadoForm.valor_cuota)
-              : null,
-            fecha_desembolso: isAprobado && creditoEstadoForm.fecha_desembolso
-              ? creditoEstadoForm.fecha_desembolso
-              : null,
-            fecha_fin_estimada: isAprobado && creditoEstadoForm.fecha_fin_estimada
-              ? creditoEstadoForm.fecha_fin_estimada
-              : null,
-          }),
-        },
-      );
-
+        }),
+      });
       setCreditos((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)).sort((a, b) => b.id - a.id),
+        current.map((credito) => (credito.id === updated.id ? updated : credito)),
       );
-      setSelectedCreditoId(updated.id);
-      setSuccess("Estado del credito actualizado correctamente.");
-      resetCreditoEstadoForm();
+      setShowEstadoForm(false);
+      setMessage(`Credito actualizado a ${updated.estado}.`);
     } catch (submitError) {
-      setCreditoEstadoError(
+      setError(
         submitError instanceof ApiError
           ? submitError.message
-          : "No se pudo cambiar el estado del credito",
+          : "No se pudo cambiar el estado",
       );
     } finally {
-      setSavingCreditoEstado(false);
+      setSaving(false);
     }
   }
 
-  async function handleCopyDocumentoUrl(url: string) {
+  async function handleUploadDocumento() {
+    if (!selectedCredito || !uploadFile) {
+      setError("Selecciona un credito y un archivo.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+
     try {
-      await navigator.clipboard.writeText(url);
-      setSuccess("Ruta del documento copiada al portapapeles.");
-    } catch {
-      setError("No se pudo copiar la ruta del documento.");
+      const formData = new FormData();
+      formData.append("credito_id", String(selectedCredito.id));
+      formData.append("archivo", uploadFile);
+
+      const documento = await apiFetch<Documento>("/api/v1/documentos/", {
+        method: "POST",
+        body: formData,
+      });
+      setDocumentos((current) => [documento, ...current]);
+      setUploadFile(null);
+      setMessage("Documento subido al credito.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof ApiError ? submitError.message : "No se pudo subir el documento",
+      );
+    } finally {
+      setSaving(false);
     }
   }
+
+  const nextEstados = selectedCredito ? transiciones[selectedCredito.estado] ?? [] : [];
 
   return (
     <section className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <article className="glass-panel p-6">
-          <p className="text-xs uppercase tracking-[0.3em] text-stone-500">
-            CRM operativo
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-stone-950">
-            Contactos y su vida crediticia
-          </h1>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-stone-600">
-            Esta vista deja de tratar al pensionado como un registro aislado. Aqui
-            ves la persona, sus creditos, sus documentos, sus refinanciaciones y
-            la traza de gestion sin armar rompecabezas entre modulos.
-          </p>
-        </article>
-
-        <article className="glass-panel p-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-            Acciones
-          </p>
-          <div className="mt-4 grid gap-3">
-            <button type="button" className="button-primary" onClick={startCreate}>
-              Nuevo contacto
-            </button>
-            {selectedPensionado ? (
-              <button
-                type="button"
-                className="button-muted"
-                onClick={() => startEdit(selectedPensionado)}
-              >
-                Editar contacto seleccionado
-              </button>
-            ) : null}
+      <div className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
+              CRM operativo
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">
+              Contactos
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+              El flujo vive aqui: pensionado, seguimientos, creditos y documentos del
+              credito seleccionado.
+            </p>
           </div>
-        </article>
+          <button
+            type="button"
+            className="button-primary rounded-lg px-3 py-2 text-sm"
+            onClick={() => setShowNewContact(true)}
+          >
+            Nuevo contacto
+          </button>
+        </div>
       </div>
 
-      {success ? (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {success}
-        </div>
-      ) : null}
-
       {error ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-500/20 bg-red-50 px-5 py-4 text-sm text-red-700">
           {error}
         </div>
       ) : null}
+      {message ? (
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-50 px-5 py-4 text-sm text-emerald-700">
+          {message}
+        </div>
+      ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <article className="glass-panel overflow-hidden">
-          <div className="border-b border-stone-800/10 px-5 py-5">
-            <div className="flex flex-col gap-3">
-              <div>
-                <h2 className="text-xl font-semibold text-stone-950">Contactos</h2>
-                <p className="mt-1 text-sm text-stone-500">
-                  Busca por nombre, documento o telefono.
-                </p>
-              </div>
-              <input
-                className="input-base"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar contacto..."
-              />
-            </div>
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_420px]">
+        <aside className="rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
+          <div className="border-b border-stone-800/10 p-4">
+            <input
+              className="input-base rounded-lg"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar por nombre, documento o telefono"
+            />
           </div>
-
-          <div className="space-y-3 p-4">
+          <div className="max-h-[calc(100vh-250px)] space-y-2 overflow-y-auto p-3">
             {loading ? (
               <EmptyState text="Cargando contactos..." />
-            ) : paginatedItems.length === 0 ? (
-              <EmptyState text="No hay contactos para mostrar." />
+            ) : filteredPensionados.length === 0 ? (
+              <EmptyState text="Sin contactos para mostrar." />
             ) : (
-              paginatedItems.map((item) => {
+              filteredPensionados.map((item) => {
                 const active = item.id === selectedId;
-
                 return (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => setSelectedId(item.id)}
                     className={[
-                      "w-full rounded-3xl border px-5 py-4 text-left transition",
+                      "w-full rounded-xl border px-4 py-3 text-left transition",
                       active
-                        ? "border-teal-700/20 bg-teal-950 text-white shadow-xl shadow-teal-950/15"
-                        : "border-stone-800/10 bg-white/65 hover:bg-white/90",
+                        ? "border-teal-700/20 bg-teal-950 text-white"
+                        : "border-stone-800/10 bg-white/70 text-stone-800 hover:bg-white",
                     ].join(" ")}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.24em] opacity-70">
-                          {item.documento}
-                        </p>
-                        <h3 className="mt-2 text-xl font-semibold">{item.nombre}</h3>
-                        <p className="mt-1 text-sm opacity-80">{item.telefono}</p>
-                      </div>
-                      <span
-                        className={[
-                          "rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
-                          item.is_active
-                            ? active
-                              ? "bg-white/15 text-white"
-                              : "bg-emerald-100 text-emerald-700"
-                            : active
-                              ? "bg-white/15 text-white"
-                              : "bg-stone-900/5 text-stone-500",
-                        ].join(" ")}
-                      >
-                        {item.is_active ? "Activo" : "Inactivo"}
-                      </span>
-                    </div>
+                    <p className="text-sm font-semibold">{item.nombre}</p>
+                    <p className="mt-1 text-xs opacity-75">
+                      {item.documento} · {item.telefono}
+                    </p>
                   </button>
                 );
               })
             )}
           </div>
+        </aside>
 
-          <div className="border-t border-stone-800/10 px-4 py-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-stone-500">
-                Mostrando {paginatedItems.length} de {filteredItems.length} contactos.
-              </p>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="button-muted px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-45"
-                  disabled={page === 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  Anterior
-                </button>
-                <div className="rounded-xl border border-stone-800/10 bg-white/70 px-3 py-2 text-sm text-stone-700">
-                  Pagina {page} de {totalPages}
-                </div>
-                <button
-                  type="button"
-                  className="button-muted px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-45"
-                  disabled={page === totalPages}
-                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <div className="space-y-4">
+        <main className="space-y-4">
           {!selectedPensionado ? (
-            <article className="glass-panel p-8">
-              <EmptyState text="Selecciona un contacto para ver su ficha completa." />
-            </article>
+            <EmptyState text="Selecciona o crea un contacto para empezar." />
           ) : (
             <>
-              <article className="glass-panel p-6">
+              <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                      Ficha del contacto
+                    <p className="text-xs uppercase tracking-[0.22em] text-stone-500">
+                      Pensionado
                     </p>
-                    <h2 className="mt-2 text-3xl font-semibold text-stone-950">
+                    <h2 className="mt-2 text-2xl font-semibold text-stone-950">
                       {selectedPensionado.nombre}
                     </h2>
                     <p className="mt-2 text-sm text-stone-600">
-                      Documento {selectedPensionado.documento} · Pension desde{" "}
-                      {formatDate(selectedPensionado.fecha_inicio_pension)}
+                      Documento {selectedPensionado.documento} · Tel {selectedPensionado.telefono}
+                    </p>
+                    <p className="mt-1 text-sm text-stone-600">
+                      Pension desde {formatDate(selectedPensionado.fecha_inicio_pension)}
                     </p>
                   </div>
-
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="button-muted"
-                      onClick={() => startEdit(selectedPensionado)}
+                      className="button-muted rounded-lg px-3 py-2 text-sm"
+                      onClick={() => setShowNewSeguimiento(true)}
                     >
-                      Editar ficha
+                      Agregar seguimiento
                     </button>
                     <button
                       type="button"
-                      className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:border-stone-800/10 disabled:bg-stone-100 disabled:text-stone-400"
-                      disabled={!selectedPensionado.is_active || !isAdmin}
-                      onClick={() => void handleDelete(selectedPensionado)}
-                      title={isAdmin ? undefined : "Solo administradores pueden desactivar contactos"}
+                      className="button-primary rounded-lg px-3 py-2 text-sm"
+                      onClick={() => setShowNewCredito(true)}
                     >
-                      {!isAdmin
-                        ? "Solo administrador"
-                        : selectedPensionado.is_active
-                          ? "Desactivar"
-                          : "Contacto inactivo"}
+                      Crear credito
                     </button>
                   </div>
                 </div>
-
-                <div className="mt-6 grid gap-3 md:grid-cols-4">
-                  <MetricCard label="Creditos" value={String(pensionadoResumen.totalCreditos)} />
-                  <MetricCard label="Activos" value={String(pensionadoResumen.activos)} />
-                  <MetricCard
-                    label="Documentos"
-                    value={String(pensionadoResumen.documentosActivos)}
-                  />
-                  <MetricCard
-                    label="Refinanciaciones"
-                    value={String(pensionadoResumen.refinanciaciones)}
-                  />
-                </div>
-
-                <div className="mt-6 grid gap-3 md:grid-cols-2">
-                  <DetailRow label="Telefono" value={selectedPensionado.telefono} />
-                  <DetailRow
-                    label="Celular"
-                    value={selectedPensionado.celular ?? "No registrado"}
-                  />
-                  <DetailRow
-                    label="Fecha de nacimiento"
-                    value={formatDate(selectedPensionado.fecha_nacimiento)}
-                  />
-                  <DetailRow label="Direccion" value={selectedPensionado.direccion} />
-                </div>
               </article>
 
-              <div className="grid gap-4 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                <article className="glass-panel overflow-hidden">
-                  <div className="border-b border-stone-800/10 px-6 py-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h3 className="text-xl font-semibold text-stone-950">
-                          Creditos del contacto
-                        </h3>
-                        <p className="mt-1 text-sm text-stone-500">
-                          Todo el historial crediticio de esta persona en un solo lugar.
-                        </p>
-                      </div>
-                      {selectedPensionado.is_active ? (
-                        <button
-                          type="button"
-                          className="button-primary"
-                          onClick={startCreateCredito}
-                        >
-                          Nuevo credito
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 p-4">
-                    {relacionadosError ? (
-                      <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-700">
-                        {relacionadosError}
-                      </div>
+              <section className="grid gap-4 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-semibold text-stone-950">Seguimientos</h3>
+                    {loadingFicha ? (
+                      <span className="text-xs text-stone-500">Actualizando...</span>
                     ) : null}
-                    {loadingRelacionados ? (
-                      <EmptyState text="Cargando creditos..." />
-                    ) : creditos.length === 0 ? (
-                      <EmptyState text="Este contacto aun no tiene creditos registrados." />
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {seguimientos.length === 0 ? (
+                      <EmptyState text="Aun no hay seguimientos para este contacto." />
+                    ) : (
+                      seguimientos.map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-stone-950">
+                                {item.tipo} · {item.oficina_nombre ?? `Oficina ${item.oficina_id}`}
+                              </p>
+                              <p className="mt-1 text-xs text-stone-500">
+                                {item.usuario_nombre ?? "Usuario"} · {formatDateTime(item.created_at)}
+                              </p>
+                            </div>
+                            {item.fecha_proximo_contacto ? (
+                              <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                                {formatDate(item.fecha_proximo_contacto)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-stone-700">{item.comentario}</p>
+                          {item.resultado ? (
+                            <p className="mt-2 text-xs font-semibold text-teal-700">
+                              Resultado: {item.resultado}
+                            </p>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </article>
+
+                <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+                  <h3 className="text-lg font-semibold text-stone-950">Creditos</h3>
+                  <div className="mt-4 space-y-3">
+                    {creditos.length === 0 ? (
+                      <EmptyState text="Este contacto aun no tiene creditos." />
                     ) : (
                       creditos.map((credito) => {
                         const active = credito.id === selectedCreditoId;
-
                         return (
                           <button
                             key={credito.id}
                             type="button"
                             onClick={() => setSelectedCreditoId(credito.id)}
                             className={[
-                              "w-full rounded-3xl border px-5 py-4 text-left transition",
+                              "w-full rounded-xl border px-4 py-3 text-left transition",
                               active
-                                ? "border-amber-500/20 bg-[#fff4cc] text-stone-950 shadow-lg shadow-amber-500/10"
-                                : "border-stone-800/10 bg-white/65 hover:bg-white/90",
+                                ? "border-teal-700/20 bg-teal-950 text-white"
+                                : "border-stone-800/10 bg-white/70 hover:bg-white",
                             ].join(" ")}
                           >
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-start justify-between gap-3">
                               <div>
-                                <p className="text-xs uppercase tracking-[0.24em] text-stone-500">
-                                  Credito #{credito.id}
+                                <p className="text-sm font-semibold">Credito #{credito.id}</p>
+                                <p className="mt-1 text-xs opacity-75">
+                                  {formatCurrency(credito.monto_solicitado)} · {credito.plazo} meses
                                 </p>
-                                <h4 className="mt-2 text-xl font-semibold">
-                                  {formatCurrency(credito.monto_solicitado)}
-                                </h4>
                               </div>
-                              <span className="rounded-full bg-stone-900/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-stone-700">
+                              <span className="rounded-lg bg-white/15 px-2 py-1 text-xs font-semibold">
                                 {credito.estado}
                               </span>
                             </div>
-
-                            <div className="mt-4 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
-                              <p>Plazo: {credito.plazo} meses</p>
-                              <p>Creado: {formatDateTime(credito.created_at)}</p>
-                            </div>
+                            {credito.tiene_documentos_pendientes ? (
+                              <p className={["mt-2 text-xs", active ? "text-amber-100" : "text-amber-700"].join(" ")}>
+                                Docs pendientes: {credito.documentos_pendientes ?? "sin detalle"}
+                              </p>
+                            ) : null}
                           </button>
                         );
                       })
                     )}
                   </div>
                 </article>
-
-                <article className="glass-panel p-6">
-                  <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                    Mundo del credito
-                  </p>
-
-                  {!selectedCredito ? (
-                    <EmptyState text="Selecciona un credito para ver documentos, historial y refinanciaciones." />
-                  ) : (
-                    <div className="mt-5 space-y-5">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="button-muted"
-                          onClick={startEditCredito}
-                          disabled={!canEditSelectedCredito}
-                        >
-                          {canEditSelectedCredito
-                            ? "Editar credito"
-                            : "Credito no editable en este estado"}
-                        </button>
-                        <button
-                          type="button"
-                          className="button-primary"
-                          onClick={startChangeCreditoEstado}
-                        >
-                          Cambiar estado
-                        </button>
-                      </div>
-
-                      {creditoEstadoError ? (
-                        <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-700">
-                          {creditoEstadoError}
-                        </div>
-                      ) : null}
-                      {detalleError ? (
-                        <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-700">
-                          {detalleError}
-                        </div>
-                      ) : null}
-
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <DetailRow label="Estado" value={selectedCredito.estado} />
-                        <DetailRow
-                          label="Monto solicitado"
-                          value={formatCurrency(selectedCredito.monto_solicitado)}
-                        />
-                        <DetailRow
-                          label="Monto aprobado"
-                          value={formatCurrency(selectedCredito.monto_aprobado)}
-                        />
-                        <DetailRow
-                          label="Observaciones"
-                          value={selectedCredito.observaciones ?? "Sin observaciones"}
-                        />
-                        <DetailRow
-                          label="Documentos pendientes"
-                          value={
-                            selectedCredito.tiene_documentos_pendientes
-                              ? selectedCredito.documentos_pendientes ?? "Pendientes sin detalle"
-                              : "No"
-                          }
-                        />
-                      </div>
-
-                      <section className="space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="text-lg font-semibold text-stone-950">
-                            Documentos del credito
-                          </h4>
-                          {loadingCreditoDetalle ? (
-                            <span className="text-sm text-stone-500">Actualizando...</span>
-                          ) : null}
-                        </div>
-
-                        {documentos.length === 0 ? (
-                          <EmptyState text="Este credito no tiene documentos registrados aun." />
-                        ) : (
-                          <div className="space-y-3">
-                            {documentos.map((documento) => (
-                              <div
-                                key={documento.id}
-                                className="rounded-2xl border border-stone-800/10 bg-white/65 px-4 py-4"
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-xs uppercase tracking-[0.22em] text-stone-500">
-                                      {documento.tipo} · v{documento.version}
-                                    </p>
-                                    <p className="mt-2 text-sm font-semibold text-stone-900">
-                                      {documento.nombre}
-                                    </p>
-                                  </div>
-                                  <span
-                                    className={[
-                                      "rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
-                                      documento.is_active
-                                        ? "bg-emerald-100 text-emerald-700"
-                                        : "bg-stone-900/5 text-stone-500",
-                                    ].join(" ")}
-                                  >
-                                    {documento.is_active ? "Activo" : "Historico"}
-                                  </span>
-                                </div>
-                                <div className="mt-3 flex justify-end">
-                                  <button
-                                    type="button"
-                                    className="button-muted px-3 py-2 text-xs"
-                                    onClick={() => void handleCopyDocumentoUrl(documento.url)}
-                                  >
-                                    Copiar ruta
-                                  </button>
-                                </div>
-                                <p className="mt-3 break-all text-xs text-stone-500">
-                                  {documento.url}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </section>
-
-                      <section className="grid gap-4 xl:grid-cols-2">
-                        <div className="space-y-3">
-                          <h4 className="text-lg font-semibold text-stone-950">
-                            Historial del credito
-                          </h4>
-                          {historial.length === 0 ? (
-                            <EmptyState text="Sin historial visible." />
-                          ) : (
-                            historial.map((item) => (
-                              <div
-                                key={item.id}
-                                className="rounded-2xl border border-stone-800/10 bg-white/65 px-4 py-4"
-                              >
-                                <p className="text-xs uppercase tracking-[0.22em] text-stone-500">
-                                  {item.estado_anterior ?? "Inicio"} {" -> "} {item.estado_nuevo}
-                                </p>
-                                <p className="mt-2 text-sm font-semibold text-stone-900">
-                                  {item.usuario_nombre ?? "Usuario desconocido"}
-                                </p>
-                                <p className="mt-2 text-sm text-stone-600">
-                                  {item.observacion ?? "Sin observacion registrada"}
-                                </p>
-                              </div>
-                            ))
-                          )}
-                        </div>
-
-                        <div className="space-y-3">
-                          <h4 className="text-lg font-semibold text-stone-950">
-                            Refinanciaciones
-                          </h4>
-                          {refinanciaciones.length === 0 ? (
-                            <EmptyState text="Sin refinanciaciones asociadas." />
-                          ) : (
-                            refinanciaciones.map((item) => (
-                              <div
-                                key={item.id}
-                                className="rounded-2xl border border-stone-800/10 bg-white/65 px-4 py-4"
-                              >
-                                <p className="text-xs uppercase tracking-[0.22em] text-stone-500">
-                                  Refinanciacion #{item.id}
-                                </p>
-                                <p className="mt-2 text-sm font-semibold text-stone-900">
-                                  {item.entidad ?? "Entidad no registrada"}
-                                </p>
-                                <p className="mt-2 text-sm text-stone-600">
-                                  {formatCurrency(item.valor_refinanciacion)}
-                                </p>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </section>
-                    </div>
-                  )}
-                </article>
-              </div>
+              </section>
             </>
           )}
-        </div>
+        </main>
+
+        <aside className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+          <h3 className="text-lg font-semibold text-stone-950">Credito seleccionado</h3>
+          {!selectedCredito ? (
+            <EmptyState text="Selecciona un credito para trabajar documentos y estado." />
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <Detail label="Estado" value={selectedCredito.estado} />
+                <Detail label="Solicitado" value={formatCurrency(selectedCredito.monto_solicitado)} />
+                <Detail label="Aprobado" value={formatCurrency(selectedCredito.monto_aprobado)} />
+                <Detail label="Oficina" value={`#${selectedCredito.oficina_id}`} />
+              </div>
+
+              {nextEstados.length > 0 ? (
+                <button
+                  type="button"
+                  className="button-primary w-full rounded-lg px-3 py-2 text-sm"
+                  onClick={openEstadoForm}
+                >
+                  Cambiar estado
+                </button>
+              ) : (
+                <div className="rounded-xl border border-stone-800/10 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+                  Este credito esta en estado final.
+                </div>
+              )}
+
+              <div className="border-t border-stone-800/10 pt-4">
+                <p className="text-sm font-semibold text-stone-950">Subir documento</p>
+                <input
+                  className="input-base mt-3 rounded-lg file:mr-3 file:rounded-lg file:border-0 file:bg-stone-900 file:px-3 file:py-2 file:text-sm file:text-white"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setUploadFile(event.target.files?.[0] ?? null)
+                  }
+                />
+                <button
+                  type="button"
+                  className="button-muted mt-3 w-full rounded-lg px-3 py-2 text-sm"
+                  onClick={() => void handleUploadDocumento()}
+                  disabled={saving || !uploadFile}
+                >
+                  Subir al credito
+                </button>
+              </div>
+
+              <div className="border-t border-stone-800/10 pt-4">
+                <p className="text-sm font-semibold text-stone-950">Documentos</p>
+                <div className="mt-3 space-y-2">
+                  {documentos.length === 0 ? (
+                    <EmptyState text="Sin documentos." />
+                  ) : (
+                    documentos.map((documento) => (
+                      <div
+                        key={documento.id}
+                        className="rounded-xl border border-stone-800/10 bg-white/70 px-3 py-3"
+                      >
+                        <p className="text-sm font-semibold text-stone-950">
+                          {documento.nombre}
+                        </p>
+                        <p className="mt-1 text-xs text-stone-500">
+                          {documento.tipo} · v{documento.version} · {formatDate(documento.created_at)}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
 
-      {showForm ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm">
-          <div className="glass-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                  {editingId ? "Edicion" : "Creacion"}
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-stone-950">
-                  {editingId ? "Editar contacto" : "Nuevo contacto"}
-                </h2>
-                <p className="mt-2 text-sm text-stone-600">
-                  {editingId
-                    ? "Estas modificando la ficha principal del pensionado."
-                    : "Registra un nuevo contacto para iniciar su mundo dentro del CRM."}
-                </p>
-              </div>
-              <button type="button" className="button-muted" onClick={resetForm}>
-                Cerrar
-              </button>
+      {showNewContact ? (
+        <Modal title="Nuevo contacto" onClose={() => setShowNewContact(false)}>
+          <form className="space-y-3" onSubmit={handleCreatePensionado}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input label="Nombre" value={pensionadoForm.nombre} onChange={(value) => setPensionadoForm((current) => ({ ...current, nombre: value }))} />
+              <Input label="Documento" value={pensionadoForm.documento} onChange={(value) => setPensionadoForm((current) => ({ ...current, documento: value }))} />
+              <Input label="Fecha nacimiento" type="date" value={pensionadoForm.fecha_nacimiento} onChange={(value) => setPensionadoForm((current) => ({ ...current, fecha_nacimiento: value }))} />
+              <Input label="Inicio pension" type="date" value={pensionadoForm.fecha_inicio_pension} onChange={(value) => setPensionadoForm((current) => ({ ...current, fecha_inicio_pension: value }))} />
+              <Input label="Telefono" value={pensionadoForm.telefono} onChange={(value) => setPensionadoForm((current) => ({ ...current, telefono: value }))} />
+              <Input label="Celular" value={pensionadoForm.celular} onChange={(value) => setPensionadoForm((current) => ({ ...current, celular: value }))} />
             </div>
-
-            <form className="mt-6 space-y-3" onSubmit={handleSubmit}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <InputField
-                  label="Nombre completo"
-                  value={form.nombre}
-                  onChange={(value) => setForm((current) => ({ ...current, nombre: value }))}
-                  placeholder="Nombre del pensionado"
-                />
-                <InputField
-                  label="Documento"
-                  value={form.documento}
-                  onChange={(value) =>
-                    setForm((current) => ({ ...current, documento: value }))
-                  }
-                  placeholder="Numero de identificacion"
-                  disabled={Boolean(editingId)}
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <InputField
-                  label="Fecha de nacimiento"
-                  type="date"
-                  value={form.fecha_nacimiento}
-                  onChange={(value) =>
-                    setForm((current) => ({ ...current, fecha_nacimiento: value }))
-                  }
-                  disabled={Boolean(editingId)}
-                />
-                <InputField
-                  label="Fecha inicio pension"
-                  type="date"
-                  value={form.fecha_inicio_pension}
-                  onChange={(value) =>
-                    setForm((current) => ({ ...current, fecha_inicio_pension: value }))
-                  }
-                  disabled={Boolean(editingId)}
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <InputField
-                  label="Telefono"
-                  value={form.telefono}
-                  onChange={(value) =>
-                    setForm((current) => ({ ...current, telefono: value }))
-                  }
-                  placeholder="Telefono principal"
-                />
-                <InputField
-                  label="Celular"
-                  value={form.celular}
-                  onChange={(value) =>
-                    setForm((current) => ({ ...current, celular: value }))
-                  }
-                  placeholder="Celular opcional"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-stone-700">
-                  Direccion
-                </label>
-                <textarea
-                  className="input-base min-h-[110px] resize-none"
-                  value={form.direccion}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, direccion: event.target.value }))
-                  }
-                  placeholder="Direccion de residencia"
-                />
-              </div>
-
-              <button type="submit" className="button-primary w-full" disabled={saving}>
-                {saving
-                  ? "Guardando..."
-                  : editingId
-                    ? "Actualizar contacto"
-                    : "Crear contacto"}
-              </button>
-            </form>
-          </div>
-        </div>
+            <Input label="Direccion" value={pensionadoForm.direccion} onChange={(value) => setPensionadoForm((current) => ({ ...current, direccion: value }))} />
+            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
+              {saving ? "Guardando..." : "Crear contacto"}
+            </button>
+          </form>
+        </Modal>
       ) : null}
 
-      {showCreditoForm && selectedPensionado ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm">
-          <div className="glass-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                  Nuevo credito
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-stone-950">
-                  Crear credito para {selectedPensionado.nombre}
-                </h2>
-                <p className="mt-2 text-sm text-stone-600">
-                  El pensionado ya viene precargado. Aqui solo completas el contexto
-                  comercial y financiero del nuevo credito.
-                </p>
-              </div>
-              <button type="button" className="button-muted" onClick={resetCreditoForm}>
-                Cerrar
-              </button>
-            </div>
-
-            <form className="mt-6 space-y-3" onSubmit={handleCreateCredito}>
-              <div className="rounded-2xl border border-stone-800/10 bg-white/70 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-stone-500">
-                  Pensionado seleccionado
-                </p>
-                <p className="mt-2 text-base font-semibold text-stone-950">
-                  {selectedPensionado.nombre}
-                </p>
-                <p className="mt-1 text-sm text-stone-600">
-                  Documento {selectedPensionado.documento}
-                </p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <SelectField
-                  label="Oficina"
-                  value={creditoForm.oficina_id}
-                  onChange={(value) =>
-                    setCreditoForm((current) => ({ ...current, oficina_id: value }))
-                  }
-                  options={oficinas.map((item) => ({
-                    value: String(item.id),
-                    label: item.nombre,
-                  }))}
-                />
-                <SelectField
-                  label="Cooperativa"
-                  value={creditoForm.cooperativa_id}
-                  onChange={(value) =>
-                    setCreditoForm((current) => ({ ...current, cooperativa_id: value }))
-                  }
-                  options={cooperativas.map((item) => ({
-                    value: String(item.id),
-                    label: item.nombre,
-                  }))}
-                />
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <SelectField
-                  label="Pagaduria"
-                  value={creditoForm.pagaduria_id}
-                  onChange={(value) =>
-                    setCreditoForm((current) => ({ ...current, pagaduria_id: value }))
-                  }
-                  options={pagadurias.map((item) => ({
-                    value: String(item.id),
-                    label: item.nombre,
-                  }))}
-                />
-                <InputField
-                  label="Plazo (meses)"
-                  type="number"
-                  value={creditoForm.plazo}
-                  onChange={(value) =>
-                    setCreditoForm((current) => ({ ...current, plazo: value }))
-                  }
-                  placeholder="24"
-                />
-              </div>
-
-              <InputField
-                label="Monto solicitado"
-                type="number"
-                value={creditoForm.monto_solicitado}
-                onChange={(value) =>
-                  setCreditoForm((current) => ({ ...current, monto_solicitado: value }))
-                }
-                placeholder="5000000"
+      {showNewSeguimiento && selectedPensionado ? (
+        <Modal title={`Seguimiento para ${selectedPensionado.nombre}`} onClose={() => setShowNewSeguimiento(false)}>
+          <form className="space-y-3" onSubmit={handleCreateSeguimiento}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select
+                label="Oficina"
+                value={seguimientoForm.oficina_id}
+                disabled={!isAdmin}
+                onChange={(value) => setSeguimientoForm((current) => ({ ...current, oficina_id: value }))}
+                options={oficinas.map((item) => ({ value: String(item.id), label: item.nombre }))}
               />
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <InputField
-                  label="Nro. libranza"
-                  value={creditoForm.nro_libranza}
-                  onChange={(value) =>
-                    setCreditoForm((current) => ({ ...current, nro_libranza: value }))
-                  }
-                  placeholder="Opcional"
-                />
-                <InputField
-                  label="Tipo credito"
-                  value={creditoForm.tipo_credito}
-                  onChange={(value) =>
-                    setCreditoForm((current) => ({ ...current, tipo_credito: value }))
-                  }
-                  placeholder="Libre inversion"
-                />
-                <InputField
-                  label="Nro. afiliacion"
-                  value={creditoForm.nro_afiliacion}
-                  onChange={(value) =>
-                    setCreditoForm((current) => ({ ...current, nro_afiliacion: value }))
-                  }
-                  placeholder="Opcional"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-stone-700">
-                  Observaciones
-                </label>
-                <textarea
-                  className="input-base min-h-[110px] resize-none"
-                  value={creditoForm.observaciones}
-                  onChange={(event) =>
-                    setCreditoForm((current) => ({
-                      ...current,
-                      observaciones: event.target.value,
-                    }))
-                  }
-                  placeholder="Contexto comercial o detalle del caso"
-                />
-              </div>
-
-              {creditoError ? (
-                <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {creditoError}
-                </div>
-              ) : null}
-
-              <button type="submit" className="button-primary w-full" disabled={savingCredito}>
-                {savingCredito ? "Creando..." : "Crear credito"}
-              </button>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {showCreditoEditForm && selectedCredito ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm">
-          <div className="glass-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                  Edicion de credito
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-stone-950">
-                  Editar credito #{selectedCredito.id}
-                </h2>
-              </div>
-              <button type="button" className="button-muted" onClick={resetCreditoEditForm}>
-                Cerrar
-              </button>
-            </div>
-
-            <form className="mt-6 space-y-3" onSubmit={handleUpdateCredito}>
-              <div className="grid gap-3 md:grid-cols-2">
-                <SelectField
-                  label="Cooperativa"
-                  value={creditoEditForm.cooperativa_id}
-                  onChange={(value) =>
-                    setCreditoEditForm((current) => ({ ...current, cooperativa_id: value }))
-                  }
-                  options={cooperativas.map((item) => ({
-                    value: String(item.id),
-                    label: item.nombre,
-                  }))}
-                />
-                <SelectField
-                  label="Pagaduria"
-                  value={creditoEditForm.pagaduria_id}
-                  onChange={(value) =>
-                    setCreditoEditForm((current) => ({ ...current, pagaduria_id: value }))
-                  }
-                  options={pagadurias.map((item) => ({
-                    value: String(item.id),
-                    label: item.nombre,
-                  }))}
-                />
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <InputField
-                  label="Monto solicitado"
-                  type="number"
-                  value={creditoEditForm.monto_solicitado}
-                  onChange={(value) =>
-                    setCreditoEditForm((current) => ({ ...current, monto_solicitado: value }))
-                  }
-                />
-                <InputField
-                  label="Plazo (meses)"
-                  type="number"
-                  value={creditoEditForm.plazo}
-                  onChange={(value) =>
-                    setCreditoEditForm((current) => ({ ...current, plazo: value }))
-                  }
-                />
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <InputField
-                  label="Nro. libranza"
-                  value={creditoEditForm.nro_libranza}
-                  onChange={(value) =>
-                    setCreditoEditForm((current) => ({ ...current, nro_libranza: value }))
-                  }
-                />
-                <InputField
-                  label="Tipo credito"
-                  value={creditoEditForm.tipo_credito}
-                  onChange={(value) =>
-                    setCreditoEditForm((current) => ({ ...current, tipo_credito: value }))
-                  }
-                />
-                <InputField
-                  label="Nro. afiliacion"
-                  value={creditoEditForm.nro_afiliacion}
-                  onChange={(value) =>
-                    setCreditoEditForm((current) => ({ ...current, nro_afiliacion: value }))
-                  }
-                />
-              </div>
-
-              <label className="flex items-center gap-3 text-sm text-stone-700">
-                <input
-                  type="checkbox"
-                  checked={creditoEditForm.tiene_documentos_pendientes}
-                  onChange={(event) =>
-                    setCreditoEditForm((current) => ({
-                      ...current,
-                      tiene_documentos_pendientes: event.target.checked,
-                      documentos_pendientes: event.target.checked ? current.documentos_pendientes : "",
-                    }))
-                  }
-                />
-                Tiene documentos pendientes
-              </label>
-
-              {creditoEditForm.tiene_documentos_pendientes ? (
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-stone-700">
-                    Cuales documentos faltan
-                  </label>
-                  <textarea
-                    className="input-base min-h-[110px] resize-none"
-                    value={creditoEditForm.documentos_pendientes}
-                    onChange={(event) =>
-                      setCreditoEditForm((current) => ({
-                        ...current,
-                        documentos_pendientes: event.target.value,
-                      }))
-                    }
-                    placeholder="Ej: Cedula ampliada, desprendible de pago, certificado bancario"
-                  />
-                </div>
-              ) : null}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-stone-700">
-                  Observaciones
-                </label>
-                <textarea
-                  className="input-base min-h-[110px] resize-none"
-                  value={creditoEditForm.observaciones}
-                  onChange={(event) =>
-                    setCreditoEditForm((current) => ({
-                      ...current,
-                      observaciones: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              {creditoEditError ? (
-                <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {creditoEditError}
-                </div>
-              ) : null}
-
-              <button type="submit" className="button-primary w-full" disabled={savingCreditoEdit}>
-                {savingCreditoEdit ? "Actualizando..." : "Actualizar credito"}
-              </button>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {showCreditoEstadoForm && selectedCredito ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm">
-          <div className="glass-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                  Cambio de estado
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-stone-950">
-                  Credito #{selectedCredito.id}
-                </h2>
-                <p className="mt-2 text-sm text-stone-600">
-                  Estado actual: {selectedCredito.estado}
-                </p>
-              </div>
-              <button type="button" className="button-muted" onClick={resetCreditoEstadoForm}>
-                Cerrar
-              </button>
-            </div>
-
-            <form className="mt-6 space-y-3" onSubmit={handleChangeCreditoEstado}>
-              <SelectField
-                label="Nuevo estado"
-                value={creditoEstadoForm.estado_nuevo}
-                onChange={(value) =>
-                  setCreditoEstadoForm((current) => ({ ...current, estado_nuevo: value }))
-                }
-                options={(estadoTransitions[selectedCredito.estado] ?? []).map((option) => ({
-                  value: option,
-                  label: option,
-                }))}
+              <Select
+                label="Tipo"
+                value={seguimientoForm.tipo}
+                onChange={(value) => setSeguimientoForm((current) => ({ ...current, tipo: value }))}
+                options={tiposSeguimiento.map((tipo) => ({ value: tipo, label: tipo }))}
               />
+            </div>
+            <Textarea label="Comentario" value={seguimientoForm.comentario} onChange={(value) => setSeguimientoForm((current) => ({ ...current, comentario: value }))} />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input label="Resultado" value={seguimientoForm.resultado} onChange={(value) => setSeguimientoForm((current) => ({ ...current, resultado: value }))} />
+              <Input label="Proximo contacto" type="datetime-local" value={seguimientoForm.fecha_proximo_contacto} onChange={(value) => setSeguimientoForm((current) => ({ ...current, fecha_proximo_contacto: value }))} />
+            </div>
+            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
+              {saving ? "Guardando..." : "Agregar seguimiento"}
+            </button>
+          </form>
+        </Modal>
+      ) : null}
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-stone-700">
-                  Observacion del cambio
-                </label>
-                <textarea
-                  className="input-base min-h-[110px] resize-none"
-                  value={creditoEstadoForm.observaciones}
-                  onChange={(event) =>
-                    setCreditoEstadoForm((current) => ({
-                      ...current,
-                      observaciones: event.target.value,
-                    }))
-                  }
-                />
-              </div>
+      {showNewCredito && selectedPensionado ? (
+        <Modal title={`Credito para ${selectedPensionado.nombre}`} onClose={resetCreditoForm}>
+          <form className="space-y-3" onSubmit={handleCreateCredito}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select label="Oficina" value={creditoForm.oficina_id} disabled={!isAdmin} onChange={(value) => setCreditoForm((current) => ({ ...current, oficina_id: value }))} options={oficinas.map((item) => ({ value: String(item.id), label: item.nombre }))} />
+              <Select label="Cooperativa" value={creditoForm.cooperativa_id} onChange={(value) => setCreditoForm((current) => ({ ...current, cooperativa_id: value }))} options={cooperativas.map((item) => ({ value: String(item.id), label: item.nombre }))} />
+              <Select label="Pagaduria" value={creditoForm.pagaduria_id} onChange={(value) => setCreditoForm((current) => ({ ...current, pagaduria_id: value }))} options={pagadurias.map((item) => ({ value: String(item.id), label: item.nombre }))} />
+              <Input label="Plazo meses" type="number" value={creditoForm.plazo} onChange={(value) => setCreditoForm((current) => ({ ...current, plazo: value }))} />
+            </div>
+            <Input label="Monto solicitado" type="number" value={creditoForm.monto_solicitado} onChange={(value) => setCreditoForm((current) => ({ ...current, monto_solicitado: value }))} />
+            <Textarea label="Observaciones" value={creditoForm.observaciones} onChange={(value) => setCreditoForm((current) => ({ ...current, observaciones: value }))} />
+            <label className="flex items-center gap-3 text-sm text-stone-700">
+              <input
+                type="checkbox"
+                checked={creditoForm.tiene_documentos_pendientes}
+                onChange={(event) => setCreditoForm((current) => ({ ...current, tiene_documentos_pendientes: event.target.checked }))}
+              />
+              Tiene documentos pendientes
+            </label>
+            {creditoForm.tiene_documentos_pendientes ? (
+              <Textarea label="Documentos pendientes" value={creditoForm.documentos_pendientes} onChange={(value) => setCreditoForm((current) => ({ ...current, documentos_pendientes: value }))} />
+            ) : null}
+            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
+              {saving ? "Creando..." : "Crear credito"}
+            </button>
+          </form>
+        </Modal>
+      ) : null}
 
-              {creditoEstadoForm.estado_nuevo === "Aprobado" ? (
-                <>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <InputField
-                      label="Monto aprobado"
-                      type="number"
-                      value={creditoEstadoForm.monto_aprobado}
-                      onChange={(value) =>
-                        setCreditoEstadoForm((current) => ({ ...current, monto_aprobado: value }))
-                      }
-                    />
-                    <InputField
-                      label="Tasa mensual"
-                      type="number"
-                      value={creditoEstadoForm.tasa_mensual}
-                      onChange={(value) =>
-                        setCreditoEstadoForm((current) => ({ ...current, tasa_mensual: value }))
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <InputField
-                      label="Valor cuota"
-                      type="number"
-                      value={creditoEstadoForm.valor_cuota}
-                      onChange={(value) =>
-                        setCreditoEstadoForm((current) => ({ ...current, valor_cuota: value }))
-                      }
-                    />
-                    <InputField
-                      label="Fecha desembolso"
-                      type="date"
-                      value={creditoEstadoForm.fecha_desembolso}
-                      onChange={(value) =>
-                        setCreditoEstadoForm((current) => ({
-                          ...current,
-                          fecha_desembolso: value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <InputField
-                    label="Fecha fin estimada"
-                    type="date"
-                    value={creditoEstadoForm.fecha_fin_estimada}
-                    onChange={(value) =>
-                      setCreditoEstadoForm((current) => ({
-                        ...current,
-                        fecha_fin_estimada: value,
-                      }))
-                    }
-                  />
-                </>
-              ) : null}
-
-              {creditoEstadoError ? (
-                <div className="rounded-2xl border border-red-500/20 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {creditoEstadoError}
-                </div>
-              ) : null}
-
-              <button type="submit" className="button-primary w-full" disabled={savingCreditoEstado}>
-                {savingCreditoEstado ? "Actualizando..." : "Cambiar estado"}
-              </button>
-            </form>
-          </div>
-        </div>
+      {showEstadoForm && selectedCredito ? (
+        <Modal title={`Cambiar estado credito #${selectedCredito.id}`} onClose={() => setShowEstadoForm(false)}>
+          <form className="space-y-3" onSubmit={handleChangeEstado}>
+            <Select
+              label="Nuevo estado"
+              value={estadoForm.estado_nuevo}
+              onChange={(value) => setEstadoForm((current) => ({ ...current, estado_nuevo: value }))}
+              options={nextEstados.map((estado) => ({ value: estado, label: estado }))}
+            />
+            {estadoForm.estado_nuevo === "Aprobado" ? (
+              <Input label="Monto aprobado" type="number" value={estadoForm.monto_aprobado} onChange={(value) => setEstadoForm((current) => ({ ...current, monto_aprobado: value }))} />
+            ) : null}
+            <Textarea label="Observacion" value={estadoForm.observaciones} onChange={(value) => setEstadoForm((current) => ({ ...current, observaciones: value }))} />
+            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
+              {saving ? "Actualizando..." : "Cambiar estado"}
+            </button>
+          </form>
+        </Modal>
       ) : null}
     </section>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
   return (
-    <div className="card-panel p-4">
-      <p className="text-xs uppercase tracking-[0.24em] text-stone-500">{label}</p>
-      <p className="mt-3 text-3xl font-semibold text-stone-950">{value}</p>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-stone-800/10 bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold text-stone-950">{title}</h2>
+          <button type="button" className="button-muted rounded-lg px-3 py-2 text-sm" onClick={onClose}>
+            Cerrar
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
 
-function InputField({
+function Input({
   label,
   value,
   onChange,
-  placeholder,
   type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-stone-700">{label}</span>
+      <input
+        className="input-base rounded-lg"
+        value={value}
+        type={type}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function Textarea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-stone-700">{label}</span>
+      <textarea
+        className="input-base min-h-[110px] resize-none rounded-lg"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function Select({
+  label,
+  value,
+  options,
+  onChange,
   disabled = false,
 }: {
   label: string;
   value: string;
+  options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
-  placeholder?: string;
-  type?: string;
   disabled?: boolean;
 }) {
   return (
-    <div>
-      <label className="mb-2 block text-sm font-medium text-stone-700">{label}</label>
-      <input
-        className="input-base disabled:cursor-not-allowed disabled:bg-stone-100"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        type={type}
-        disabled={disabled}
-      />
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-medium text-stone-700">{label}</label>
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-stone-700">{label}</span>
       <select
-        className="input-base"
+        className="input-base rounded-lg disabled:cursor-not-allowed disabled:bg-stone-100"
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">Selecciona una opcion</option>
+        <option value="">Selecciona</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
       </select>
-    </div>
+    </label>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-stone-800/10 bg-white/65 px-4 py-4">
-      <p className="text-xs uppercase tracking-[0.22em] text-stone-500">{label}</p>
-      <p className="mt-2 text-sm leading-6 text-stone-800">{value}</p>
+    <div className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-stone-900">{value}</p>
     </div>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-3xl border border-dashed border-stone-800/15 bg-white/40 px-5 py-8 text-center text-sm text-stone-500">
+    <div className="rounded-xl border border-dashed border-stone-800/15 bg-white/45 px-5 py-6 text-center text-sm text-stone-500">
       {text}
     </div>
   );

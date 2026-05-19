@@ -70,5 +70,6 @@ class UsuarioService:
         return TokenResponse(
             access_token=token,
             rol=usuario.rol,
-            nombre=usuario.nombre
+            nombre=usuario.nombre,
+            oficina_id=usuario.oficina_id,
         )

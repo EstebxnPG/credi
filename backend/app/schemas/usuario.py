@@ -40,3 +40,4 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     rol: str
     nombre: str
+    oficina_id: int

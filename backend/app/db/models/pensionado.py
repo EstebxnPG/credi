@@ -18,3 +18,4 @@ class Pensionado(Base, TimestampMixin, SoftDeleteMixin):
     fecha_inicio_pension: Mapped[date] = mapped_column(Date, nullable=False)
 
     creditos: Mapped[list["Credito"]] = relationship(back_populates="pensionado")
+    seguimientos: Mapped[list["Seguimiento"]] = relationship(back_populates="pensionado")

@@ -13,3 +13,4 @@ class Oficina(Base, TimestampMixin, SoftDeleteMixin):
 
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="oficina")
     creditos: Mapped[list["Credito"]] = relationship(back_populates="oficina")
+    seguimientos: Mapped[list["Seguimiento"]] = relationship(back_populates="oficina")

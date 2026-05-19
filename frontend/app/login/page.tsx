@@ -11,6 +11,7 @@ type LoginResponse = {
   access_token: string;
   rol: string;
   nombre: string;
+  oficina_id: number;
 };
 
 export default function LoginPage() {
@@ -60,6 +61,7 @@ function LoginContent() {
         accessToken: data.access_token,
         nombre: data.nombre,
         rol: data.rol,
+        oficinaId: data.oficina_id,
       });
 
       router.replace(searchParams.get("next") || "/dashboard");

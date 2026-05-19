@@ -18,7 +18,7 @@ from app.db.base import Base
 from app.db.models import (
     Oficina, Cooperativa, Pagaduria, Usuario,
     Pensionado, Credito, Documento,
-    HistorialCredito, Refinanciacion, Log
+    HistorialCredito, Refinanciacion, Log, Seguimiento
 )
 
 target_metadata = Base.metadata

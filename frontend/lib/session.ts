@@ -4,6 +4,7 @@ export type SessionUser = {
   accessToken: string;
   nombre: string;
   rol: string;
+  oficinaId?: number;
 };
 
 const SESSION_KEY = "credi.session";
