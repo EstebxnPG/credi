@@ -16,6 +16,7 @@ type Pensionado = {
   nombre_completo: string;
   documento: string;
   fecha_nacimiento: string;
+  correo: string | null;
   telefono: string | null;
   celular: string | null;
   direccion: string;
@@ -30,6 +31,7 @@ type PensionadoCreatePayload = {
   genero: string;
   documento: string;
   fecha_nacimiento: string;
+  correo: string | null;
   telefono: string;
   celular: string | null;
   direccion: string;
@@ -41,6 +43,7 @@ type PensionadoUpdatePayload = {
   segundo_nombre: string | null;
   apellidos: string;
   genero: string;
+  correo: string | null;
   telefono: string | null;
   celular: string | null;
   direccion: string;
@@ -53,6 +56,7 @@ type FormValues = {
   genero: string;
   documento: string;
   fecha_nacimiento: string;
+  correo: string;
   telefono: string;
   celular: string;
   direccion: string;
@@ -68,6 +72,7 @@ const emptyForm: FormValues = {
   genero: "No especificado",
   documento: "",
   fecha_nacimiento: "",
+  correo: "",
   telefono: "",
   celular: "",
   direccion: "",
@@ -125,6 +130,7 @@ export default function PensionadosPage() {
         pensionado.nombre_completo,
         pensionado.genero,
         pensionado.documento,
+        pensionado.correo,
         pensionado.celular,
         pensionado.telefono,
         pensionado.direccion,
@@ -150,6 +156,7 @@ export default function PensionadosPage() {
       genero: pensionado.genero,
       documento: pensionado.documento,
       fecha_nacimiento: pensionado.fecha_nacimiento,
+      correo: pensionado.correo ?? "",
       telefono: pensionado.telefono ?? "",
       celular: pensionado.celular ?? "",
       direccion: pensionado.direccion,
@@ -189,6 +196,7 @@ export default function PensionadosPage() {
           genero: form.genero,
           documento: form.documento.trim(),
           fecha_nacimiento: form.fecha_nacimiento,
+          correo: nullableText(form.correo),
           telefono: form.telefono.trim(),
           celular: nullableText(form.celular),
           direccion: form.direccion.trim(),
@@ -207,6 +215,7 @@ export default function PensionadosPage() {
           segundo_nombre: nullableText(form.segundo_nombre),
           apellidos: form.apellidos.trim(),
           genero: form.genero,
+          correo: nullableText(form.correo),
           telefono: nullableText(form.telefono),
           celular: nullableText(form.celular),
           direccion: form.direccion.trim(),
@@ -296,7 +305,7 @@ export default function PensionadosPage() {
               className="input-base min-w-0 sm:w-80"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por nombre, documento o telefono"
+              placeholder="Buscar por nombre, documento, correo o telefono"
             />
             <button type="button" className="button-primary whitespace-nowrap" onClick={openCreateModal}>
               Crear pensionado
@@ -482,6 +491,12 @@ function PensionadoModal({
             onChange={(value) => updateField("fecha_inicio_pension", value)}
             required
             disabled={isEdit}
+          />
+          <Field
+            label="Correo"
+            type="email"
+            value={form.correo}
+            onChange={(value) => updateField("correo", value)}
           />
           <Field
             label="Telefono"

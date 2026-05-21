@@ -15,6 +15,7 @@ class Pensionado(Base, TimestampMixin, SoftDeleteMixin):
     genero: Mapped[str] = mapped_column(String(30), nullable=False)
     documento: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
+    correo: Mapped[str | None] = mapped_column(String(150))
     telefono: Mapped[str | None] = mapped_column(String(20))
     celular: Mapped[str | None] = mapped_column(String(20))
     direccion: Mapped[str] = mapped_column(String(200), nullable=False)

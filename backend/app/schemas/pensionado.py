@@ -11,6 +11,7 @@ class PensionadoBase(BaseModel):
     genero: str
     documento: str
     fecha_nacimiento: date
+    correo: Optional[str] = None
     telefono: str
     celular: Optional[str] = None
     direccion: str
@@ -49,6 +50,18 @@ class PensionadoBase(BaseModel):
             raise ValueError("Genero debe ser Masculino, Femenino, Otro o No especificado")
         return v
 
+    @field_validator("correo")
+    @classmethod
+    def correo_opcional(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if not v:
+            return None
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+            raise ValueError("Correo debe tener un formato valido")
+        return v
+
 # ── Create: lo que recibe la API al crear ────────────────────────
 class PensionadoCreate(PensionadoBase):
     pass
@@ -59,6 +72,7 @@ class PensionadoUpdate(BaseModel):
     segundo_nombre: Optional[str] = None
     apellidos: Optional[str] = None
     genero: Optional[str] = None
+    correo: Optional[str] = None
     telefono: Optional[str] = None
     celular: Optional[str] = None
     direccion: Optional[str] = None
@@ -90,6 +104,18 @@ class PensionadoUpdate(BaseModel):
         opciones = {"Masculino", "Femenino", "Otro", "No especificado"}
         if v not in opciones:
             raise ValueError("Genero debe ser Masculino, Femenino, Otro o No especificado")
+        return v
+
+    @field_validator("correo")
+    @classmethod
+    def correo_update(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if not v:
+            return None
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+            raise ValueError("Correo debe tener un formato valido")
         return v
 
 # ── Read: lo que devuelve la API ─────────────────────────────────
