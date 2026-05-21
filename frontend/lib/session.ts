@@ -9,6 +9,43 @@ export type SessionUser = {
 
 const SESSION_KEY = "credi.session";
 
+type TokenPayload = {
+  exp?: number;
+  sub?: string;
+};
+
+function decodeTokenPayload(token: string): TokenPayload | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) {
+      return null;
+    }
+
+    const normalized = payload.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "=",
+    );
+    const decoded = window.atob(padded);
+    return JSON.parse(decoded) as TokenPayload;
+  } catch {
+    return null;
+  }
+}
+
+export function isSessionExpired(session: SessionUser) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const payload = decodeTokenPayload(session.accessToken);
+  if (!payload?.exp) {
+    return false;
+  }
+
+  return payload.exp * 1000 <= Date.now();
+}
+
 export function readSession(): SessionUser | null {
   if (typeof window === "undefined") {
     return null;
@@ -20,7 +57,13 @@ export function readSession(): SessionUser | null {
   }
 
   try {
-    return JSON.parse(raw) as SessionUser;
+    const session = JSON.parse(raw) as SessionUser;
+    if (isSessionExpired(session)) {
+      window.localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+
+    return session;
   } catch {
     window.localStorage.removeItem(SESSION_KEY);
     return null;
@@ -43,13 +86,6 @@ export function readSessionUserId() {
     return null;
   }
 
-  try {
-    const payload = token.split(".")[1];
-    const normalized = payload.replaceAll("-", "+").replaceAll("_", "/");
-    const decoded = window.atob(normalized);
-    const data = JSON.parse(decoded) as { sub?: string };
-    return data.sub ? Number(data.sub) : null;
-  } catch {
-    return null;
-  }
+  const data = decodeTokenPayload(token);
+  return data?.sub ? Number(data.sub) : null;
 }

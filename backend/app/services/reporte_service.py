@@ -86,7 +86,7 @@ def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
     cumpleanos = [
         {
             "id": pensionado.id,
-            "nombre": pensionado.nombre,
+            "nombre": pensionado.nombre_completo,
             "documento": pensionado.documento,
             "fecha_nacimiento": pensionado.fecha_nacimiento.isoformat(),
         }

@@ -53,7 +53,7 @@ function LoginContent() {
 
       if (!response.ok) {
         const payload = (await response.json()) as { detail?: string };
-        throw new Error(payload.detail ?? "No se pudo iniciar sesion");
+        throw new Error(payload.detail ?? "No se pudo iniciar sesión");
       }
 
       const data = (await response.json()) as LoginResponse;
@@ -69,7 +69,7 @@ function LoginContent() {
       const message =
         submitError instanceof Error
           ? submitError.message
-          : "Ocurrio un error inesperado";
+          : "Ocurrió un error inesperado";
       setError(message);
     } finally {
       setLoading(false);
@@ -84,11 +84,11 @@ function LoginContent() {
             Crediconfiemos
           </p>
           <h1 className="mt-5 max-w-xl text-5xl font-semibold tracking-tight text-stone-950">
-            El frente comercial del credito ya tiene forma.
+            El frente comercial del crédito ya tiene forma.
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-8 text-stone-600">
-            Inicia sesion para entrar al panel, navegar por los modulos del
-            negocio y empezar a conectar la operacion real del sistema sin perder
+            Inicia sesión para entrar al panel, navegar por los módulos del
+            negocio y empezar a conectar la operación real del sistema sin perder
             tiempo en estructura.
           </p>
 
@@ -98,7 +98,7 @@ function LoginContent() {
                 Ya visible
               </p>
               <p className="mt-3 text-2xl font-semibold text-stone-900">
-                Login, shell, dashboard y creditos conectados
+                Login, shell, dashboard y créditos conectados
               </p>
             </article>
             <article className="card-panel p-5">
@@ -117,7 +117,7 @@ function LoginContent() {
             Acceso interno
           </p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-stone-950">
-            Inicia sesion
+            Inicia sesión
           </h2>
           <p className="mt-3 text-sm leading-7 text-stone-600">
             Usa tus credenciales reales del backend para entrar al panel.
@@ -140,13 +140,13 @@ function LoginContent() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-stone-700">
-                Contrasena
+                Contraseña
               </label>
               <input
                 className="input-base"
                 value={contrasena}
                 onChange={(event) => setContrasena(event.target.value)}
-                placeholder="Ingresa tu contrasena"
+                placeholder="Ingresa tu contraseña"
                 type="password"
                 autoComplete="current-password"
               />

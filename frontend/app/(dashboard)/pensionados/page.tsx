@@ -1,74 +1,56 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { readSession, readSessionUserId } from "@/lib/session";
+import { formatDate } from "@/lib/format";
 
 type Pensionado = {
   id: number;
   nombre: string;
+  segundo_nombre: string | null;
+  apellidos: string;
+  genero: string;
+  nombre_completo: string;
   documento: string;
   fecha_nacimiento: string;
-  telefono: string;
+  telefono: string | null;
   celular: string | null;
   direccion: string;
   fecha_inicio_pension: string;
   is_active: boolean;
 };
 
-type Credito = {
-  id: number;
-  pensionado_id: number;
-  asesor_id: number;
-  oficina_id: number;
-  cooperativa_id: number;
-  pagaduria_id: number;
-  monto_solicitado: number;
-  monto_aprobado: number | null;
-  plazo: number;
-  estado: string;
-  observaciones: string | null;
-  tiene_documentos_pendientes: boolean;
-  documentos_pendientes: string | null;
-  created_at: string;
-};
-
-type Documento = {
-  id: number;
-  credito_id: number;
+type PensionadoCreatePayload = {
   nombre: string;
-  tipo: string;
-  url: string;
-  version: number;
-  is_active: boolean;
-  created_at: string;
+  segundo_nombre: string | null;
+  apellidos: string;
+  genero: string;
+  documento: string;
+  fecha_nacimiento: string;
+  telefono: string;
+  celular: string | null;
+  direccion: string;
+  fecha_inicio_pension: string;
 };
 
-type Seguimiento = {
-  id: number;
-  pensionado_id: number;
-  pensionado_nombre: string | null;
-  pensionado_documento: string | null;
-  oficina_id: number;
-  oficina_nombre: string | null;
-  usuario_nombre: string | null;
-  tipo: string;
-  comentario: string;
-  resultado: string | null;
-  fecha_proximo_contacto: string | null;
-  created_at: string;
-};
-
-type CatalogItem = {
-  id: number;
+type PensionadoUpdatePayload = {
   nombre: string;
-  is_active?: boolean;
+  segundo_nombre: string | null;
+  apellidos: string;
+  genero: string;
+  telefono: string | null;
+  celular: string | null;
+  direccion: string;
 };
 
-type PensionadoForm = {
+type FormValues = {
   nombre: string;
+  segundo_nombre: string;
+  apellidos: string;
+  genero: string;
   documento: string;
   fecha_nacimiento: string;
   telefono: string;
@@ -77,33 +59,13 @@ type PensionadoForm = {
   fecha_inicio_pension: string;
 };
 
-type CreditoForm = {
-  oficina_id: string;
-  cooperativa_id: string;
-  pagaduria_id: string;
-  monto_solicitado: string;
-  plazo: string;
-  observaciones: string;
-  tiene_documentos_pendientes: boolean;
-  documentos_pendientes: string;
-};
+type FormMode = "create" | "edit";
 
-type SeguimientoForm = {
-  oficina_id: string;
-  tipo: string;
-  comentario: string;
-  resultado: string;
-  fecha_proximo_contacto: string;
-};
-
-type EstadoForm = {
-  estado_nuevo: string;
-  observaciones: string;
-  monto_aprobado: string;
-};
-
-const initialPensionadoForm: PensionadoForm = {
+const emptyForm: FormValues = {
   nombre: "",
+  segundo_nombre: "",
+  apellidos: "",
+  genero: "No especificado",
   documento: "",
   fecha_nacimiento: "",
   telefono: "",
@@ -112,162 +74,33 @@ const initialPensionadoForm: PensionadoForm = {
   fecha_inicio_pension: "",
 };
 
-const initialCreditoForm: CreditoForm = {
-  oficina_id: "",
-  cooperativa_id: "",
-  pagaduria_id: "",
-  monto_solicitado: "",
-  plazo: "",
-  observaciones: "",
-  tiene_documentos_pendientes: false,
-  documentos_pendientes: "",
-};
-
-const initialEstadoForm: EstadoForm = {
-  estado_nuevo: "",
-  observaciones: "",
-  monto_aprobado: "",
-};
-
-const tiposSeguimiento = [
-  "cotizacion",
-  "llamada",
-  "whatsapp",
-  "visita",
-  "documentos",
-  "objecion",
-  "seguimiento",
-  "cierre_perdido",
-];
-
-const transiciones: Record<string, string[]> = {
-  Prospecto: ["Enviado a cooperativa"],
-  "Enviado a cooperativa": ["Devuelto por corrección", "Aprobado", "Rechazado"],
-  "Devuelto por corrección": ["Reenviado"],
-  Reenviado: ["Devuelto por corrección", "Aprobado", "Rechazado"],
-};
-
-function formatCurrency(value: number | null) {
-  if (value === null) {
-    return "Sin valor";
-  }
-  return new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "Sin fecha";
-  }
-  return new Intl.DateTimeFormat("es-CO", {
-    dateStyle: "medium",
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Sin fecha";
-  }
-  return new Intl.DateTimeFormat("es-CO", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function normalizeText(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
 export default function PensionadosPage() {
   const router = useRouter();
-  const session = readSession();
-  const isAdmin = session?.rol === "administrador";
-  const userId = readSessionUserId();
   const [pensionados, setPensionados] = useState<Pensionado[]>([]);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [selectedCreditoId, setSelectedCreditoId] = useState<number | null>(null);
-  const [creditos, setCreditos] = useState<Credito[]>([]);
-  const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
-  const [documentos, setDocumentos] = useState<Documento[]>([]);
-  const [oficinas, setOficinas] = useState<CatalogItem[]>([]);
-  const [cooperativas, setCooperativas] = useState<CatalogItem[]>([]);
-  const [pagadurias, setPagadurias] = useState<CatalogItem[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [loadingFicha, setLoadingFicha] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showNewContact, setShowNewContact] = useState(false);
-  const [showNewCredito, setShowNewCredito] = useState(false);
-  const [showNewSeguimiento, setShowNewSeguimiento] = useState(false);
-  const [showEstadoForm, setShowEstadoForm] = useState(false);
-  const [pensionadoForm, setPensionadoForm] =
-    useState<PensionadoForm>(initialPensionadoForm);
-  const [creditoForm, setCreditoForm] = useState<CreditoForm>(initialCreditoForm);
-  const [seguimientoForm, setSeguimientoForm] = useState<SeguimientoForm>({
-    oficina_id: "",
-    tipo: "seguimiento",
-    comentario: "",
-    resultado: "",
-    fecha_proximo_contacto: "",
-  });
-  const [estadoForm, setEstadoForm] = useState<EstadoForm>(initialEstadoForm);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-
-  useEffect(() => {
-    if (!session) {
-      router.replace("/login?message=Inicia sesion para trabajar contactos");
-    }
-  }, [router, session]);
-
-  async function loadCatalogs() {
-    const [oficinasData, cooperativasData, pagaduriasData] = await Promise.all([
-      apiFetch<CatalogItem[]>("/api/v1/oficinas/"),
-      apiFetch<CatalogItem[]>("/api/v1/cooperativas/"),
-      apiFetch<CatalogItem[]>("/api/v1/pagadurias/"),
-    ]);
-
-    setOficinas(oficinasData);
-    setCooperativas(cooperativasData);
-    setPagadurias(pagaduriasData);
-
-    const defaultOffice = isAdmin
-      ? String(oficinasData[0]?.id ?? "")
-      : String(session?.oficinaId ?? oficinasData[0]?.id ?? "");
-
-    setCreditoForm((current) => ({
-      ...current,
-      oficina_id: current.oficina_id || defaultOffice,
-      cooperativa_id: current.cooperativa_id || String(cooperativasData[0]?.id ?? ""),
-      pagaduria_id: current.pagaduria_id || String(pagaduriasData[0]?.id ?? ""),
-    }));
-    setSeguimientoForm((current) => ({
-      ...current,
-      oficina_id: current.oficina_id || defaultOffice,
-    }));
-  }
+  const [formError, setFormError] = useState<string | null>(null);
+  const [modalMode, setModalMode] = useState<FormMode | null>(null);
+  const [selected, setSelected] = useState<Pensionado | null>(null);
+  const [form, setForm] = useState<FormValues>(emptyForm);
 
   async function loadPensionados() {
     setLoading(true);
     setError(null);
+
     try {
-      const data = await apiFetch<Pensionado[]>("/api/v1/pensionados/");
-      const ordered = [...data].sort((left, right) => Number(right.is_active) - Number(left.is_active) || right.id - left.id);
-      setPensionados(ordered);
-      setSelectedId((current) =>
-        current && ordered.some((item) => item.id === current)
-          ? current
-          : ordered[0]?.id ?? null,
+      const data = await apiFetch<Pensionado[]>(
+        "/api/v1/pensionados/?limit=200",
       );
+      setPensionados(data);
     } catch (loadError) {
       setError(
         loadError instanceof ApiError
           ? loadError.message
-          : "No se pudieron cargar los contactos",
+          : "No se pudo cargar la lista de pensionados",
       );
     } finally {
       setLoading(false);
@@ -275,793 +108,479 @@ export default function PensionadosPage() {
   }
 
   useEffect(() => {
-    if (!session) {
-      return;
-    }
+    void loadPensionados();
+  }, []);
 
-    void Promise.all([loadCatalogs(), loadPensionados()]);
-  }, [session?.accessToken]);
-
-  const selectedPensionado = useMemo(
-    () => pensionados.find((item) => item.id === selectedId) ?? null,
-    [pensionados, selectedId],
-  );
-
-  const selectedCredito = useMemo(
-    () => creditos.find((item) => item.id === selectedCreditoId) ?? null,
-    [creditos, selectedCreditoId],
-  );
-
-  const filteredPensionados = useMemo(() => {
-    const normalized = normalizeText(query.trim());
-    if (!normalized) {
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) {
       return pensionados;
     }
 
-    return pensionados.filter((item) =>
-      normalizeText(
-        [item.nombre, item.documento, item.telefono, item.celular ?? ""].join(" "),
-      ).includes(normalized),
+    return pensionados.filter((pensionado) =>
+      [
+        pensionado.nombre,
+        pensionado.segundo_nombre,
+        pensionado.apellidos,
+        pensionado.nombre_completo,
+        pensionado.genero,
+        pensionado.documento,
+        pensionado.celular,
+        pensionado.telefono,
+        pensionado.direccion,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term)),
     );
   }, [pensionados, query]);
 
-  async function loadFicha(pensionadoId: number) {
-    setLoadingFicha(true);
-    setError(null);
-
-    try {
-      const [creditosData, seguimientosData] = await Promise.all([
-        apiFetch<Credito[]>(`/api/v1/creditos/?pensionado_id=${pensionadoId}`),
-        apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?pensionado_id=${pensionadoId}`),
-      ]);
-      const orderedCreditos = [...creditosData].sort((left, right) => right.id - left.id);
-
-      setCreditos(orderedCreditos);
-      setSeguimientos(
-        [...seguimientosData].sort(
-          (left, right) =>
-            new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
-        ),
-      );
-      setSelectedCreditoId((current) =>
-        current && orderedCreditos.some((credito) => credito.id === current)
-          ? current
-          : orderedCreditos[0]?.id ?? null,
-      );
-    } catch (loadError) {
-      setError(
-        loadError instanceof ApiError
-          ? loadError.message
-          : "No se pudo cargar la ficha del contacto",
-      );
-      setCreditos([]);
-      setSeguimientos([]);
-      setSelectedCreditoId(null);
-    } finally {
-      setLoadingFicha(false);
-    }
+  function openCreateModal() {
+    setSelected(null);
+    setForm(emptyForm);
+    setFormError(null);
+    setModalMode("create");
   }
 
-  useEffect(() => {
-    if (selectedId) {
-      void loadFicha(selectedId);
-    } else {
-      setCreditos([]);
-      setSeguimientos([]);
-      setDocumentos([]);
-      setSelectedCreditoId(null);
-    }
-  }, [selectedId]);
-
-  async function loadDocumentos(creditoId: number) {
-    try {
-      const data = await apiFetch<Documento[]>(
-        `/api/v1/documentos/?credito_id=${creditoId}&solo_activos=false`,
-      );
-      setDocumentos([...data].sort((left, right) => right.id - left.id));
-    } catch {
-      setDocumentos([]);
-    }
-  }
-
-  useEffect(() => {
-    if (selectedCreditoId) {
-      void loadDocumentos(selectedCreditoId);
-    } else {
-      setDocumentos([]);
-    }
-  }, [selectedCreditoId]);
-
-  function resetCreditoForm() {
-    setCreditoForm((current) => ({
-      ...initialCreditoForm,
-      oficina_id: isAdmin
-        ? current.oficina_id || String(oficinas[0]?.id ?? "")
-        : String(session?.oficinaId ?? current.oficina_id),
-      cooperativa_id: current.cooperativa_id || String(cooperativas[0]?.id ?? ""),
-      pagaduria_id: current.pagaduria_id || String(pagadurias[0]?.id ?? ""),
-    }));
-    setShowNewCredito(false);
-  }
-
-  async function handleCreatePensionado(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const created = await apiFetch<Pensionado>("/api/v1/pensionados/", {
-        method: "POST",
-        body: JSON.stringify({
-          ...pensionadoForm,
-          celular: pensionadoForm.celular || null,
-        }),
-      });
-      setPensionados((current) => [created, ...current]);
-      setSelectedId(created.id);
-      setPensionadoForm(initialPensionadoForm);
-      setShowNewContact(false);
-      setMessage("Contacto creado correctamente.");
-    } catch (submitError) {
-      setError(
-        submitError instanceof ApiError ? submitError.message : "No se pudo crear el contacto",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleCreateSeguimiento(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedPensionado) {
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const created = await apiFetch<Seguimiento>("/api/v1/seguimientos/", {
-        method: "POST",
-        body: JSON.stringify({
-          pensionado_id: selectedPensionado.id,
-          oficina_id: Number(seguimientoForm.oficina_id),
-          tipo: seguimientoForm.tipo,
-          comentario: seguimientoForm.comentario,
-          resultado: seguimientoForm.resultado || null,
-          fecha_proximo_contacto: seguimientoForm.fecha_proximo_contacto || null,
-        }),
-      });
-      setSeguimientos((current) => [created, ...current]);
-      setSeguimientoForm((current) => ({
-        oficina_id: current.oficina_id,
-        tipo: "seguimiento",
-        comentario: "",
-        resultado: "",
-        fecha_proximo_contacto: "",
-      }));
-      setShowNewSeguimiento(false);
-      setMessage("Seguimiento agregado.");
-    } catch (submitError) {
-      setError(
-        submitError instanceof ApiError
-          ? submitError.message
-          : "No se pudo crear el seguimiento",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleCreateCredito(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedPensionado || !userId) {
-      setError("No se pudo identificar el contacto o el usuario actual.");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const created = await apiFetch<Credito>("/api/v1/creditos/", {
-        method: "POST",
-        body: JSON.stringify({
-          pensionado_id: selectedPensionado.id,
-          asesor_id: userId,
-          oficina_id: Number(creditoForm.oficina_id),
-          cooperativa_id: Number(creditoForm.cooperativa_id),
-          pagaduria_id: Number(creditoForm.pagaduria_id),
-          monto_solicitado: Number(creditoForm.monto_solicitado),
-          plazo: Number(creditoForm.plazo),
-          observaciones: creditoForm.observaciones || null,
-          tiene_documentos_pendientes: creditoForm.tiene_documentos_pendientes,
-          documentos_pendientes: creditoForm.tiene_documentos_pendientes
-            ? creditoForm.documentos_pendientes || null
-            : null,
-        }),
-      });
-      setCreditos((current) => [created, ...current]);
-      setSelectedCreditoId(created.id);
-      resetCreditoForm();
-      setMessage("Credito creado para el contacto.");
-    } catch (submitError) {
-      setError(
-        submitError instanceof ApiError ? submitError.message : "No se pudo crear el credito",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function openEstadoForm() {
-    if (!selectedCredito) {
-      return;
-    }
-    const next = transiciones[selectedCredito.estado] ?? [];
-    setEstadoForm({
-      estado_nuevo: next[0] ?? "",
-      observaciones: "",
-      monto_aprobado: selectedCredito.monto_solicitado
-        ? String(selectedCredito.monto_solicitado)
-        : "",
+  function openEditModal(pensionado: Pensionado) {
+    setSelected(pensionado);
+    setForm({
+      nombre: pensionado.nombre,
+      segundo_nombre: pensionado.segundo_nombre ?? "",
+      apellidos: pensionado.apellidos,
+      genero: pensionado.genero,
+      documento: pensionado.documento,
+      fecha_nacimiento: pensionado.fecha_nacimiento,
+      telefono: pensionado.telefono ?? "",
+      celular: pensionado.celular ?? "",
+      direccion: pensionado.direccion,
+      fecha_inicio_pension: pensionado.fecha_inicio_pension,
     });
-    setShowEstadoForm(true);
+    setFormError(null);
+    setModalMode("edit");
   }
 
-  async function handleChangeEstado(event: FormEvent<HTMLFormElement>) {
+  function closeModal() {
+    if (saving) {
+      return;
+    }
+
+    setModalMode(null);
+    setSelected(null);
+    setForm(emptyForm);
+    setFormError(null);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedCredito || !estadoForm.estado_nuevo) {
+
+    if (!modalMode) {
       return;
     }
 
     setSaving(true);
-    setError(null);
-    setMessage(null);
+    setFormError(null);
 
     try {
-      const updated = await apiFetch<Credito>(`/api/v1/creditos/${selectedCredito.id}/estado`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          estado_nuevo: estadoForm.estado_nuevo,
-          observaciones: estadoForm.observaciones || null,
-          monto_aprobado:
-            estadoForm.estado_nuevo === "Aprobado"
-              ? Number(estadoForm.monto_aprobado)
-              : null,
-        }),
-      });
-      setCreditos((current) =>
-        current.map((credito) => (credito.id === updated.id ? updated : credito)),
-      );
-      setShowEstadoForm(false);
-      setMessage(`Credito actualizado a ${updated.estado}.`);
-    } catch (submitError) {
-      setError(
-        submitError instanceof ApiError
-          ? submitError.message
-          : "No se pudo cambiar el estado",
+      if (modalMode === "create") {
+        const payload: PensionadoCreatePayload = {
+          nombre: form.nombre.trim(),
+          segundo_nombre: nullableText(form.segundo_nombre),
+          apellidos: form.apellidos.trim(),
+          genero: form.genero,
+          documento: form.documento.trim(),
+          fecha_nacimiento: form.fecha_nacimiento,
+          telefono: form.telefono.trim(),
+          celular: nullableText(form.celular),
+          direccion: form.direccion.trim(),
+          fecha_inicio_pension: form.fecha_inicio_pension,
+        };
+
+        const created = await apiFetch<Pensionado>("/api/v1/pensionados/", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        setPensionados((current) => [created, ...current]);
+      } else if (selected) {
+        const payload: PensionadoUpdatePayload = {
+          nombre: form.nombre.trim(),
+          segundo_nombre: nullableText(form.segundo_nombre),
+          apellidos: form.apellidos.trim(),
+          genero: form.genero,
+          telefono: nullableText(form.telefono),
+          celular: nullableText(form.celular),
+          direccion: form.direccion.trim(),
+        };
+
+        const updated = await apiFetch<Pensionado>(`/api/v1/pensionados/${selected.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+
+        setPensionados((current) =>
+          current.map((pensionado) => (pensionado.id === updated.id ? updated : pensionado)),
+        );
+      }
+
+      closeModal();
+    } catch (saveError) {
+      setFormError(
+        saveError instanceof ApiError ? saveError.message : "No se pudo guardar el pensionado",
       );
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleUploadDocumento() {
-    if (!selectedCredito || !uploadFile) {
-      setError("Selecciona un credito y un archivo.");
+  async function handleDelete(pensionado: Pensionado) {
+    const confirmed = window.confirm(
+      `Vas a borrar a ${pensionado.nombre_completo}. Esta accion lo marcara como inactivo.`,
+    );
+
+    if (!confirmed) {
       return;
     }
 
-    setSaving(true);
+    setDeletingId(pensionado.id);
     setError(null);
-    setMessage(null);
 
     try {
-      const formData = new FormData();
-      formData.append("credito_id", String(selectedCredito.id));
-      formData.append("archivo", uploadFile);
-
-      const documento = await apiFetch<Documento>("/api/v1/documentos/", {
-        method: "POST",
-        body: formData,
+      await apiFetch<Pensionado>(`/api/v1/pensionados/${pensionado.id}`, {
+        method: "DELETE",
       });
-      setDocumentos((current) => [documento, ...current]);
-      setUploadFile(null);
-      setMessage("Documento subido al credito.");
-    } catch (submitError) {
+
+      setPensionados((current) =>
+        current.map((item) => (item.id === pensionado.id ? { ...item, is_active: false } : item)),
+      );
+    } catch (deleteError) {
       setError(
-        submitError instanceof ApiError ? submitError.message : "No se pudo subir el documento",
+        deleteError instanceof ApiError
+          ? deleteError.message
+          : "No se pudo borrar el pensionado",
       );
     } finally {
-      setSaving(false);
+      setDeletingId(null);
     }
   }
 
-  const nextEstados = selectedCredito ? transiciones[selectedCredito.estado] ?? [] : [];
+  function openDetail(pensionadoId: number) {
+    router.push(`/pensionados/${pensionadoId}`);
+  }
+
+  function handleRowKeyDown(event: React.KeyboardEvent<HTMLDivElement>, pensionadoId: number) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openDetail(pensionadoId);
+    }
+  }
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
-              CRM operativo
+            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">
+              Pensionados
             </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-stone-950">
-              Contactos
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">
+              Contactos y base comercial
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
-              El flujo vive aqui: pensionado, seguimientos, creditos y documentos del
-              credito seleccionado.
+              Gestiona pensionados, consulta su ficha y manten actualizada la informacion de
+              contacto.
             </p>
           </div>
-          <button
-            type="button"
-            className="button-primary rounded-lg px-3 py-2 text-sm"
-            onClick={() => setShowNewContact(true)}
-          >
-            Nuevo contacto
-          </button>
-        </div>
-      </div>
 
-      {error ? (
-        <div className="rounded-2xl border border-red-500/20 bg-red-50 px-5 py-4 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
-      {message ? (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-50 px-5 py-4 text-sm text-emerald-700">
-          {message}
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_420px]">
-        <aside className="rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="border-b border-stone-800/10 p-4">
+          <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:items-center">
             <input
-              className="input-base rounded-lg"
+              className="input-base min-w-0 sm:w-80"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Buscar por nombre, documento o telefono"
             />
+            <button type="button" className="button-primary whitespace-nowrap" onClick={openCreateModal}>
+              Crear pensionado
+            </button>
           </div>
-          <div className="max-h-[calc(100vh-250px)] space-y-2 overflow-y-auto p-3">
-            {loading ? (
-              <EmptyState text="Cargando contactos..." />
-            ) : filteredPensionados.length === 0 ? (
-              <EmptyState text="Sin contactos para mostrar." />
-            ) : (
-              filteredPensionados.map((item) => {
-                const active = item.id === selectedId;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setSelectedId(item.id)}
-                    className={[
-                      "w-full rounded-xl border px-4 py-3 text-left transition",
-                      active
-                        ? "border-teal-700/20 bg-teal-950 text-white"
-                        : "border-stone-800/10 bg-white/70 text-stone-800 hover:bg-white",
-                    ].join(" ")}
+        </div>
+      </article>
+
+      {loading ? <StateMessage text="Cargando pensionados..." /> : null}
+      {error ? <StateMessage tone="error" text={error} /> : null}
+
+      {!loading && !error ? (
+        <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
+          <div className="hidden grid-cols-[1.2fr_0.75fr_0.95fr_0.95fr_0.7fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+            <span>Nombre</span>
+            <span>Documento</span>
+            <span>Contacto</span>
+            <span>Pension desde</span>
+            <span>Estado</span>
+            <span className="text-right">Acciones</span>
+          </div>
+
+          <div className="divide-y divide-stone-800/10">
+            {filtered.map((pensionado) => (
+              <div
+                key={pensionado.id}
+                role="link"
+                tabIndex={0}
+                onClick={() => openDetail(pensionado.id)}
+                onKeyDown={(event) => handleRowKeyDown(event, pensionado.id)}
+                className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[1.2fr_0.75fr_0.95fr_0.95fr_0.7fr_120px] md:items-center md:py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-stone-950">
+                    {pensionado.nombre_completo}
+                  </p>
+                  <p className="mt-1 text-xs text-stone-500 md:hidden">
+                    Documento {pensionado.documento}
+                  </p>
+                </div>
+                <span className="hidden text-stone-700 md:block">{pensionado.documento}</span>
+                <span className="text-stone-700">
+                  {pensionado.celular ?? pensionado.telefono ?? "Sin contacto"}
+                </span>
+                <span className="text-stone-700">
+                  {formatDate(pensionado.fecha_inicio_pension)}
+                </span>
+                <span>
+                  <StatusBadge active={pensionado.is_active} />
+                </span>
+                <div className="flex items-center gap-2 md:justify-end">
+                  <ActionLink href={`/pensionados/${pensionado.id}`} label="Ver">
+                    <EyeIcon />
+                  </ActionLink>
+                  <ActionButton label="Editar" onClick={() => openEditModal(pensionado)}>
+                    <EditIcon />
+                  </ActionButton>
+                  <ActionButton
+                    label="Borrar"
+                    tone="danger"
+                    disabled={deletingId === pensionado.id || !pensionado.is_active}
+                    onClick={() => void handleDelete(pensionado)}
                   >
-                    <p className="text-sm font-semibold">{item.nombre}</p>
-                    <p className="mt-1 text-xs opacity-75">
-                      {item.documento} · {item.telefono}
-                    </p>
-                  </button>
-                );
-              })
-            )}
+                    <TrashIcon />
+                  </ActionButton>
+                </div>
+              </div>
+            ))}
+
+            {filtered.length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-stone-500">
+                No hay pensionados para la busqueda actual.
+              </div>
+            ) : null}
           </div>
-        </aside>
-
-        <main className="space-y-4">
-          {!selectedPensionado ? (
-            <EmptyState text="Selecciona o crea un contacto para empezar." />
-          ) : (
-            <>
-              <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-stone-500">
-                      Pensionado
-                    </p>
-                    <h2 className="mt-2 text-2xl font-semibold text-stone-950">
-                      {selectedPensionado.nombre}
-                    </h2>
-                    <p className="mt-2 text-sm text-stone-600">
-                      Documento {selectedPensionado.documento} · Tel {selectedPensionado.telefono}
-                    </p>
-                    <p className="mt-1 text-sm text-stone-600">
-                      Pension desde {formatDate(selectedPensionado.fecha_inicio_pension)}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="button-muted rounded-lg px-3 py-2 text-sm"
-                      onClick={() => setShowNewSeguimiento(true)}
-                    >
-                      Agregar seguimiento
-                    </button>
-                    <button
-                      type="button"
-                      className="button-primary rounded-lg px-3 py-2 text-sm"
-                      onClick={() => setShowNewCredito(true)}
-                    >
-                      Crear credito
-                    </button>
-                  </div>
-                </div>
-              </article>
-
-              <section className="grid gap-4 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-semibold text-stone-950">Seguimientos</h3>
-                    {loadingFicha ? (
-                      <span className="text-xs text-stone-500">Actualizando...</span>
-                    ) : null}
-                  </div>
-                  <div className="mt-4 space-y-3">
-                    {seguimientos.length === 0 ? (
-                      <EmptyState text="Aun no hay seguimientos para este contacto." />
-                    ) : (
-                      seguimientos.map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-stone-950">
-                                {item.tipo} · {item.oficina_nombre ?? `Oficina ${item.oficina_id}`}
-                              </p>
-                              <p className="mt-1 text-xs text-stone-500">
-                                {item.usuario_nombre ?? "Usuario"} · {formatDateTime(item.created_at)}
-                              </p>
-                            </div>
-                            {item.fecha_proximo_contacto ? (
-                              <span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-                                {formatDate(item.fecha_proximo_contacto)}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="mt-3 text-sm leading-6 text-stone-700">{item.comentario}</p>
-                          {item.resultado ? (
-                            <p className="mt-2 text-xs font-semibold text-teal-700">
-                              Resultado: {item.resultado}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </article>
-
-                <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-                  <h3 className="text-lg font-semibold text-stone-950">Creditos</h3>
-                  <div className="mt-4 space-y-3">
-                    {creditos.length === 0 ? (
-                      <EmptyState text="Este contacto aun no tiene creditos." />
-                    ) : (
-                      creditos.map((credito) => {
-                        const active = credito.id === selectedCreditoId;
-                        return (
-                          <button
-                            key={credito.id}
-                            type="button"
-                            onClick={() => setSelectedCreditoId(credito.id)}
-                            className={[
-                              "w-full rounded-xl border px-4 py-3 text-left transition",
-                              active
-                                ? "border-teal-700/20 bg-teal-950 text-white"
-                                : "border-stone-800/10 bg-white/70 hover:bg-white",
-                            ].join(" ")}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold">Credito #{credito.id}</p>
-                                <p className="mt-1 text-xs opacity-75">
-                                  {formatCurrency(credito.monto_solicitado)} · {credito.plazo} meses
-                                </p>
-                              </div>
-                              <span className="rounded-lg bg-white/15 px-2 py-1 text-xs font-semibold">
-                                {credito.estado}
-                              </span>
-                            </div>
-                            {credito.tiene_documentos_pendientes ? (
-                              <p className={["mt-2 text-xs", active ? "text-amber-100" : "text-amber-700"].join(" ")}>
-                                Docs pendientes: {credito.documentos_pendientes ?? "sin detalle"}
-                              </p>
-                            ) : null}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </article>
-              </section>
-            </>
-          )}
-        </main>
-
-        <aside className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-          <h3 className="text-lg font-semibold text-stone-950">Credito seleccionado</h3>
-          {!selectedCredito ? (
-            <EmptyState text="Selecciona un credito para trabajar documentos y estado." />
-          ) : (
-            <div className="mt-4 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <Detail label="Estado" value={selectedCredito.estado} />
-                <Detail label="Solicitado" value={formatCurrency(selectedCredito.monto_solicitado)} />
-                <Detail label="Aprobado" value={formatCurrency(selectedCredito.monto_aprobado)} />
-                <Detail label="Oficina" value={`#${selectedCredito.oficina_id}`} />
-              </div>
-
-              {nextEstados.length > 0 ? (
-                <button
-                  type="button"
-                  className="button-primary w-full rounded-lg px-3 py-2 text-sm"
-                  onClick={openEstadoForm}
-                >
-                  Cambiar estado
-                </button>
-              ) : (
-                <div className="rounded-xl border border-stone-800/10 bg-stone-50 px-4 py-3 text-sm text-stone-600">
-                  Este credito esta en estado final.
-                </div>
-              )}
-
-              <div className="border-t border-stone-800/10 pt-4">
-                <p className="text-sm font-semibold text-stone-950">Subir documento</p>
-                <input
-                  className="input-base mt-3 rounded-lg file:mr-3 file:rounded-lg file:border-0 file:bg-stone-900 file:px-3 file:py-2 file:text-sm file:text-white"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    setUploadFile(event.target.files?.[0] ?? null)
-                  }
-                />
-                <button
-                  type="button"
-                  className="button-muted mt-3 w-full rounded-lg px-3 py-2 text-sm"
-                  onClick={() => void handleUploadDocumento()}
-                  disabled={saving || !uploadFile}
-                >
-                  Subir al credito
-                </button>
-              </div>
-
-              <div className="border-t border-stone-800/10 pt-4">
-                <p className="text-sm font-semibold text-stone-950">Documentos</p>
-                <div className="mt-3 space-y-2">
-                  {documentos.length === 0 ? (
-                    <EmptyState text="Sin documentos." />
-                  ) : (
-                    documentos.map((documento) => (
-                      <div
-                        key={documento.id}
-                        className="rounded-xl border border-stone-800/10 bg-white/70 px-3 py-3"
-                      >
-                        <p className="text-sm font-semibold text-stone-950">
-                          {documento.nombre}
-                        </p>
-                        <p className="mt-1 text-xs text-stone-500">
-                          {documento.tipo} · v{documento.version} · {formatDate(documento.created_at)}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </aside>
-      </div>
-
-      {showNewContact ? (
-        <Modal title="Nuevo contacto" onClose={() => setShowNewContact(false)}>
-          <form className="space-y-3" onSubmit={handleCreatePensionado}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input label="Nombre" value={pensionadoForm.nombre} onChange={(value) => setPensionadoForm((current) => ({ ...current, nombre: value }))} />
-              <Input label="Documento" value={pensionadoForm.documento} onChange={(value) => setPensionadoForm((current) => ({ ...current, documento: value }))} />
-              <Input label="Fecha nacimiento" type="date" value={pensionadoForm.fecha_nacimiento} onChange={(value) => setPensionadoForm((current) => ({ ...current, fecha_nacimiento: value }))} />
-              <Input label="Inicio pension" type="date" value={pensionadoForm.fecha_inicio_pension} onChange={(value) => setPensionadoForm((current) => ({ ...current, fecha_inicio_pension: value }))} />
-              <Input label="Telefono" value={pensionadoForm.telefono} onChange={(value) => setPensionadoForm((current) => ({ ...current, telefono: value }))} />
-              <Input label="Celular" value={pensionadoForm.celular} onChange={(value) => setPensionadoForm((current) => ({ ...current, celular: value }))} />
-            </div>
-            <Input label="Direccion" value={pensionadoForm.direccion} onChange={(value) => setPensionadoForm((current) => ({ ...current, direccion: value }))} />
-            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
-              {saving ? "Guardando..." : "Crear contacto"}
-            </button>
-          </form>
-        </Modal>
+        </div>
       ) : null}
 
-      {showNewSeguimiento && selectedPensionado ? (
-        <Modal title={`Seguimiento para ${selectedPensionado.nombre}`} onClose={() => setShowNewSeguimiento(false)}>
-          <form className="space-y-3" onSubmit={handleCreateSeguimiento}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Select
-                label="Oficina"
-                value={seguimientoForm.oficina_id}
-                disabled={!isAdmin}
-                onChange={(value) => setSeguimientoForm((current) => ({ ...current, oficina_id: value }))}
-                options={oficinas.map((item) => ({ value: String(item.id), label: item.nombre }))}
-              />
-              <Select
-                label="Tipo"
-                value={seguimientoForm.tipo}
-                onChange={(value) => setSeguimientoForm((current) => ({ ...current, tipo: value }))}
-                options={tiposSeguimiento.map((tipo) => ({ value: tipo, label: tipo }))}
-              />
-            </div>
-            <Textarea label="Comentario" value={seguimientoForm.comentario} onChange={(value) => setSeguimientoForm((current) => ({ ...current, comentario: value }))} />
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input label="Resultado" value={seguimientoForm.resultado} onChange={(value) => setSeguimientoForm((current) => ({ ...current, resultado: value }))} />
-              <Input label="Proximo contacto" type="datetime-local" value={seguimientoForm.fecha_proximo_contacto} onChange={(value) => setSeguimientoForm((current) => ({ ...current, fecha_proximo_contacto: value }))} />
-            </div>
-            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
-              {saving ? "Guardando..." : "Agregar seguimiento"}
-            </button>
-          </form>
-        </Modal>
-      ) : null}
-
-      {showNewCredito && selectedPensionado ? (
-        <Modal title={`Credito para ${selectedPensionado.nombre}`} onClose={resetCreditoForm}>
-          <form className="space-y-3" onSubmit={handleCreateCredito}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Select label="Oficina" value={creditoForm.oficina_id} disabled={!isAdmin} onChange={(value) => setCreditoForm((current) => ({ ...current, oficina_id: value }))} options={oficinas.map((item) => ({ value: String(item.id), label: item.nombre }))} />
-              <Select label="Cooperativa" value={creditoForm.cooperativa_id} onChange={(value) => setCreditoForm((current) => ({ ...current, cooperativa_id: value }))} options={cooperativas.map((item) => ({ value: String(item.id), label: item.nombre }))} />
-              <Select label="Pagaduria" value={creditoForm.pagaduria_id} onChange={(value) => setCreditoForm((current) => ({ ...current, pagaduria_id: value }))} options={pagadurias.map((item) => ({ value: String(item.id), label: item.nombre }))} />
-              <Input label="Plazo meses" type="number" value={creditoForm.plazo} onChange={(value) => setCreditoForm((current) => ({ ...current, plazo: value }))} />
-            </div>
-            <Input label="Monto solicitado" type="number" value={creditoForm.monto_solicitado} onChange={(value) => setCreditoForm((current) => ({ ...current, monto_solicitado: value }))} />
-            <Textarea label="Observaciones" value={creditoForm.observaciones} onChange={(value) => setCreditoForm((current) => ({ ...current, observaciones: value }))} />
-            <label className="flex items-center gap-3 text-sm text-stone-700">
-              <input
-                type="checkbox"
-                checked={creditoForm.tiene_documentos_pendientes}
-                onChange={(event) => setCreditoForm((current) => ({ ...current, tiene_documentos_pendientes: event.target.checked }))}
-              />
-              Tiene documentos pendientes
-            </label>
-            {creditoForm.tiene_documentos_pendientes ? (
-              <Textarea label="Documentos pendientes" value={creditoForm.documentos_pendientes} onChange={(value) => setCreditoForm((current) => ({ ...current, documentos_pendientes: value }))} />
-            ) : null}
-            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
-              {saving ? "Creando..." : "Crear credito"}
-            </button>
-          </form>
-        </Modal>
-      ) : null}
-
-      {showEstadoForm && selectedCredito ? (
-        <Modal title={`Cambiar estado credito #${selectedCredito.id}`} onClose={() => setShowEstadoForm(false)}>
-          <form className="space-y-3" onSubmit={handleChangeEstado}>
-            <Select
-              label="Nuevo estado"
-              value={estadoForm.estado_nuevo}
-              onChange={(value) => setEstadoForm((current) => ({ ...current, estado_nuevo: value }))}
-              options={nextEstados.map((estado) => ({ value: estado, label: estado }))}
-            />
-            {estadoForm.estado_nuevo === "Aprobado" ? (
-              <Input label="Monto aprobado" type="number" value={estadoForm.monto_aprobado} onChange={(value) => setEstadoForm((current) => ({ ...current, monto_aprobado: value }))} />
-            ) : null}
-            <Textarea label="Observacion" value={estadoForm.observaciones} onChange={(value) => setEstadoForm((current) => ({ ...current, observaciones: value }))} />
-            <button type="submit" className="button-primary w-full rounded-lg" disabled={saving}>
-              {saving ? "Actualizando..." : "Cambiar estado"}
-            </button>
-          </form>
-        </Modal>
+      {modalMode ? (
+        <PensionadoModal
+          mode={modalMode}
+          form={form}
+          error={formError}
+          saving={saving}
+          onChange={setForm}
+          onClose={closeModal}
+          onSubmit={handleSubmit}
+        />
       ) : null}
     </section>
   );
 }
 
-function Modal({
-  title,
-  children,
+function PensionadoModal({
+  mode,
+  form,
+  error,
+  saving,
+  onChange,
   onClose,
+  onSubmit,
 }: {
-  title: string;
-  children: React.ReactNode;
+  mode: FormMode;
+  form: FormValues;
+  error: string | null;
+  saving: boolean;
+  onChange: (form: FormValues) => void;
   onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const isEdit = mode === "edit";
+
+  function updateField(field: keyof FormValues, value: string) {
+    onChange({ ...form, [field]: value });
+  }
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/45 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-stone-800/10 bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-stone-950">{title}</h2>
-          <button type="button" className="button-muted rounded-lg px-3 py-2 text-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
+      <form
+        onSubmit={onSubmit}
+        className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+      >
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+              {isEdit ? "Editar pensionado" : "Nuevo pensionado"}
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-stone-950">
+              {isEdit ? fullNameFromForm(form) : "Crear pensionado"}
+            </h2>
+          </div>
+          <button type="button" className="button-muted px-3 py-2 text-sm" onClick={onClose}>
             Cerrar
           </button>
         </div>
-        {children}
-      </div>
+
+        {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Nombre"
+            value={form.nombre}
+            onChange={(value) => updateField("nombre", value)}
+            required
+          />
+          <Field
+            label="Segundo nombre"
+            value={form.segundo_nombre}
+            onChange={(value) => updateField("segundo_nombre", value)}
+          />
+          <Field
+            label="Apellidos"
+            value={form.apellidos}
+            onChange={(value) => updateField("apellidos", value)}
+            required
+          />
+          <SelectField
+            label="Genero"
+            value={form.genero}
+            onChange={(value) => updateField("genero", value)}
+            options={["Masculino", "Femenino", "Otro", "No especificado"]}
+          />
+          <Field
+            label="Documento"
+            value={form.documento}
+            onChange={(value) => updateField("documento", value)}
+            required
+            disabled={isEdit}
+            inputMode="numeric"
+          />
+          <Field
+            label="Fecha de nacimiento"
+            type="date"
+            value={form.fecha_nacimiento}
+            onChange={(value) => updateField("fecha_nacimiento", value)}
+            required
+            disabled={isEdit}
+          />
+          <Field
+            label="Inicio de pension"
+            type="date"
+            value={form.fecha_inicio_pension}
+            onChange={(value) => updateField("fecha_inicio_pension", value)}
+            required
+            disabled={isEdit}
+          />
+          <Field
+            label="Telefono"
+            value={form.telefono}
+            onChange={(value) => updateField("telefono", value)}
+            required={!isEdit}
+            inputMode="tel"
+          />
+          <Field
+            label="Celular"
+            value={form.celular}
+            onChange={(value) => updateField("celular", value)}
+            inputMode="tel"
+          />
+          <div className="sm:col-span-2">
+            <Field
+              label="Direccion"
+              value={form.direccion}
+              onChange={(value) => updateField("direccion", value)}
+              required
+            />
+          </div>
+        </div>
+
+        {isEdit ? (
+          <p className="mt-4 text-xs text-stone-500">
+            Documento y fechas no se editan desde este formulario porque el backend no los acepta
+            en PATCH.
+          </p>
+        ) : null}
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" className="button-muted" onClick={onClose} disabled={saving}>
+            Cancelar
+          </button>
+          <button type="submit" className="button-primary" disabled={saving}>
+            {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear pensionado"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
-function Input({
+function Field({
   label,
   value,
   onChange,
   type = "text",
+  required = false,
+  disabled = false,
+  inputMode,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  required?: boolean;
+  disabled?: boolean;
+  inputMode?: "numeric" | "tel";
 }) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-stone-700">{label}</span>
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
       <input
-        className="input-base rounded-lg"
-        value={value}
+        className="input-base mt-2 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500"
         type={type}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
-}
-
-function Textarea({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-stone-700">{label}</span>
-      <textarea
-        className="input-base min-h-[110px] resize-none rounded-lg"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        required={required}
+        disabled={disabled}
+        inputMode={inputMode}
       />
     </label>
   );
 }
 
-function Select({
+function SelectField({
   label,
   value,
   options,
   onChange,
-  disabled = false,
 }: {
   label: string;
   value: string;
-  options: Array<{ value: string; label: string }>;
+  options: string[];
   onChange: (value: string) => void;
-  disabled?: boolean;
 }) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-stone-700">{label}</span>
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
       <select
-        className="input-base rounded-lg disabled:cursor-not-allowed disabled:bg-stone-100"
+        className="input-base mt-2"
         value={value}
-        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">Selecciona</option>
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
+          <option key={option} value={option}>
+            {option}
           </option>
         ))}
       </select>
@@ -1069,18 +588,159 @@ function Select({
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function ActionLink({
+  href,
+  label,
+  children,
+}: {
+  href: string;
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-stone-900">{value}</p>
-    </div>
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      onClick={(event) => event.stopPropagation()}
+      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800"
+    >
+      {children}
+    </Link>
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+function StatusBadge({ active }: { active: boolean }) {
   return (
-    <div className="rounded-xl border border-dashed border-stone-800/15 bg-white/45 px-5 py-6 text-center text-sm text-stone-500">
+    <span
+      className={[
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-xs font-semibold",
+        active
+          ? "border-teal-700/20 bg-teal-50 text-teal-800"
+          : "border-stone-800/10 bg-stone-100 text-stone-600",
+      ].join(" ")}
+    >
+      {active ? "Activo" : "Inactivo"}
+    </span>
+  );
+}
+
+function ActionButton({
+  label,
+  children,
+  onClick,
+  disabled = false,
+  tone = "default",
+}: {
+  label: string;
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "default" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      disabled={disabled}
+      className={[
+        "inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-white transition disabled:cursor-not-allowed disabled:opacity-50",
+        tone === "danger"
+          ? "border-red-500/15 text-red-700 hover:bg-red-50"
+          : "border-stone-800/10 text-stone-700 hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 20h9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M3 6h18M9 6V4h6v2m-8 0 1 14h8l1-14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function nullableText(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function fullNameFromForm(form: FormValues) {
+  return [form.nombre, form.segundo_nombre, form.apellidos]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function StateMessage({
+  text,
+  tone = "default",
+}: {
+  text: string;
+  tone?: "default" | "error";
+}) {
+  return (
+    <div
+      className={[
+        "rounded-2xl border px-5 py-4 text-sm",
+        tone === "error"
+          ? "border-red-500/20 bg-red-50 text-red-700"
+          : "border-stone-800/10 bg-white/65 text-stone-500",
+      ].join(" ")}
+    >
       {text}
     </div>
   );

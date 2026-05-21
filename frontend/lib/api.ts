@@ -1,6 +1,6 @@
 "use client";
 
-import { readSession } from "@/lib/session";
+import { clearSession, readSession } from "@/lib/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -20,6 +20,9 @@ type ValidationItem = {
 
 const fieldLabels: Record<string, string> = {
   nombre: "Nombre",
+  segundo_nombre: "Segundo nombre",
+  apellidos: "Apellidos",
+  genero: "Genero",
   documento: "Documento",
   fecha_nacimiento: "Fecha de nacimiento",
   telefono: "Teléfono",
@@ -90,6 +93,18 @@ function normalizeApiError(detail: unknown, fallback: string) {
   return fallback;
 }
 
+function redirectToLogin() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  clearSession();
+
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+  const next = currentPath.startsWith("/login") ? "/dashboard" : currentPath;
+  window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
@@ -112,6 +127,11 @@ export async function apiFetch<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new ApiError("Sesion expirada. Inicia sesion nuevamente.", 401);
+    }
+
     let message = "Ocurrio un error al consultar la API";
 
     try {

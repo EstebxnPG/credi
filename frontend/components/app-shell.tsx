@@ -14,11 +14,11 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const session = readSession();
-
   const visibleItems = navItems.filter((item) => {
     if (!item.adminOnly) {
       return true;
     }
+
     return session?.rol === "administrador";
   });
 
@@ -53,7 +53,7 @@ export function AppShell({
                 </div>
                 <div className="hidden rounded-lg border border-stone-800/10 bg-white/70 px-3 py-1.5 text-xs text-stone-600 sm:block">
                   {session?.rol ?? "sin rol"}
-                  {session?.oficinaId ? ` · Oficina ${session.oficinaId}` : ""}
+                  {session?.oficinaId ? ` - Oficina ${session.oficinaId}` : ""}
                 </div>
                 <button
                   type="button"
@@ -83,7 +83,8 @@ export function AppShell({
                       {section.label}
                     </span>
                     {items.map((item) => {
-                      const active = pathname === item.href;
+                      const active =
+                        pathname === item.href || pathname.startsWith(`${item.href}/`);
 
                       return (
                         <Link

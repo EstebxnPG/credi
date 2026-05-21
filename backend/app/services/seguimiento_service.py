@@ -52,7 +52,7 @@ def _to_read(seguimiento: Seguimiento) -> SeguimientoRead:
     return SeguimientoRead(
         id=seguimiento.id,
         pensionado_id=seguimiento.pensionado_id,
-        pensionado_nombre=seguimiento.pensionado.nombre if seguimiento.pensionado else None,
+        pensionado_nombre=seguimiento.pensionado.nombre_completo if seguimiento.pensionado else None,
         pensionado_documento=seguimiento.pensionado.documento if seguimiento.pensionado else None,
         oficina_id=seguimiento.oficina_id,
         oficina_nombre=seguimiento.oficina.nombre if seguimiento.oficina else None,
