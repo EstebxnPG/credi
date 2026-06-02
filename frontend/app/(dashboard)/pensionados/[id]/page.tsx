@@ -40,6 +40,14 @@ type Credito = {
   created_at: string;
 };
 
+type PendienteCredito = {
+  id: number;
+  credito_id: number;
+  descripcion: string;
+  estado: string;
+  origen: string;
+};
+
 type Seguimiento = {
   id: number;
   pensionado_id: number;
@@ -51,6 +59,12 @@ type Seguimiento = {
   resultado: string | null;
   fecha_proximo_contacto: string | null;
   created_at: string;
+};
+
+type Oficina = {
+  id: number;
+  nombre: string;
+  is_active: boolean;
 };
 
 type LogItem = {
@@ -77,10 +91,39 @@ type FormValues = {
   segundo_nombre: string;
   apellidos: string;
   genero: string;
+  fecha_nacimiento: string;
+  fecha_inicio_pension: string;
   correo: string;
   telefono: string;
   celular: string;
   direccion: string;
+};
+
+type SeguimientoFormValues = {
+  oficina_id: string;
+  tipo: string;
+  comentario: string;
+  resultado: string;
+  fecha_proximo_contacto: string;
+};
+
+const seguimientoTipos = [
+  { value: "cotizacion", label: "Cotizacion" },
+  { value: "llamada", label: "Llamada" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "visita", label: "Visita" },
+  { value: "documentos", label: "Documentos" },
+  { value: "objecion", label: "Objecion" },
+  { value: "seguimiento", label: "Seguimiento" },
+  { value: "cierre_perdido", label: "Cierre perdido" },
+];
+
+const emptySeguimientoForm: SeguimientoFormValues = {
+  oficina_id: "",
+  tipo: "llamada",
+  comentario: "",
+  resultado: "",
+  fecha_proximo_contacto: "",
 };
 
 export default function PensionadoDetailPage() {
@@ -92,7 +135,9 @@ export default function PensionadoDetailPage() {
 
   const [pensionado, setPensionado] = useState<Pensionado | null>(null);
   const [creditos, setCreditos] = useState<Credito[]>([]);
+  const [pendientes, setPendientes] = useState<PendienteCredito[]>([]);
   const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
+  const [oficinas, setOficinas] = useState<Oficina[]>([]);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,6 +146,9 @@ export default function PensionadoDetailPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [seguimientoForm, setSeguimientoForm] = useState<SeguimientoFormValues | null>(null);
+  const [seguimientoError, setSeguimientoError] = useState<string | null>(null);
+  const [savingSeguimiento, setSavingSeguimiento] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(pensionadoId)) {
@@ -117,16 +165,29 @@ export default function PensionadoDetailPage() {
       setLogsError(null);
 
       try {
-        const [pensionadoData, creditosData, seguimientosData] = await Promise.all([
+        const [
+          pensionadoData,
+          creditosData,
+          seguimientosData,
+          pendientesData,
+          oficinasData,
+        ] = await Promise.all([
           apiFetch<Pensionado>(`/api/v1/pensionados/${pensionadoId}`),
           apiFetch<Credito[]>(`/api/v1/creditos/?pensionado_id=${pensionadoId}`),
           apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?pensionado_id=${pensionadoId}`),
+          apiFetch<PendienteCredito[]>("/api/v1/pendientes-credito/?estado=pendiente"),
+          apiFetch<Oficina[]>("/api/v1/oficinas/"),
         ]);
 
         if (!ignore) {
+          const creditoIds = new Set(creditosData.map((credito) => credito.id));
           setPensionado(pensionadoData);
           setCreditos(creditosData);
+          setPendientes(
+            pendientesData.filter((pendiente) => creditoIds.has(pendiente.credito_id)),
+          );
           setSeguimientos(seguimientosData);
+          setOficinas(oficinasData);
         }
 
         if (session?.rol === "administrador") {
@@ -196,6 +257,8 @@ export default function PensionadoDetailPage() {
       segundo_nombre: pensionado.segundo_nombre ?? "",
       apellidos: pensionado.apellidos,
       genero: pensionado.genero,
+      fecha_nacimiento: pensionado.fecha_nacimiento,
+      fecha_inicio_pension: pensionado.fecha_inicio_pension,
       correo: pensionado.correo ?? "",
       telefono: pensionado.telefono ?? "",
       celular: pensionado.celular ?? "",
@@ -213,6 +276,67 @@ export default function PensionadoDetailPage() {
     setFormError(null);
   }
 
+  function openSeguimientoModal() {
+    const defaultOficinaId = session?.oficinaId ?? oficinas[0]?.id ?? "";
+    setSeguimientoForm({
+      ...emptySeguimientoForm,
+      oficina_id: defaultOficinaId ? String(defaultOficinaId) : "",
+    });
+    setSeguimientoError(null);
+  }
+
+  function closeSeguimientoModal() {
+    if (savingSeguimiento) {
+      return;
+    }
+
+    setSeguimientoForm(null);
+    setSeguimientoError(null);
+  }
+
+  async function handleSeguimientoSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!seguimientoForm || !pensionado) {
+      return;
+    }
+
+    if (!seguimientoForm.oficina_id) {
+      setSeguimientoError("Selecciona la oficina del seguimiento.");
+      return;
+    }
+
+    setSavingSeguimiento(true);
+    setSeguimientoError(null);
+
+    try {
+      const created = await apiFetch<Seguimiento>("/api/v1/seguimientos/", {
+        method: "POST",
+        body: JSON.stringify({
+          pensionado_id: pensionado.id,
+          oficina_id: Number(seguimientoForm.oficina_id),
+          tipo: seguimientoForm.tipo,
+          comentario: seguimientoForm.comentario.trim(),
+          resultado: nullableText(seguimientoForm.resultado),
+          fecha_proximo_contacto: seguimientoForm.fecha_proximo_contacto
+            ? new Date(seguimientoForm.fecha_proximo_contacto).toISOString()
+            : null,
+        }),
+      });
+
+      setSeguimientos((current) => [created, ...current]);
+      setSeguimientoForm(null);
+    } catch (saveError) {
+      setSeguimientoError(
+        saveError instanceof ApiError
+          ? saveError.message
+          : "No se pudo crear el seguimiento",
+      );
+    } finally {
+      setSavingSeguimiento(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -224,18 +348,28 @@ export default function PensionadoDetailPage() {
     setFormError(null);
 
     try {
+      const payload: Record<string, string | null> = {
+        nombre: form.nombre.trim(),
+        segundo_nombre: nullableText(form.segundo_nombre),
+        apellidos: form.apellidos.trim(),
+        genero: form.genero,
+        correo: nullableText(form.correo),
+        telefono: nullableText(form.telefono),
+        celular: nullableText(form.celular),
+        direccion: form.direccion.trim(),
+      };
+
+      if (form.fecha_nacimiento !== pensionado.fecha_nacimiento) {
+        payload.fecha_nacimiento = form.fecha_nacimiento;
+      }
+
+      if (form.fecha_inicio_pension !== pensionado.fecha_inicio_pension) {
+        payload.fecha_inicio_pension = form.fecha_inicio_pension;
+      }
+
       const updated = await apiFetch<Pensionado>(`/api/v1/pensionados/${pensionado.id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          nombre: form.nombre.trim(),
-          segundo_nombre: nullableText(form.segundo_nombre),
-          apellidos: form.apellidos.trim(),
-          genero: form.genero,
-          correo: nullableText(form.correo),
-          telefono: nullableText(form.telefono),
-          celular: nullableText(form.celular),
-          direccion: form.direccion.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
 
       setPensionado(updated);
@@ -348,9 +482,11 @@ export default function PensionadoDetailPage() {
           </div>
         </article>
 
-        {selectedView === "creditos" ? <CreditosList creditos={creditos} /> : null}
+        {selectedView === "creditos" ? (
+          <CreditosList creditos={creditos} pendientes={pendientes} />
+        ) : null}
         {selectedView === "seguimientos" ? (
-          <SeguimientosList seguimientos={seguimientos} />
+          <SeguimientosList seguimientos={seguimientos} onCreate={openSeguimientoModal} />
         ) : null}
         {selectedView === "actualizaciones" ? (
           <ActualizacionesList
@@ -396,6 +532,17 @@ export default function PensionadoDetailPage() {
           onSubmit={handleSubmit}
         />
       ) : null}
+      {seguimientoForm ? (
+        <SeguimientoCreateModal
+          form={seguimientoForm}
+          error={seguimientoError}
+          saving={savingSeguimiento}
+          oficinas={oficinas}
+          onChange={setSeguimientoForm}
+          onClose={closeSeguimientoModal}
+          onSubmit={handleSeguimientoSubmit}
+        />
+      ) : null}
     </section>
   );
 }
@@ -404,7 +551,22 @@ function normalizeView(value: string | null): ViewKey {
   return views.some((view) => view.key === value) ? (value as ViewKey) : "creditos";
 }
 
-function CreditosList({ creditos }: { creditos: Credito[] }) {
+function CreditosList({
+  creditos,
+  pendientes,
+}: {
+  creditos: Credito[];
+  pendientes: PendienteCredito[];
+}) {
+  const pendientesByCreditoId = useMemo(() => {
+    const grouped = new Map<number, PendienteCredito[]>();
+    pendientes.forEach((pendiente) => {
+      const current = grouped.get(pendiente.credito_id) ?? [];
+      grouped.set(pendiente.credito_id, [...current, pendiente]);
+    });
+    return grouped;
+  }, [pendientes]);
+
   return (
     <article className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
       <div className="border-b border-stone-800/10 px-5 py-4">
@@ -423,6 +585,7 @@ function CreditosList({ creditos }: { creditos: Credito[] }) {
       <div className="divide-y divide-stone-800/10">
         {creditos.map((credito) => {
           const href = `/creditos/${credito.id}`;
+          const pendientesAbiertos = pendientesByCreditoId.get(credito.id) ?? [];
 
           return (
             <Link
@@ -445,11 +608,9 @@ function CreditosList({ creditos }: { creditos: Credito[] }) {
               <span className="text-stone-700">{credito.plazo} meses</span>
               <span className="text-stone-700">
                 {formatDate(credito.fecha_registro)}
-                {credito.tiene_documentos_pendientes ? (
-                  <span className="mt-1 block text-xs font-medium text-amber-700">
-                    Documentos pendientes
-                  </span>
-                ) : null}
+                <PendingSummary
+                  pendientes={pendientesAbiertos}
+                />
               </span>
               <span className="flex items-center gap-2 md:justify-end">
                 <span
@@ -472,10 +633,21 @@ function CreditosList({ creditos }: { creditos: Credito[] }) {
   );
 }
 
-function SeguimientosList({ seguimientos }: { seguimientos: Seguimiento[] }) {
+function SeguimientosList({
+  seguimientos,
+  onCreate,
+}: {
+  seguimientos: Seguimiento[];
+  onCreate: () => void;
+}) {
   return (
     <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-      <h2 className="text-lg font-semibold text-stone-950">Seguimientos</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold text-stone-950">Seguimientos</h2>
+        <button type="button" className="button-primary" onClick={onCreate}>
+          Crear seguimiento
+        </button>
+      </div>
       <div className="mt-4 divide-y divide-stone-800/10">
         {seguimientos.map((seguimiento) => (
           <Link
@@ -503,6 +675,119 @@ function SeguimientosList({ seguimientos }: { seguimientos: Seguimiento[] }) {
         ) : null}
       </div>
     </article>
+  );
+}
+
+function SeguimientoCreateModal({
+  form,
+  error,
+  saving,
+  oficinas,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  form: SeguimientoFormValues;
+  error: string | null;
+  saving: boolean;
+  oficinas: Oficina[];
+  onChange: (form: SeguimientoFormValues) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  function updateField(field: keyof SeguimientoFormValues, value: string) {
+    onChange({ ...form, [field]: value });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
+      <form
+        onSubmit={onSubmit}
+        className="max-h-[calc(100vh-48px)] w-full max-w-2xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+      >
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+              Nuevo seguimiento
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-stone-950">
+              Registrar contacto
+            </h2>
+          </div>
+          <button type="button" className="button-muted px-3 py-2 text-sm" onClick={onClose}>
+            Cerrar
+          </button>
+        </div>
+
+        {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <SelectField
+            label="Tipo"
+            value={form.tipo}
+            onChange={(value) => updateField("tipo", value)}
+            options={seguimientoTipos.map((tipo) => tipo.label)}
+            optionValues={seguimientoTipos.map((tipo) => tipo.value)}
+          />
+          <SelectField
+            label="Oficina"
+            value={form.oficina_id}
+            onChange={(value) => updateField("oficina_id", value)}
+            options={oficinas.map((oficina) => oficina.nombre)}
+            optionValues={oficinas.map((oficina) => String(oficina.id))}
+          />
+          <div className="sm:col-span-2">
+            <TextareaField
+              label="Comentario"
+              value={form.comentario}
+              onChange={(value) => updateField("comentario", value)}
+              required
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <TextareaField
+              label="Resultado"
+              value={form.resultado}
+              onChange={(value) => updateField("resultado", value)}
+            />
+          </div>
+          <Field
+            label="Proximo contacto"
+            type="datetime-local"
+            value={form.fecha_proximo_contacto}
+            onChange={(value) => updateField("fecha_proximo_contacto", value)}
+          />
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" className="button-muted" onClick={onClose} disabled={saving}>
+            Cancelar
+          </button>
+          <button type="submit" className="button-primary" disabled={saving}>
+            {saving ? "Guardando..." : "Crear seguimiento"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function PendingSummary({
+  pendientes,
+}: {
+  pendientes: PendienteCredito[];
+}) {
+  if (pendientes.length === 0) {
+    return null;
+  }
+
+  return (
+    <span className="mt-1 block space-y-1 text-xs font-medium text-amber-700">
+      <span className="block">
+        {pendientes.length} pendiente{pendientes.length === 1 ? "" : "s"} operativo
+        {pendientes.length === 1 ? "" : "s"}
+      </span>
+    </span>
   );
 }
 
@@ -603,6 +888,20 @@ function PensionadoEditModal({
             onChange={(value) => updateField("genero", value)}
             options={["Masculino", "Femenino", "Otro", "No especificado"]}
           />
+          <Field
+            label="Fecha de nacimiento"
+            type="date"
+            value={form.fecha_nacimiento}
+            onChange={(value) => updateField("fecha_nacimiento", value)}
+            required
+          />
+          <Field
+            label="Inicio de pension"
+            type="date"
+            value={form.fecha_inicio_pension}
+            onChange={(value) => updateField("fecha_inicio_pension", value)}
+            required
+          />
           <Field label="Correo" type="email" value={form.correo} onChange={(value) => updateField("correo", value)} />
           <Field label="Telefono" value={form.telefono} onChange={(value) => updateField("telefono", value)} inputMode="tel" />
           <Field label="Celular" value={form.celular} onChange={(value) => updateField("celular", value)} inputMode="tel" />
@@ -612,7 +911,8 @@ function PensionadoEditModal({
         </div>
 
         <p className="mt-4 text-xs text-stone-500">
-          Documento y fechas no se editan aqui porque el backend de pensionados no los acepta en PATCH.
+          Corrige las fechas solo cuando exista un error de digitacion. Estos datos afectan las
+          reglas de edad y antiguedad usadas al crear creditos.
         </p>
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -663,11 +963,13 @@ function SelectField({
   value,
   options,
   onChange,
+  optionValues,
 }: {
   label: string;
   value: string;
   options: string[];
   onChange: (value: string) => void;
+  optionValues?: string[];
 }) {
   return (
     <label className="block text-sm font-medium text-stone-700">
@@ -677,12 +979,36 @@ function SelectField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
+        {options.map((option, index) => (
+          <option key={optionValues?.[index] ?? option} value={optionValues?.[index] ?? option}>
             {option}
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function TextareaField({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <textarea
+        className="input-base mt-2 min-h-24"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+      />
     </label>
   );
 }

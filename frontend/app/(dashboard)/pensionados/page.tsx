@@ -43,6 +43,8 @@ type PensionadoUpdatePayload = {
   segundo_nombre: string | null;
   apellidos: string;
   genero: string;
+  fecha_nacimiento: string;
+  fecha_inicio_pension: string;
   correo: string | null;
   telefono: string | null;
   celular: string | null;
@@ -210,7 +212,7 @@ export default function PensionadosPage() {
 
         setPensionados((current) => [created, ...current]);
       } else if (selected) {
-        const payload: PensionadoUpdatePayload = {
+        const payload: Partial<PensionadoUpdatePayload> = {
           nombre: form.nombre.trim(),
           segundo_nombre: nullableText(form.segundo_nombre),
           apellidos: form.apellidos.trim(),
@@ -220,6 +222,14 @@ export default function PensionadosPage() {
           celular: nullableText(form.celular),
           direccion: form.direccion.trim(),
         };
+
+        if (form.fecha_nacimiento !== selected.fecha_nacimiento) {
+          payload.fecha_nacimiento = form.fecha_nacimiento;
+        }
+
+        if (form.fecha_inicio_pension !== selected.fecha_inicio_pension) {
+          payload.fecha_inicio_pension = form.fecha_inicio_pension;
+        }
 
         const updated = await apiFetch<Pensionado>(`/api/v1/pensionados/${selected.id}`, {
           method: "PATCH",
@@ -482,7 +492,6 @@ function PensionadoModal({
             value={form.fecha_nacimiento}
             onChange={(value) => updateField("fecha_nacimiento", value)}
             required
-            disabled={isEdit}
           />
           <Field
             label="Inicio de pension"
@@ -490,7 +499,6 @@ function PensionadoModal({
             value={form.fecha_inicio_pension}
             onChange={(value) => updateField("fecha_inicio_pension", value)}
             required
-            disabled={isEdit}
           />
           <Field
             label="Correo"
@@ -523,8 +531,8 @@ function PensionadoModal({
 
         {isEdit ? (
           <p className="mt-4 text-xs text-stone-500">
-            Documento y fechas no se editan desde este formulario porque el backend no los acepta
-            en PATCH.
+            Documento sigue bloqueado por identidad unica. Las fechas se pueden corregir si hubo
+            error de digitacion; afectan las reglas de edad y antiguedad para creditos.
           </p>
         ) : null}
 

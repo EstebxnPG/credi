@@ -160,8 +160,7 @@ export default function DashboardPage() {
               Base limpia para reconstruir la operacion
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
-              El login y este dashboard quedan como unica superficie del frontend.
-              Las demas vistas fueron retiradas para volver a montarlas con criterio.
+              Dashboard analitico 
             </p>
           </div>
           <div className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm text-stone-600">

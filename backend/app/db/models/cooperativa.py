@@ -15,7 +15,4 @@ class Cooperativa(Base, TimestampMixin, SoftDeleteMixin):
     monto_maximo: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     plazo_minimo: Mapped[int] = mapped_column(Integer, nullable=False)
     plazo_maximo: Mapped[int] = mapped_column(Integer, nullable=False)
-    tiempo_minimo_pension: Mapped[int] = mapped_column(Integer, nullable=False)
-    porcentaje_comision: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-
     creditos: Mapped[list["Credito"]] = relationship(back_populates="cooperativa")

@@ -24,6 +24,7 @@ from app.schemas.credito import (
 from app.schemas.historial_credito import HistorialCreditoRead
 from app.services.cooperativa_service import validar_credito_contra_cooperativa
 from app.services.log_service import registrar_log
+from app.services.pendiente_credito_service import credito_tiene_pendientes_abiertos
 
 
 ESTADOS_EDITABLES = {"Prospecto", "Devuelto por corrección"}
@@ -36,16 +37,6 @@ def _calcular_edad(fecha_nacimiento: date, fecha_referencia: date | None = None)
         (fecha_referencia.month, fecha_referencia.day)
         < (fecha_nacimiento.month, fecha_nacimiento.day)
     )
-
-
-def _calcular_meses_desde(fecha_inicio: date, fecha_referencia: date | None = None) -> int:
-    fecha_referencia = fecha_referencia or date.today()
-    meses = (fecha_referencia.year - fecha_inicio.year) * 12 + (
-        fecha_referencia.month - fecha_inicio.month
-    )
-    if fecha_referencia.day < fecha_inicio.day:
-        meses -= 1
-    return max(meses, 0)
 
 
 def _get_credito_or_404(db: Session, credito_id: int) -> Credito:
@@ -160,14 +151,11 @@ def _validar_reglas_credito(
     cooperativa = _get_cooperativa_activa_or_404(db, cooperativa_id)
 
     edad = _calcular_edad(pensionado.fecha_nacimiento)
-    meses_pensionado = _calcular_meses_desde(pensionado.fecha_inicio_pension)
-
     errores = validar_credito_contra_cooperativa(
         cooperativa=cooperativa,
         edad_pensionado=edad,
         monto=monto,
         plazo=plazo,
-        meses_como_pensionado=meses_pensionado,
     )
 
     if errores:
@@ -428,11 +416,19 @@ def cambiar_estado(
             detail=f"No se permite pasar de '{estado_actual}' a '{estado_nuevo}'",
         )
 
+    if estado_nuevo == "Aprobado" and (
+        credito.tiene_documentos_pendientes
+        or credito_tiene_pendientes_abiertos(db, credito.id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede aprobar un credito con documentos o tareas pendientes",
+        )
+
     credito.estado = estado_nuevo
 
     if estado_nuevo == "Aprobado":
         credito.monto_aprobado = data.monto_aprobado
-        credito.tasa_mensual = data.tasa_mensual
         credito.valor_cuota = data.valor_cuota
         credito.fecha_desembolso = data.fecha_desembolso
         credito.fecha_fin_estimada = data.fecha_fin_estimada
@@ -456,7 +452,6 @@ def cambiar_estado(
         valores_despues={
             "estado": estado_nuevo,
             "monto_aprobado": data.monto_aprobado,
-            "tasa_mensual": data.tasa_mensual,
             "valor_cuota": data.valor_cuota,
             "fecha_desembolso": data.fecha_desembolso,
             "fecha_fin_estimada": data.fecha_fin_estimada,

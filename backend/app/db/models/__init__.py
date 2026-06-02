@@ -9,3 +9,4 @@ from app.db.models.historial_credito import HistorialCredito
 from app.db.models.refinanciacion import Refinanciacion
 from app.db.models.log import Log
 from app.db.models.seguimiento import Seguimiento
+from app.db.models.pendiente_credito import PendienteCredito

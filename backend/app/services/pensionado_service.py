@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.db.repositories.pensionado_repo import PensionadoRepository
+from app.db.models.pensionado import Pensionado
 from app.schemas.pensionado import PensionadoCreate, PensionadoUpdate
 
 class PensionadoService:
@@ -31,8 +32,27 @@ class PensionadoService:
 
     def actualizar(self, pensionado_id: int, data: PensionadoUpdate):
         pensionado = self.obtener_o_404(pensionado_id)
+        self._validar_fechas_actualizacion(pensionado, data)
         return self.repo.update(pensionado, data)
 
     def eliminar(self, pensionado_id: int):
         pensionado = self.obtener_o_404(pensionado_id)
         return self.repo.soft_delete(pensionado)
+
+    def _validar_fechas_actualizacion(
+        self,
+        pensionado: Pensionado,
+        data: PensionadoUpdate,
+    ) -> None:
+        cambios = data.model_dump(exclude_unset=True)
+        fecha_nacimiento = cambios.get("fecha_nacimiento", pensionado.fecha_nacimiento)
+        fecha_inicio_pension = cambios.get(
+            "fecha_inicio_pension",
+            pensionado.fecha_inicio_pension,
+        )
+
+        if fecha_inicio_pension < fecha_nacimiento:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La fecha de inicio de pension no puede ser anterior al nacimiento",
+            )

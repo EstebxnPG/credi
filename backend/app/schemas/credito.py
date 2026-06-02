@@ -34,7 +34,6 @@ class CreditoCreate(BaseModel):
     plazo: int
     nro_libranza: Optional[str] = None
     tipo_credito: Optional[str] = None
-    nro_afiliacion: Optional[str] = None
     observaciones: Optional[str] = None
     tiene_documentos_pendientes: bool = False
     documentos_pendientes: Optional[str] = None
@@ -64,7 +63,6 @@ class CreditoUpdate(BaseModel):
     plazo: Optional[int] = None
     nro_libranza: Optional[str] = None
     tipo_credito: Optional[str] = None
-    nro_afiliacion: Optional[str] = None
     observaciones: Optional[str] = None
     pagaduria_id: Optional[int] = None
     cooperativa_id: Optional[int] = None
@@ -97,7 +95,6 @@ class CreditoCambioEstado(BaseModel):
 
     # Campos solo relevantes al aprobar
     monto_aprobado: Optional[float] = None
-    tasa_mensual: Optional[float] = None
     valor_cuota: Optional[float] = None
     fecha_desembolso: Optional[date] = None
     fecha_fin_estimada: Optional[date] = None
@@ -134,11 +131,9 @@ class CreditoRead(BaseModel):
     monto_aprobado: Optional[float]
     plazo: int
     estado: str
-    tasa_mensual: Optional[float]
     valor_cuota: Optional[float]
     fecha_desembolso: Optional[date]
     fecha_fin_estimada: Optional[date]
-    nro_afiliacion: Optional[str]
     observaciones: Optional[str]
     tiene_documentos_pendientes: bool
     documentos_pendientes: Optional[str]

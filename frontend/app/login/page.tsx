@@ -25,6 +25,7 @@ export default function LoginPage() {
 function LoginContent() {
   const [correo, setCorreo] = useState("admin@crediconfiemos.com");
   const [contrasena, setContrasena] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -142,14 +143,24 @@ function LoginContent() {
               <label className="mb-2 block text-sm font-medium text-stone-700">
                 Contraseña
               </label>
-              <input
-                className="input-base"
-                value={contrasena}
-                onChange={(event) => setContrasena(event.target.value)}
-                placeholder="Ingresa tu contraseña"
-                type="password"
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <input
+                  className="input-base pr-11"
+                  value={contrasena}
+                  onChange={(event) => setContrasena(event.target.value)}
+                  placeholder="Ingresa tu contraseña"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  className="absolute inset-y-0 right-3 flex items-center rounded-full px-2 text-stone-500 transition hover:text-stone-700 focus:outline-none"
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                >
+                  {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                </button>
+              </div>
             </div>
 
             {error ? (
@@ -165,5 +176,24 @@ function LoginContent() {
         </section>
       </div>
     </main>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeSlashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+      <path d="M9.88 9.88a3 3 0 0 1 4.24 4.24" />
+      <path d="M3 3l18 18" />
+    </svg>
   );
 }
