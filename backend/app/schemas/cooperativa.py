@@ -4,6 +4,33 @@ from typing import Optional
 from pydantic import BaseModel, field_validator, model_validator
 
 
+class CooperativaRefinanciacionReglaBase(BaseModel):
+    plazo_minimo: int
+    plazo_maximo: int
+    meses_para_refinanciar: int
+
+    @field_validator("plazo_minimo", "plazo_maximo", "meses_para_refinanciar")
+    @classmethod
+    def valores_positivos(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("El valor debe ser mayor a 0")
+        return value
+
+    @model_validator(mode="after")
+    def rango_coherente(self):
+        if self.plazo_minimo > self.plazo_maximo:
+            raise ValueError("plazo_minimo debe ser menor o igual que plazo_maximo")
+        if self.meses_para_refinanciar > self.plazo_maximo:
+            raise ValueError("meses_para_refinanciar no debe superar el plazo maximo")
+        return self
+
+
+class CooperativaRefinanciacionReglaRead(CooperativaRefinanciacionReglaBase):
+    id: int
+
+    model_config = {"from_attributes": True}
+
+
 class CooperativaBase(BaseModel):
     nombre: str
     edad_minima: int
@@ -12,6 +39,7 @@ class CooperativaBase(BaseModel):
     monto_maximo: float
     plazo_minimo: int
     plazo_maximo: int
+    reglas_refinanciacion: list[CooperativaRefinanciacionReglaBase] = []
 
     @field_validator("nombre")
     @classmethod
@@ -49,6 +77,11 @@ class CooperativaBase(BaseModel):
             raise ValueError("monto_minimo debe ser menor que monto_maximo")
         if self.plazo_minimo >= self.plazo_maximo:
             raise ValueError("plazo_minimo debe ser menor que plazo_maximo")
+        reglas = sorted(self.reglas_refinanciacion, key=lambda regla: regla.plazo_minimo)
+        for index, regla in enumerate(reglas[1:], start=1):
+            anterior = reglas[index - 1]
+            if regla.plazo_minimo <= anterior.plazo_maximo:
+                raise ValueError("Las reglas de refinanciacion no pueden solaparse")
         return self
 
 
@@ -64,7 +97,19 @@ class CooperativaUpdate(BaseModel):
     monto_maximo: Optional[float] = None
     plazo_minimo: Optional[int] = None
     plazo_maximo: Optional[int] = None
+    reglas_refinanciacion: Optional[list[CooperativaRefinanciacionReglaBase]] = None
     is_active: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def reglas_no_solapadas(self):
+        if self.reglas_refinanciacion is None:
+            return self
+        reglas = sorted(self.reglas_refinanciacion, key=lambda regla: regla.plazo_minimo)
+        for index, regla in enumerate(reglas[1:], start=1):
+            anterior = reglas[index - 1]
+            if regla.plazo_minimo <= anterior.plazo_maximo:
+                raise ValueError("Las reglas de refinanciacion no pueden solaparse")
+        return self
 
 
 class CooperativaRead(CooperativaBase):
@@ -72,5 +117,6 @@ class CooperativaRead(CooperativaBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    reglas_refinanciacion: list[CooperativaRefinanciacionReglaRead] = []
 
     model_config = {"from_attributes": True}

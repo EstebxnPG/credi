@@ -29,6 +29,7 @@ def upgrade() -> None:
     sa.Column('monto_maximo', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('plazo_minimo', sa.Integer(), nullable=False),
     sa.Column('plazo_maximo', sa.Integer(), nullable=False),
+    sa.Column('meses_para_refinanciacion', sa.Integer(), nullable=False, server_default='0'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
@@ -41,6 +42,15 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('cooperativa_refinanciacion_reglas',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('cooperativa_id', sa.Integer(), nullable=False),
+    sa.Column('plazo_minimo', sa.Integer(), nullable=False),
+    sa.Column('plazo_maximo', sa.Integer(), nullable=False),
+    sa.Column('meses_para_refinanciar', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['cooperativa_id'], ['cooperativas.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('pagadurias',
@@ -59,7 +69,6 @@ def upgrade() -> None:
     sa.Column('telefono', sa.String(length=20), nullable=True),
     sa.Column('celular', sa.String(length=20), nullable=True),
     sa.Column('direccion', sa.String(length=200), nullable=False),
-    sa.Column('fecha_inicio_pension', sa.Date(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
@@ -90,9 +99,11 @@ def upgrade() -> None:
     sa.Column('asesor_id', sa.Integer(), nullable=False),
     sa.Column('oficina_id', sa.Integer(), nullable=False),
     sa.Column('cooperativa_id', sa.Integer(), nullable=False),
+    sa.Column('credito_refinanciado_id', sa.Integer(), nullable=True),
     sa.Column('pagaduria_id', sa.Integer(), nullable=False),
     sa.Column('nro_libranza', sa.String(length=50), nullable=True),
     sa.Column('tipo_credito', sa.String(length=50), nullable=True),
+    sa.Column('entidad_financiera_origen', sa.String(length=150), nullable=True),
     sa.Column('monto_solicitado', sa.Numeric(precision=12, scale=2), nullable=False),
     sa.Column('monto_aprobado', sa.Numeric(precision=12, scale=2), nullable=True),
     sa.Column('plazo', sa.Integer(), nullable=False),
@@ -107,6 +118,7 @@ def upgrade() -> None:
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['asesor_id'], ['usuarios.id'], ),
     sa.ForeignKeyConstraint(['cooperativa_id'], ['cooperativas.id'], ),
+    sa.ForeignKeyConstraint(['credito_refinanciado_id'], ['creditos.id'], ),
     sa.ForeignKeyConstraint(['oficina_id'], ['oficinas.id'], ),
     sa.ForeignKeyConstraint(['pagaduria_id'], ['pagadurias.id'], ),
     sa.ForeignKeyConstraint(['pensionado_id'], ['pensionados.id'], ),
@@ -175,5 +187,6 @@ def downgrade() -> None:
     op.drop_table('pensionados')
     op.drop_table('pagadurias')
     op.drop_table('oficinas')
+    op.drop_table('cooperativa_refinanciacion_reglas')
     op.drop_table('cooperativas')
     # ### end Alembic commands ###

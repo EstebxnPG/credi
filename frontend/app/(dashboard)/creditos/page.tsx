@@ -14,9 +14,11 @@ type Credito = {
   asesor_id: number;
   oficina_id: number;
   cooperativa_id: number;
+  credito_refinanciado_id: number | null;
   pagaduria_id: number;
   nro_libranza: string | null;
   tipo_credito: string | null;
+  entidad_financiera_origen: string | null;
   monto_solicitado: number;
   monto_aprobado: number | null;
   plazo: number;
@@ -80,6 +82,7 @@ type Oficina = {
 type FormValues = {
   pensionado_id: string;
   cooperativa_id: string;
+  credito_refinanciado_id: string;
   pagaduria_id: string;
   asesor_id: string;
   oficina_id: string;
@@ -87,6 +90,7 @@ type FormValues = {
   plazo: string;
   nro_libranza: string;
   tipo_credito: string;
+  entidad_financiera_origen: string;
   observaciones: string;
   tiene_documentos_pendientes: boolean;
   documentos_pendientes: string;
@@ -95,13 +99,15 @@ type FormValues = {
 const emptyForm: FormValues = {
   pensionado_id: "",
   cooperativa_id: "",
+  credito_refinanciado_id: "",
   pagaduria_id: "",
   asesor_id: "",
   oficina_id: "",
   monto_solicitado: "",
   plazo: "",
   nro_libranza: "",
-  tipo_credito: "",
+  tipo_credito: "Nuevo",
+  entidad_financiera_origen: "",
   observaciones: "",
   tiene_documentos_pendientes: false,
   documentos_pendientes: "",
@@ -265,13 +271,15 @@ export default function CreditosPage() {
     setForm({
       pensionado_id: String(credito.pensionado_id),
       cooperativa_id: String(credito.cooperativa_id),
+      credito_refinanciado_id: credito.credito_refinanciado_id ? String(credito.credito_refinanciado_id) : "",
       pagaduria_id: String(credito.pagaduria_id),
       asesor_id: String(credito.asesor_id),
       oficina_id: String(credito.oficina_id),
       monto_solicitado: String(credito.monto_solicitado),
       plazo: String(credito.plazo),
       nro_libranza: credito.nro_libranza ?? "",
-      tipo_credito: credito.tipo_credito ?? "",
+      tipo_credito: credito.tipo_credito ?? "Nuevo",
+      entidad_financiera_origen: credito.entidad_financiera_origen ?? "",
       observaciones: credito.observaciones ?? "",
       tiene_documentos_pendientes: credito.tiene_documentos_pendientes,
       documentos_pendientes: credito.documentos_pendientes ?? "",
@@ -322,11 +330,16 @@ export default function CreditosPage() {
             asesor_id: Number(form.asesor_id),
             oficina_id: Number(form.oficina_id),
             cooperativa_id: Number(form.cooperativa_id),
+            credito_refinanciado_id: form.tipo_credito === "Refinanciacion" ? Number(form.credito_refinanciado_id) : null,
             pagaduria_id: Number(form.pagaduria_id),
             monto_solicitado: Number(form.monto_solicitado),
             plazo: Number(form.plazo),
             nro_libranza: nullableText(form.nro_libranza),
-            tipo_credito: nullableText(form.tipo_credito),
+            tipo_credito: form.tipo_credito,
+            entidad_financiera_origen:
+              form.tipo_credito === "Compra de cartera"
+                ? nullableText(form.entidad_financiera_origen)
+                : null,
             observaciones: nullableText(form.observaciones),
             tiene_documentos_pendientes: form.tiene_documentos_pendientes,
             documentos_pendientes: form.tiene_documentos_pendientes
@@ -341,11 +354,16 @@ export default function CreditosPage() {
           method: "PATCH",
           body: JSON.stringify({
             cooperativa_id: Number(form.cooperativa_id),
+            credito_refinanciado_id: form.tipo_credito === "Refinanciacion" ? Number(form.credito_refinanciado_id) : null,
             pagaduria_id: Number(form.pagaduria_id),
           monto_solicitado: Number(form.monto_solicitado),
           plazo: Number(form.plazo),
           nro_libranza: nullableText(form.nro_libranza),
-          tipo_credito: nullableText(form.tipo_credito),
+          tipo_credito: form.tipo_credito,
+          entidad_financiera_origen:
+            form.tipo_credito === "Compra de cartera"
+              ? nullableText(form.entidad_financiera_origen)
+              : null,
           observaciones: nullableText(form.observaciones),
           tiene_documentos_pendientes: form.tiene_documentos_pendientes,
           documentos_pendientes: form.tiene_documentos_pendientes
@@ -534,6 +552,7 @@ export default function CreditosPage() {
           saving={saving}
           pensionados={pensionados}
           cooperativas={cooperativas}
+          creditos={creditos}
           pagadurias={pagadurias}
           asesores={asesores}
           oficinaById={oficinaById}
@@ -555,6 +574,7 @@ function CreditoModal({
   saving,
   pensionados,
   cooperativas,
+  creditos,
   pagadurias,
   asesores,
   oficinaById,
@@ -570,6 +590,7 @@ function CreditoModal({
   saving: boolean;
   pensionados: Pensionado[];
   cooperativas: Cooperativa[];
+  creditos: Credito[];
   pagadurias: Pagaduria[];
   asesores: Usuario[];
   oficinaById: Map<number, Oficina>;
@@ -581,8 +602,24 @@ function CreditoModal({
   const isCreate = mode === "create";
   const selectedAsesor = asesores.find((asesor) => String(asesor.id) === form.asesor_id);
   const selectedCooperativa = cooperativaById.get(Number(form.cooperativa_id));
+  const creditosRefinanciables = creditos.filter(
+    (item) =>
+      item.estado === "Aprobado" &&
+      String(item.pensionado_id) === form.pensionado_id &&
+      item.id !== credito?.id,
+  );
 
   function updateField(field: keyof FormValues, value: string | boolean) {
+    if (field === "tipo_credito") {
+      onChange({
+        ...form,
+        tipo_credito: String(value),
+        credito_refinanciado_id: "",
+        entidad_financiera_origen: "",
+      });
+      return;
+    }
+
     if (field === "asesor_id") {
       const asesor = asesores.find((item) => String(item.id) === value);
       onChange({ ...form, asesor_id: String(value), oficina_id: asesor?.oficina_id ? String(asesor.oficina_id) : "" });
@@ -699,11 +736,37 @@ function CreditoModal({
             value={form.nro_libranza}
             onChange={(value) => updateField("nro_libranza", value)}
           />
-          <Field
+          <SelectField
             label="Tipo de credito"
             value={form.tipo_credito}
             onChange={(value) => updateField("tipo_credito", value)}
+            options={[
+              { value: "Nuevo", label: "Nuevo" },
+              { value: "Refinanciacion", label: "Refinanciacion" },
+              { value: "Compra de cartera", label: "Compra de cartera" },
+            ]}
+            required
           />
+          {form.tipo_credito === "Refinanciacion" ? (
+            <SelectField
+              label="Credito que refinancia"
+              value={form.credito_refinanciado_id}
+              onChange={(value) => updateField("credito_refinanciado_id", value)}
+              options={creditosRefinanciables.map((credito) => ({
+                value: String(credito.id),
+                label: `#${credito.id} - ${formatCurrency(credito.monto_aprobado ?? credito.monto_solicitado)}`,
+              }))}
+              required
+            />
+          ) : null}
+          {form.tipo_credito === "Compra de cartera" ? (
+            <Field
+              label="Entidad financiera de origen"
+              value={form.entidad_financiera_origen}
+              onChange={(value) => updateField("entidad_financiera_origen", value)}
+              required
+            />
+          ) : null}
           <label className="flex items-center gap-3 rounded-2xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm font-medium text-stone-700">
             <input
               type="checkbox"

@@ -28,7 +28,6 @@ const fieldLabels: Record<string, string> = {
   telefono: "Teléfono",
   celular: "Celular",
   direccion: "Dirección",
-  fecha_inicio_pension: "Fecha de inicio de pensión",
   correo: "Correo",
   contrasena: "Contraseña",
 };
@@ -154,4 +153,36 @@ export async function apiFetch<T>(
   }
 
   return (await response.json()) as T;
+}
+
+export async function apiDownload(path: string, init?: RequestInit): Promise<Blob> {
+  const session = readSession();
+  const headers = new Headers(init?.headers);
+
+  if (session?.accessToken) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      redirectToLogin();
+      throw new ApiError("Sesion expirada. Inicia sesion nuevamente.", 401);
+    }
+
+    let message = response.statusText || "No se pudo descargar el archivo";
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      message = normalizeApiError(payload.detail, message);
+    } catch {
+      // Binary endpoints may not return JSON errors.
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  return response.blob();
 }

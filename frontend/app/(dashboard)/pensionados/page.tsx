@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { formatDate } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
+import { readSession, readSessionUserId } from "@/lib/session";
 
 type Pensionado = {
   id: number;
@@ -20,7 +21,6 @@ type Pensionado = {
   telefono: string | null;
   celular: string | null;
   direccion: string;
-  fecha_inicio_pension: string;
   is_active: boolean;
 };
 
@@ -35,7 +35,6 @@ type PensionadoCreatePayload = {
   telefono: string;
   celular: string | null;
   direccion: string;
-  fecha_inicio_pension: string;
 };
 
 type PensionadoUpdatePayload = {
@@ -44,7 +43,6 @@ type PensionadoUpdatePayload = {
   apellidos: string;
   genero: string;
   fecha_nacimiento: string;
-  fecha_inicio_pension: string;
   correo: string | null;
   telefono: string | null;
   celular: string | null;
@@ -62,7 +60,52 @@ type FormValues = {
   telefono: string;
   celular: string;
   direccion: string;
-  fecha_inicio_pension: string;
+};
+
+type Cooperativa = {
+  id: number;
+  nombre: string;
+  monto_minimo: number;
+  monto_maximo: number;
+  plazo_minimo: number;
+  plazo_maximo: number;
+  is_active: boolean;
+};
+
+type Pagaduria = {
+  id: number;
+  nombre: string;
+  is_active: boolean;
+};
+
+type Usuario = {
+  id: number;
+  nombre: string;
+  rol: string;
+  oficina_id: number;
+  is_active: boolean;
+};
+
+type Oficina = {
+  id: number;
+  nombre: string;
+  is_active: boolean;
+};
+
+type CreditoFormValues = {
+  enabled: boolean;
+  cooperativa_id: string;
+  pagaduria_id: string;
+  asesor_id: string;
+  oficina_id: string;
+  monto_solicitado: string;
+  plazo: string;
+  nro_libranza: string;
+  tipo_credito: string;
+  entidad_financiera_origen: string;
+  observaciones: string;
+  tiene_documentos_pendientes: boolean;
+  documentos_pendientes: string;
 };
 
 type FormMode = "create" | "edit";
@@ -78,7 +121,22 @@ const emptyForm: FormValues = {
   telefono: "",
   celular: "",
   direccion: "",
-  fecha_inicio_pension: "",
+};
+
+const emptyCreditoForm: CreditoFormValues = {
+  enabled: false,
+  cooperativa_id: "",
+  pagaduria_id: "",
+  asesor_id: "",
+  oficina_id: "",
+  monto_solicitado: "",
+  plazo: "",
+  nro_libranza: "",
+  tipo_credito: "Nuevo",
+  entidad_financiera_origen: "",
+  observaciones: "",
+  tiene_documentos_pendientes: false,
+  documentos_pendientes: "",
 };
 
 export default function PensionadosPage() {
@@ -93,16 +151,47 @@ export default function PensionadosPage() {
   const [modalMode, setModalMode] = useState<FormMode | null>(null);
   const [selected, setSelected] = useState<Pensionado | null>(null);
   const [form, setForm] = useState<FormValues>(emptyForm);
+  const [creditoForm, setCreditoForm] = useState<CreditoFormValues>(emptyCreditoForm);
+  const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
+  const [pagadurias, setPagadurias] = useState<Pagaduria[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [oficinas, setOficinas] = useState<Oficina[]>([]);
 
   async function loadPensionados() {
     setLoading(true);
     setError(null);
 
     try {
-      const data = await apiFetch<Pensionado[]>(
-        "/api/v1/pensionados/?limit=200",
-      );
-      setPensionados(data);
+      const session = readSession();
+      const userId = readSessionUserId();
+      const [pensionadosData, cooperativasData, pagaduriasData, oficinasData] =
+        await Promise.all([
+          apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=200"),
+          apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
+          apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
+          apiFetch<Oficina[]>("/api/v1/oficinas/"),
+        ]);
+
+      let usuariosData: Usuario[] = [];
+      if (session?.rol === "administrador") {
+        usuariosData = await apiFetch<Usuario[]>("/api/v1/usuarios/?limit=500");
+      } else if (session && userId) {
+        usuariosData = [
+          {
+            id: userId,
+            nombre: session.nombre,
+            rol: session.rol,
+            oficina_id: session.oficinaId ?? 0,
+            is_active: true,
+          },
+        ];
+      }
+
+      setPensionados(pensionadosData);
+      setCooperativas(cooperativasData);
+      setPagadurias(pagaduriasData);
+      setOficinas(oficinasData);
+      setUsuarios(usuariosData);
     } catch (loadError) {
       setError(
         loadError instanceof ApiError
@@ -142,9 +231,37 @@ export default function PensionadosPage() {
     );
   }, [pensionados, query]);
 
+  const oficinaById = useMemo(() => {
+    return new Map(oficinas.map((oficina) => [oficina.id, oficina]));
+  }, [oficinas]);
+
+  const cooperativaById = useMemo(() => {
+    return new Map(cooperativas.map((cooperativa) => [cooperativa.id, cooperativa]));
+  }, [cooperativas]);
+
+  const asesores = useMemo(() => {
+    return usuarios.filter(
+      (usuario) =>
+        usuario.is_active && (usuario.rol === "asesora" || usuario.rol === "administrador"),
+    );
+  }, [usuarios]);
+
   function openCreateModal() {
+    const session = readSession();
+    const userId = readSessionUserId();
+    const defaultAsesor =
+      session?.rol === "administrador"
+        ? asesores[0]
+        : asesores.find((asesor) => asesor.id === userId);
+    const defaultOficinaId = defaultAsesor?.oficina_id || session?.oficinaId || oficinas[0]?.id || "";
+
     setSelected(null);
     setForm(emptyForm);
+    setCreditoForm({
+      ...emptyCreditoForm,
+      asesor_id: defaultAsesor?.id ? String(defaultAsesor.id) : userId ? String(userId) : "",
+      oficina_id: defaultOficinaId ? String(defaultOficinaId) : "",
+    });
     setFormError(null);
     setModalMode("create");
   }
@@ -162,7 +279,6 @@ export default function PensionadosPage() {
       telefono: pensionado.telefono ?? "",
       celular: pensionado.celular ?? "",
       direccion: pensionado.direccion,
-      fecha_inicio_pension: pensionado.fecha_inicio_pension,
     });
     setFormError(null);
     setModalMode("edit");
@@ -176,6 +292,7 @@ export default function PensionadosPage() {
     setModalMode(null);
     setSelected(null);
     setForm(emptyForm);
+    setCreditoForm(emptyCreditoForm);
     setFormError(null);
   }
 
@@ -191,6 +308,20 @@ export default function PensionadosPage() {
 
     try {
       if (modalMode === "create") {
+        if (
+          creditoForm.enabled &&
+          (!creditoForm.cooperativa_id ||
+            !creditoForm.pagaduria_id ||
+            !creditoForm.asesor_id ||
+            !creditoForm.oficina_id ||
+            !creditoForm.monto_solicitado ||
+            !creditoForm.plazo)
+        ) {
+          setFormError("Completa los datos del credito o desactiva la creacion de credito.");
+          setSaving(false);
+          return;
+        }
+
         const payload: PensionadoCreatePayload = {
           nombre: form.nombre.trim(),
           segundo_nombre: nullableText(form.segundo_nombre),
@@ -202,7 +333,6 @@ export default function PensionadosPage() {
           telefono: form.telefono.trim(),
           celular: nullableText(form.celular),
           direccion: form.direccion.trim(),
-          fecha_inicio_pension: form.fecha_inicio_pension,
         };
 
         const created = await apiFetch<Pensionado>("/api/v1/pensionados/", {
@@ -211,6 +341,32 @@ export default function PensionadosPage() {
         });
 
         setPensionados((current) => [created, ...current]);
+
+        if (creditoForm.enabled) {
+          await apiFetch("/api/v1/creditos/", {
+            method: "POST",
+            body: JSON.stringify({
+              pensionado_id: created.id,
+              asesor_id: Number(creditoForm.asesor_id),
+              oficina_id: Number(creditoForm.oficina_id),
+              cooperativa_id: Number(creditoForm.cooperativa_id),
+              pagaduria_id: Number(creditoForm.pagaduria_id),
+              monto_solicitado: Number(creditoForm.monto_solicitado),
+              plazo: Number(creditoForm.plazo),
+              nro_libranza: nullableText(creditoForm.nro_libranza),
+              tipo_credito: creditoForm.tipo_credito,
+              entidad_financiera_origen:
+                creditoForm.tipo_credito === "Compra de cartera"
+                  ? nullableText(creditoForm.entidad_financiera_origen)
+                  : null,
+              observaciones: nullableText(creditoForm.observaciones),
+              tiene_documentos_pendientes: creditoForm.tiene_documentos_pendientes,
+              documentos_pendientes: creditoForm.tiene_documentos_pendientes
+                ? nullableText(creditoForm.documentos_pendientes)
+                : null,
+            }),
+          });
+        }
       } else if (selected) {
         const payload: Partial<PensionadoUpdatePayload> = {
           nombre: form.nombre.trim(),
@@ -225,10 +381,6 @@ export default function PensionadosPage() {
 
         if (form.fecha_nacimiento !== selected.fecha_nacimiento) {
           payload.fecha_nacimiento = form.fecha_nacimiento;
-        }
-
-        if (form.fecha_inicio_pension !== selected.fecha_inicio_pension) {
-          payload.fecha_inicio_pension = form.fecha_inicio_pension;
         }
 
         const updated = await apiFetch<Pensionado>(`/api/v1/pensionados/${selected.id}`, {
@@ -329,11 +481,10 @@ export default function PensionadosPage() {
 
       {!loading && !error ? (
         <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[1.2fr_0.75fr_0.95fr_0.95fr_0.7fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+          <div className="hidden grid-cols-[1.2fr_0.75fr_0.95fr_0.7fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
             <span>Nombre</span>
             <span>Documento</span>
             <span>Contacto</span>
-            <span>Pension desde</span>
             <span>Estado</span>
             <span className="text-right">Acciones</span>
           </div>
@@ -346,7 +497,7 @@ export default function PensionadosPage() {
                 tabIndex={0}
                 onClick={() => openDetail(pensionado.id)}
                 onKeyDown={(event) => handleRowKeyDown(event, pensionado.id)}
-                className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[1.2fr_0.75fr_0.95fr_0.95fr_0.7fr_120px] md:items-center md:py-3"
+                className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[1.2fr_0.75fr_0.95fr_0.7fr_120px] md:items-center md:py-3"
               >
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-stone-950">
@@ -359,9 +510,6 @@ export default function PensionadosPage() {
                 <span className="hidden text-stone-700 md:block">{pensionado.documento}</span>
                 <span className="text-stone-700">
                   {pensionado.celular ?? pensionado.telefono ?? "Sin contacto"}
-                </span>
-                <span className="text-stone-700">
-                  {formatDate(pensionado.fecha_inicio_pension)}
                 </span>
                 <span>
                   <StatusBadge active={pensionado.is_active} />
@@ -400,7 +548,14 @@ export default function PensionadosPage() {
           form={form}
           error={formError}
           saving={saving}
+          creditoForm={creditoForm}
+          cooperativas={cooperativas}
+          pagadurias={pagadurias}
+          asesores={asesores}
+          oficinaById={oficinaById}
+          cooperativaById={cooperativaById}
           onChange={setForm}
+          onCreditoChange={setCreditoForm}
           onClose={closeModal}
           onSubmit={handleSubmit}
         />
@@ -414,7 +569,14 @@ function PensionadoModal({
   form,
   error,
   saving,
+  creditoForm,
+  cooperativas,
+  pagadurias,
+  asesores,
+  oficinaById,
+  cooperativaById,
   onChange,
+  onCreditoChange,
   onClose,
   onSubmit,
 }: {
@@ -422,14 +584,46 @@ function PensionadoModal({
   form: FormValues;
   error: string | null;
   saving: boolean;
+  creditoForm: CreditoFormValues;
+  cooperativas: Cooperativa[];
+  pagadurias: Pagaduria[];
+  asesores: Usuario[];
+  oficinaById: Map<number, Oficina>;
+  cooperativaById: Map<number, Cooperativa>;
   onChange: (form: FormValues) => void;
+  onCreditoChange: (form: CreditoFormValues) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const isEdit = mode === "edit";
+  const selectedAsesor = asesores.find((asesor) => String(asesor.id) === creditoForm.asesor_id);
+  const selectedCooperativa = cooperativaById.get(Number(creditoForm.cooperativa_id));
 
   function updateField(field: keyof FormValues, value: string) {
     onChange({ ...form, [field]: value });
+  }
+
+  function updateCreditoField(field: keyof CreditoFormValues, value: string | boolean) {
+    if (field === "tipo_credito") {
+      onCreditoChange({
+        ...creditoForm,
+        tipo_credito: String(value),
+        entidad_financiera_origen: "",
+      });
+      return;
+    }
+
+    if (field === "asesor_id") {
+      const asesor = asesores.find((item) => String(item.id) === value);
+      onCreditoChange({
+        ...creditoForm,
+        asesor_id: String(value),
+        oficina_id: asesor?.oficina_id ? String(asesor.oficina_id) : "",
+      });
+      return;
+    }
+
+    onCreditoChange({ ...creditoForm, [field]: value });
   }
 
   return (
@@ -494,13 +688,6 @@ function PensionadoModal({
             required
           />
           <Field
-            label="Inicio de pension"
-            type="date"
-            value={form.fecha_inicio_pension}
-            onChange={(value) => updateField("fecha_inicio_pension", value)}
-            required
-          />
-          <Field
             label="Correo"
             type="email"
             value={form.correo}
@@ -532,8 +719,152 @@ function PensionadoModal({
         {isEdit ? (
           <p className="mt-4 text-xs text-stone-500">
             Documento sigue bloqueado por identidad unica. Las fechas se pueden corregir si hubo
-            error de digitacion; afectan las reglas de edad y antiguedad para creditos.
+            error de digitacion; afecta las reglas de edad para creditos.
           </p>
+        ) : null}
+
+        {!isEdit ? (
+          <div className="mt-6 border-t border-stone-800/10 pt-5">
+            <label className="flex items-start gap-3 text-sm font-medium text-stone-800">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={creditoForm.enabled}
+                onChange={(event) => updateCreditoField("enabled", event.target.checked)}
+              />
+              <span>
+                <span className="block font-semibold text-stone-950">
+                  Crear credito para este pensionado
+                </span>
+                <span className="mt-1 block text-xs font-normal text-stone-500">
+                  Guarda el pensionado y crea la solicitud de credito en el mismo flujo.
+                </span>
+              </span>
+            </label>
+
+            {creditoForm.enabled ? (
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <OptionSelectField
+                  label="Cooperativa"
+                  value={creditoForm.cooperativa_id}
+                  onChange={(value) => updateCreditoField("cooperativa_id", value)}
+                  options={cooperativas.map((cooperativa) => ({
+                    value: String(cooperativa.id),
+                    label: cooperativa.nombre,
+                  }))}
+                  required
+                />
+                <OptionSelectField
+                  label="Pagaduria"
+                  value={creditoForm.pagaduria_id}
+                  onChange={(value) => updateCreditoField("pagaduria_id", value)}
+                  options={pagadurias.map((pagaduria) => ({
+                    value: String(pagaduria.id),
+                    label: pagaduria.nombre,
+                  }))}
+                  required
+                />
+                {asesores.length > 1 ? (
+                  <OptionSelectField
+                    label="Asesor"
+                    value={creditoForm.asesor_id}
+                    onChange={(value) => updateCreditoField("asesor_id", value)}
+                    options={asesores.map((asesor) => ({
+                      value: String(asesor.id),
+                      label: `${asesor.nombre} - ${
+                        oficinaById.get(asesor.oficina_id)?.nombre ?? "Sin oficina"
+                      }`,
+                    }))}
+                    required
+                  />
+                ) : null}
+                <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3 text-sm text-stone-700">
+                  <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Oficina</p>
+                  <p className="mt-2 font-semibold text-stone-900">
+                    {oficinaById.get(Number(creditoForm.oficina_id))?.nombre ??
+                      "Pendiente por asignar"}
+                  </p>
+                  {selectedAsesor ? (
+                    <p className="mt-1 text-xs text-stone-500">
+                      Tomada del asesor seleccionado.
+                    </p>
+                  ) : null}
+                </div>
+                <Field
+                  label="Monto solicitado"
+                  type="number"
+                  value={creditoForm.monto_solicitado}
+                  onChange={(value) => updateCreditoField("monto_solicitado", value)}
+                  required
+                />
+                <Field
+                  label="Plazo"
+                  type="number"
+                  value={creditoForm.plazo}
+                  onChange={(value) => updateCreditoField("plazo", value)}
+                  required
+                />
+                <Field
+                  label="Nro libranza"
+                  value={creditoForm.nro_libranza}
+                  onChange={(value) => updateCreditoField("nro_libranza", value)}
+                />
+                <OptionSelectField
+                  label="Tipo de credito"
+                  value={creditoForm.tipo_credito}
+                  onChange={(value) => updateCreditoField("tipo_credito", value)}
+                  options={[
+                    { value: "Nuevo", label: "Nuevo" },
+                    { value: "Compra de cartera", label: "Compra de cartera" },
+                  ]}
+                  required
+                />
+                {creditoForm.tipo_credito === "Compra de cartera" ? (
+                  <Field
+                    label="Entidad financiera de origen"
+                    value={creditoForm.entidad_financiera_origen}
+                    onChange={(value) =>
+                      updateCreditoField("entidad_financiera_origen", value)
+                    }
+                    required
+                  />
+                ) : null}
+                <label className="flex items-center gap-3 rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm font-medium text-stone-700">
+                  <input
+                    type="checkbox"
+                    checked={creditoForm.tiene_documentos_pendientes}
+                    onChange={(event) =>
+                      updateCreditoField("tiene_documentos_pendientes", event.target.checked)
+                    }
+                  />
+                  Documentos pendientes
+                </label>
+                <div className="sm:col-span-2">
+                  <TextareaField
+                    label="Documentos pendientes"
+                    value={creditoForm.documentos_pendientes}
+                    onChange={(value) => updateCreditoField("documentos_pendientes", value)}
+                    disabled={!creditoForm.tiene_documentos_pendientes}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <TextareaField
+                    label="Observaciones del credito"
+                    value={creditoForm.observaciones}
+                    onChange={(value) => updateCreditoField("observaciones", value)}
+                  />
+                </div>
+                {selectedCooperativa ? (
+                  <p className="sm:col-span-2 text-xs text-stone-500">
+                    Regla de cooperativa: monto entre{" "}
+                    {formatCurrency(selectedCooperativa.monto_minimo)} y{" "}
+                    {formatCurrency(selectedCooperativa.monto_maximo)}, plazo entre{" "}
+                    {selectedCooperativa.plazo_minimo} y {selectedCooperativa.plazo_maximo} meses.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -541,7 +872,13 @@ function PensionadoModal({
             Cancelar
           </button>
           <button type="submit" className="button-primary" disabled={saving}>
-            {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear pensionado"}
+            {saving
+              ? "Guardando..."
+              : isEdit
+                ? "Guardar cambios"
+                : creditoForm.enabled
+                  ? "Crear pensionado y credito"
+                  : "Crear pensionado"}
           </button>
         </div>
       </form>
@@ -607,6 +944,63 @@ function SelectField({
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function OptionSelectField({
+  label,
+  value,
+  options,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <select
+        className="input-base mt-2"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+      >
+        <option value="">Seleccionar</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TextareaField({
+  label,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <textarea
+        className="input-base mt-2 min-h-24 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+      />
     </label>
   );
 }

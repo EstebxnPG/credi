@@ -12,6 +12,12 @@ ESTADOS_VALIDOS = {
     "Rechazado",
 }
 
+TIPOS_CREDITO_VALIDOS = {
+    "Nuevo",
+    "Refinanciacion",
+    "Compra de cartera",
+}
+
 # Transiciones permitidas: desde → {hacia donde puede ir}
 TRANSICIONES_VALIDAS: dict[str, set[str]] = {
     "Prospecto":              {"Enviado a cooperativa"},
@@ -29,11 +35,13 @@ class CreditoCreate(BaseModel):
     asesor_id: int
     oficina_id: int
     cooperativa_id: int
+    credito_refinanciado_id: Optional[int] = None
     pagaduria_id: int
     monto_solicitado: float
     plazo: int
     nro_libranza: Optional[str] = None
-    tipo_credito: Optional[str] = None
+    tipo_credito: str = "Nuevo"
+    entidad_financiera_origen: Optional[str] = None
     observaciones: Optional[str] = None
     tiene_documentos_pendientes: bool = False
     documentos_pendientes: Optional[str] = None
@@ -52,6 +60,22 @@ class CreditoCreate(BaseModel):
             raise ValueError("El plazo debe ser mayor a 0")
         return v
 
+    @field_validator("tipo_credito")
+    @classmethod
+    def tipo_credito_valido(cls, v: str) -> str:
+        v = v.strip()
+        if v not in TIPOS_CREDITO_VALIDOS:
+            raise ValueError("Tipo de credito debe ser Nuevo, Refinanciacion o Compra de cartera")
+        return v
+
+    @field_validator("entidad_financiera_origen")
+    @classmethod
+    def entidad_origen_limpia(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
 
 # ─── Update (campos editables por asesora) ───────────────────────────────────
 class CreditoUpdate(BaseModel):
@@ -63,9 +87,11 @@ class CreditoUpdate(BaseModel):
     plazo: Optional[int] = None
     nro_libranza: Optional[str] = None
     tipo_credito: Optional[str] = None
+    entidad_financiera_origen: Optional[str] = None
     observaciones: Optional[str] = None
     pagaduria_id: Optional[int] = None
     cooperativa_id: Optional[int] = None
+    credito_refinanciado_id: Optional[int] = None
     tiene_documentos_pendientes: Optional[bool] = None
     documentos_pendientes: Optional[str] = None
 
@@ -82,6 +108,24 @@ class CreditoUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("El plazo debe ser mayor a 0")
         return v
+
+    @field_validator("tipo_credito")
+    @classmethod
+    def tipo_credito_valido(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if v not in TIPOS_CREDITO_VALIDOS:
+            raise ValueError("Tipo de credito debe ser Nuevo, Refinanciacion o Compra de cartera")
+        return v
+
+    @field_validator("entidad_financiera_origen")
+    @classmethod
+    def entidad_origen_limpia(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
 
 
 # ─── Cambio de estado ────────────────────────────────────────────────────────
@@ -124,9 +168,11 @@ class CreditoRead(BaseModel):
     asesor_id: int
     oficina_id: int
     cooperativa_id: int
+    credito_refinanciado_id: Optional[int]
     pagaduria_id: int
     nro_libranza: Optional[str]
     tipo_credito: Optional[str]
+    entidad_financiera_origen: Optional[str]
     monto_solicitado: float
     monto_aprobado: Optional[float]
     plazo: int

@@ -21,7 +21,6 @@ type Pensionado = {
   telefono: string | null;
   celular: string | null;
   direccion: string;
-  fecha_inicio_pension: string;
   is_active: boolean;
 };
 
@@ -92,7 +91,6 @@ type FormValues = {
   apellidos: string;
   genero: string;
   fecha_nacimiento: string;
-  fecha_inicio_pension: string;
   correo: string;
   telefono: string;
   celular: string;
@@ -258,7 +256,6 @@ export default function PensionadoDetailPage() {
       apellidos: pensionado.apellidos,
       genero: pensionado.genero,
       fecha_nacimiento: pensionado.fecha_nacimiento,
-      fecha_inicio_pension: pensionado.fecha_inicio_pension,
       correo: pensionado.correo ?? "",
       telefono: pensionado.telefono ?? "",
       celular: pensionado.celular ?? "",
@@ -361,10 +358,6 @@ export default function PensionadoDetailPage() {
 
       if (form.fecha_nacimiento !== pensionado.fecha_nacimiento) {
         payload.fecha_nacimiento = form.fecha_nacimiento;
-      }
-
-      if (form.fecha_inicio_pension !== pensionado.fecha_inicio_pension) {
-        payload.fecha_inicio_pension = form.fecha_inicio_pension;
       }
 
       const updated = await apiFetch<Pensionado>(`/api/v1/pensionados/${pensionado.id}`, {
@@ -475,10 +468,6 @@ export default function PensionadoDetailPage() {
             <Detail label="Celular" value={pensionado.celular ?? "Sin celular"} />
             <Detail label="Direccion" value={pensionado.direccion} />
             <Detail label="Nacimiento" value={formatDate(pensionado.fecha_nacimiento)} />
-            <Detail
-              label="Inicio pension"
-              value={formatDate(pensionado.fecha_inicio_pension)}
-            />
           </div>
         </article>
 
@@ -895,13 +884,6 @@ function PensionadoEditModal({
             onChange={(value) => updateField("fecha_nacimiento", value)}
             required
           />
-          <Field
-            label="Inicio de pension"
-            type="date"
-            value={form.fecha_inicio_pension}
-            onChange={(value) => updateField("fecha_inicio_pension", value)}
-            required
-          />
           <Field label="Correo" type="email" value={form.correo} onChange={(value) => updateField("correo", value)} />
           <Field label="Telefono" value={form.telefono} onChange={(value) => updateField("telefono", value)} inputMode="tel" />
           <Field label="Celular" value={form.celular} onChange={(value) => updateField("celular", value)} inputMode="tel" />
@@ -912,7 +894,7 @@ function PensionadoEditModal({
 
         <p className="mt-4 text-xs text-stone-500">
           Corrige las fechas solo cuando exista un error de digitacion. Estos datos afectan las
-          reglas de edad y antiguedad usadas al crear creditos.
+          reglas de edad usadas al crear creditos.
         </p>
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

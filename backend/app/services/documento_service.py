@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db.models.credito import Credito
@@ -155,6 +156,31 @@ def listar_documentos(
 
 def obtener_documento(db: Session, documento_id: int) -> Documento:
     return _get_or_404(db, documento_id)
+
+
+def descargar_documento(db: Session, documento_id: int) -> FileResponse:
+    documento = _get_or_404(db, documento_id)
+    if not documento.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Documento con id {documento_id} no encontrado",
+        )
+
+    app_root = Path(__file__).resolve().parents[2]
+    ruta = (app_root / documento.url).resolve()
+    uploads_root = (app_root / "data" / "uploads" / "documentos").resolve()
+
+    if uploads_root not in ruta.parents or not ruta.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Archivo fisico no encontrado",
+        )
+
+    return FileResponse(
+        path=ruta,
+        filename=documento.nombre,
+        media_type="application/octet-stream",
+    )
 
 
 def reemplazar_documento(

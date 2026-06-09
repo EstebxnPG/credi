@@ -1,5 +1,5 @@
 from app.db.models.oficina import Oficina
-from app.db.models.cooperativa import Cooperativa
+from app.db.models.cooperativa import Cooperativa, CooperativaRefinanciacionRegla
 from app.db.models.pagaduria import Pagaduria
 from app.db.models.usuario import Usuario
 from app.db.models.pensionado import Pensionado

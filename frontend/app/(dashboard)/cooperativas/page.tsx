@@ -14,7 +14,15 @@ type Cooperativa = {
   monto_maximo: number;
   plazo_minimo: number;
   plazo_maximo: number;
+  reglas_refinanciacion: ReglaRefinanciacion[];
   is_active: boolean;
+};
+
+type ReglaRefinanciacion = {
+  id?: number;
+  plazo_minimo: number;
+  plazo_maximo: number;
+  meses_para_refinanciar: number;
 };
 
 type FormValues = Omit<Cooperativa, "id" | "is_active">;
@@ -27,6 +35,7 @@ const emptyForm: FormValues = {
   monto_maximo: 50000000,
   plazo_minimo: 6,
   plazo_maximo: 120,
+  reglas_refinanciacion: [],
 };
 
 export default function CooperativasPage() {
@@ -83,6 +92,7 @@ export default function CooperativasPage() {
       monto_maximo: item.monto_maximo,
       plazo_minimo: item.plazo_minimo,
       plazo_maximo: item.plazo_maximo,
+      reglas_refinanciacion: item.reglas_refinanciacion ?? [],
     });
     setFormError(null);
     setModalMode("edit");
@@ -94,6 +104,15 @@ export default function CooperativasPage() {
     setSelected(null);
     setForm(emptyForm);
     setFormError(null);
+  }
+
+  function updateRule(index: number, field: keyof ReglaRefinanciacion, value: number) {
+    setForm((current) => ({
+      ...current,
+      reglas_refinanciacion: current.reglas_refinanciacion.map((regla, itemIndex) =>
+        itemIndex === index ? { ...regla, [field]: value } : regla,
+      ),
+    }));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -165,7 +184,12 @@ export default function CooperativasPage() {
                 <div><p className="font-semibold text-stone-950">{item.nombre}</p><p className="mt-1 text-xs text-stone-500">Cooperativa financiera</p></div>
                 <p className="text-stone-700">{item.edad_minima} a {item.edad_maxima}</p>
                 <p className="text-stone-700">{formatCurrency(item.monto_minimo)} a {formatCurrency(item.monto_maximo)}</p>
-                <p className="text-stone-700">{item.plazo_minimo} a {item.plazo_maximo} meses</p>
+                <p className="text-stone-700">
+                  {item.plazo_minimo} a {item.plazo_maximo} meses
+                  <span className="mt-1 block text-xs text-stone-500">
+                    Refi: {item.reglas_refinanciacion?.length ?? 0} regla(s)
+                  </span>
+                </p>
                 <StatusBadge active={item.is_active} />
                 <Actions onEdit={() => openEdit(item)} onDelete={() => void handleDelete(item)} deleteDisabled={!item.is_active} />
               </div>
@@ -185,6 +209,50 @@ export default function CooperativasPage() {
             <NumberField label="Monto maximo" value={form.monto_maximo} onChange={(value) => setForm({ ...form, monto_maximo: value })} />
             <NumberField label="Plazo minimo" value={form.plazo_minimo} onChange={(value) => setForm({ ...form, plazo_minimo: value })} />
             <NumberField label="Plazo maximo" value={form.plazo_maximo} onChange={(value) => setForm({ ...form, plazo_maximo: value })} />
+          </div>
+          <div className="rounded-xl border border-stone-800/10 bg-white/70 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-stone-950">Reglas de refinanciacion</h3>
+              <button
+                type="button"
+                className="button-muted px-3 py-2 text-sm"
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    reglas_refinanciacion: [
+                      ...form.reglas_refinanciacion,
+                      { plazo_minimo: 12, plazo_maximo: 14, meses_para_refinanciar: 6 },
+                    ],
+                  })
+                }
+              >
+                Agregar regla
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {form.reglas_refinanciacion.map((regla, index) => (
+                <div key={index} className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                  <NumberField label="Plazo desde" value={regla.plazo_minimo} onChange={(value) => updateRule(index, "plazo_minimo", value)} />
+                  <NumberField label="Plazo hasta" value={regla.plazo_maximo} onChange={(value) => updateRule(index, "plazo_maximo", value)} />
+                  <NumberField label="Refi al mes" value={regla.meses_para_refinanciar} onChange={(value) => updateRule(index, "meses_para_refinanciar", value)} />
+                  <button
+                    type="button"
+                    className="button-muted self-end px-3 py-2 text-sm"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        reglas_refinanciacion: form.reglas_refinanciacion.filter((_, itemIndex) => itemIndex !== index),
+                      })
+                    }
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
+              {form.reglas_refinanciacion.length === 0 ? (
+                <p className="text-sm text-stone-500">Sin reglas configuradas.</p>
+              ) : null}
+            </div>
           </div>
         </Modal>
       ) : null}

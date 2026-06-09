@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 from datetime import date
 from typing import Optional
 import re
@@ -15,7 +15,6 @@ class PensionadoBase(BaseModel):
     telefono: str
     celular: Optional[str] = None
     direccion: str
-    fecha_inicio_pension: date
 
     @field_validator("documento")
     @classmethod
@@ -64,18 +63,12 @@ class PensionadoBase(BaseModel):
 
 # ── Create: lo que recibe la API al crear ────────────────────────
 class PensionadoCreate(PensionadoBase):
-    @field_validator("fecha_nacimiento", "fecha_inicio_pension")
+    @field_validator("fecha_nacimiento")
     @classmethod
     def fecha_no_futura(cls, v: date) -> date:
         if v > date.today():
             raise ValueError("La fecha no puede estar en el futuro")
         return v
-
-    @model_validator(mode="after")
-    def fechas_coherentes(self):
-        if self.fecha_inicio_pension < self.fecha_nacimiento:
-            raise ValueError("La fecha de inicio de pension no puede ser anterior al nacimiento")
-        return self
 
 # ── Update: todos los campos opcionales para PATCH ──────────────
 class PensionadoUpdate(BaseModel):
@@ -88,7 +81,6 @@ class PensionadoUpdate(BaseModel):
     celular: Optional[str] = None
     direccion: Optional[str] = None
     fecha_nacimiento: Optional[date] = None
-    fecha_inicio_pension: Optional[date] = None
 
     @field_validator("nombre", "apellidos")
     @classmethod
@@ -131,7 +123,7 @@ class PensionadoUpdate(BaseModel):
             raise ValueError("Correo debe tener un formato valido")
         return v
 
-    @field_validator("fecha_nacimiento", "fecha_inicio_pension")
+    @field_validator("fecha_nacimiento")
     @classmethod
     def fecha_update_no_futura(cls, v: Optional[date]) -> Optional[date]:
         if v is not None and v > date.today():

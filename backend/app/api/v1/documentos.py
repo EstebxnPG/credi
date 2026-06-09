@@ -5,9 +5,10 @@ Router de Documentos con upload y versionado.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, get_db, solo_admin
+from app.core.dependencies import get_current_user, get_db
 from app.db.models.usuario import Usuario
 from app.schemas.documento import (
     DocumentoRead,
@@ -54,6 +55,15 @@ def obtener_documento(
     return documento_service.obtener_documento(db, documento_id)
 
 
+@router.get("/{documento_id}/descargar", response_class=FileResponse)
+def descargar_documento(
+    documento_id: int,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    return documento_service.descargar_documento(db, documento_id)
+
+
 @router.patch("/{documento_id}/reemplazar", response_model=DocumentoReplaceResponse)
 async def reemplazar_documento(
     documento_id: int,
@@ -75,6 +85,6 @@ async def reemplazar_documento(
 def desactivar_documento(
     documento_id: int,
     db: Session = Depends(get_db),
-    usuario_actual: Usuario = Depends(solo_admin),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
     return documento_service.desactivar_documento(db, documento_id, usuario_actual)

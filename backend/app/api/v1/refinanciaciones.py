@@ -11,6 +11,7 @@ from app.core.dependencies import get_current_user, get_db
 from app.db.models.usuario import Usuario
 from app.schemas.refinanciacion import (
     RefinanciacionCreate,
+    RefinanciacionElegibleRead,
     RefinanciacionRead,
     RefinanciacionUpdate,
 )
@@ -35,6 +36,14 @@ def listar_refinanciaciones(
     _: Usuario = Depends(get_current_user),
 ):
     return refinanciacion_service.listar_refinanciaciones(db, credito_id)
+
+
+@router.get("/elegibles/", response_model=list[RefinanciacionElegibleRead])
+def listar_creditos_elegibles(
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(get_current_user),
+):
+    return refinanciacion_service.listar_creditos_elegibles(db)
 
 
 @router.get("/{refinanciacion_id}", response_model=RefinanciacionRead)

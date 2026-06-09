@@ -189,6 +189,61 @@ def _validar_contexto_creacion(
             )
 
 
+def _validar_tipo_credito(
+    db: Session,
+    pensionado_id: int,
+    tipo_credito: str | None,
+    credito_refinanciado_id: int | None,
+    entidad_financiera_origen: str | None,
+) -> None:
+    if tipo_credito == "Nuevo":
+        if credito_refinanciado_id or entidad_financiera_origen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Un credito nuevo no debe tener credito anterior ni entidad financiera de origen",
+            )
+        return
+
+    if tipo_credito == "Compra de cartera":
+        if credito_refinanciado_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Una compra de cartera no debe apuntar a un credito interno",
+            )
+        if not entidad_financiera_origen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Debes indicar la entidad financiera de origen",
+            )
+        return
+
+    if not credito_refinanciado_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debes seleccionar el credito anterior que se refinancia",
+        )
+    if entidad_financiera_origen:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Una refinanciacion interna no debe tener entidad financiera de origen",
+        )
+    credito_anterior = (
+        db.query(Credito)
+        .filter(
+            Credito.id == credito_refinanciado_id,
+            Credito.pensionado_id == pensionado_id,
+            Credito.estado == "Aprobado",
+            Credito.is_active == True,  # noqa: E712
+        )
+        .first()
+    )
+    if not credito_anterior:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El credito refinanciado debe ser aprobado y pertenecer al mismo pensionado",
+        )
+
+
 def _validar_credito_editable(credito: Credito) -> None:
     if credito.estado in ESTADOS_FINALES:
         raise HTTPException(
@@ -230,6 +285,13 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
     _get_oficina_activa_or_404(db, data.oficina_id)
     _get_pagaduria_activa_or_404(db, data.pagaduria_id)
     _validar_contexto_creacion(data, usuario_actual, asesor)
+    _validar_tipo_credito(
+        db,
+        data.pensionado_id,
+        data.tipo_credito,
+        data.credito_refinanciado_id,
+        data.entidad_financiera_origen,
+    )
     _validar_reglas_credito(
         db=db,
         pensionado_id=data.pensionado_id,
@@ -353,6 +415,30 @@ def actualizar_credito(
         _get_pagaduria_activa_or_404(db, cambios["pagaduria_id"])
     if "cooperativa_id" in cambios:
         _get_cooperativa_activa_or_404(db, cambios["cooperativa_id"])
+    if (
+        "tipo_credito" in cambios
+        or "credito_refinanciado_id" in cambios
+        or "entidad_financiera_origen" in cambios
+    ):
+        tipo_credito = cambios.get("tipo_credito", credito.tipo_credito)
+        if tipo_credito == "Nuevo":
+            cambios["credito_refinanciado_id"] = None
+            cambios["entidad_financiera_origen"] = None
+        elif tipo_credito == "Refinanciacion":
+            cambios["entidad_financiera_origen"] = None
+        elif tipo_credito == "Compra de cartera":
+            cambios["credito_refinanciado_id"] = None
+
+        _validar_tipo_credito(
+            db,
+            credito.pensionado_id,
+            tipo_credito,
+            cambios.get("credito_refinanciado_id", credito.credito_refinanciado_id),
+            cambios.get(
+                "entidad_financiera_origen",
+                credito.entidad_financiera_origen,
+            ),
+        )
 
     if "tiene_documentos_pendientes" in cambios or "documentos_pendientes" in cambios:
         tiene_documentos_pendientes, documentos_pendientes = _normalizar_pendientes_documentales(

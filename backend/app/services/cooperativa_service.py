@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.db.models.cooperativa import Cooperativa
+from app.db.models.cooperativa import Cooperativa, CooperativaRefinanciacionRegla
 from app.schemas.cooperativa import CooperativaCreate, CooperativaUpdate
 
 
@@ -29,7 +29,12 @@ def crear_cooperativa(db: Session, data: CooperativaCreate) -> Cooperativa:
             detail=f"Ya existe una cooperativa con el nombre '{data.nombre}'",
         )
 
-    cooperativa = Cooperativa(**data.model_dump())
+    payload = data.model_dump()
+    reglas = payload.pop("reglas_refinanciacion", [])
+    cooperativa = Cooperativa(**payload)
+    cooperativa.reglas_refinanciacion = [
+        CooperativaRefinanciacionRegla(**regla) for regla in reglas
+    ]
     db.add(cooperativa)
     db.commit()
     db.refresh(cooperativa)
@@ -52,6 +57,7 @@ def actualizar_cooperativa(
 ) -> Cooperativa:
     cooperativa = _get_or_404(db, cooperativa_id)
     cambios = data.model_dump(exclude_unset=True)
+    reglas = cambios.pop("reglas_refinanciacion", None)
 
     if "nombre" in cambios and _nombre_duplicado(
         db, cambios["nombre"], exclude_id=cooperativa_id
@@ -77,6 +83,11 @@ def actualizar_cooperativa(
 
     for campo, valor in cambios.items():
         setattr(cooperativa, campo, valor)
+
+    if reglas is not None:
+        cooperativa.reglas_refinanciacion = [
+            CooperativaRefinanciacionRegla(**regla) for regla in reglas
+        ]
 
     db.commit()
     db.refresh(cooperativa)

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiDownload, apiFetch } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
 type Credito = {
@@ -13,9 +13,11 @@ type Credito = {
   asesor_id: number;
   oficina_id: number;
   cooperativa_id: number;
+  credito_refinanciado_id: number | null;
   pagaduria_id: number;
   nro_libranza: string | null;
   tipo_credito: string | null;
+  entidad_financiera_origen: string | null;
   monto_solicitado: number;
   monto_aprobado: number | null;
   plazo: number;
@@ -98,6 +100,8 @@ type EditForm = {
   plazo: string;
   nro_libranza: string;
   tipo_credito: string;
+  credito_refinanciado_id: string;
+  entidad_financiera_origen: string;
   observaciones: string;
   tiene_documentos_pendientes: boolean;
   documentos_pendientes: string;
@@ -145,6 +149,7 @@ export default function CreditoDetailPage() {
   const [pendientes, setPendientes] = useState<PendienteCredito[]>([]);
   const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
   const [pagadurias, setPagadurias] = useState<Pagaduria[]>([]);
+  const [creditosPensionado, setCreditosPensionado] = useState<Credito[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendienteForm, setPendienteForm] = useState<PendienteForm>(emptyPendienteForm);
@@ -157,6 +162,8 @@ export default function CreditoDetailPage() {
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [openingDocumentId, setOpeningDocumentId] = useState<number | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
   const [estadoForm, setEstadoForm] = useState<EstadoForm>(emptyEstadoForm);
   const [estadoError, setEstadoError] = useState<string | null>(null);
   const [savingEstado, setSavingEstado] = useState(false);
@@ -190,9 +197,12 @@ export default function CreditoDetailPage() {
           apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
           apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
         ]);
-        const pensionadoData = await apiFetch<Pensionado>(
-          `/api/v1/pensionados/${creditoData.pensionado_id}`,
-        );
+        const [pensionadoData, creditosPensionadoData] = await Promise.all([
+          apiFetch<Pensionado>(`/api/v1/pensionados/${creditoData.pensionado_id}`),
+          apiFetch<Credito[]>(
+            `/api/v1/creditos/?pensionado_id=${creditoData.pensionado_id}`,
+          ),
+        ]);
 
         if (!ignore) {
           setCredito(creditoData);
@@ -202,6 +212,7 @@ export default function CreditoDetailPage() {
           setPendientes(pendientesData);
           setCooperativas(cooperativasData);
           setPagadurias(pagaduriasData);
+          setCreditosPensionado(creditosPensionadoData);
         }
       } catch (loadError) {
         if (!ignore) {
@@ -236,7 +247,11 @@ export default function CreditoDetailPage() {
       monto_solicitado: String(credito.monto_solicitado),
       plazo: String(credito.plazo),
       nro_libranza: credito.nro_libranza ?? "",
-      tipo_credito: credito.tipo_credito ?? "",
+      tipo_credito: credito.tipo_credito ?? "Nuevo",
+      credito_refinanciado_id: credito.credito_refinanciado_id
+        ? String(credito.credito_refinanciado_id)
+        : "",
+      entidad_financiera_origen: credito.entidad_financiera_origen ?? "",
       observaciones: credito.observaciones ?? "",
       tiene_documentos_pendientes: credito.tiene_documentos_pendientes,
       documentos_pendientes: credito.documentos_pendientes ?? "",
@@ -272,7 +287,15 @@ export default function CreditoDetailPage() {
           monto_solicitado: Number(editForm.monto_solicitado),
           plazo: Number(editForm.plazo),
           nro_libranza: nullableText(editForm.nro_libranza),
-          tipo_credito: nullableText(editForm.tipo_credito),
+          tipo_credito: editForm.tipo_credito,
+          credito_refinanciado_id:
+            editForm.tipo_credito === "Refinanciacion"
+              ? Number(editForm.credito_refinanciado_id)
+              : null,
+          entidad_financiera_origen:
+            editForm.tipo_credito === "Compra de cartera"
+              ? nullableText(editForm.entidad_financiera_origen)
+              : null,
           observaciones: nullableText(editForm.observaciones),
           tiene_documentos_pendientes: editForm.tiene_documentos_pendientes,
           documentos_pendientes: editForm.tiene_documentos_pendientes
@@ -320,6 +343,54 @@ export default function CreditoDetailPage() {
       );
     } finally {
       setUploadingDocument(false);
+    }
+  }
+
+  async function handleOpenDocument(documento: Documento) {
+    setOpeningDocumentId(documento.id);
+    setDocumentError(null);
+
+    try {
+      const blob = await apiDownload(`/api/v1/documentos/${documento.id}/descargar`);
+      const objectUrl = window.URL.createObjectURL(blob);
+      window.open(objectUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (downloadError) {
+      setDocumentError(
+        downloadError instanceof ApiError
+          ? downloadError.message
+          : "No se pudo abrir el documento",
+      );
+    } finally {
+      setOpeningDocumentId(null);
+    }
+  }
+
+  async function handleDeleteDocument(documento: Documento) {
+    const confirmed = window.confirm(
+      `Vas a eliminar el documento ${documento.nombre}. Esta accion lo ocultara del credito.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingDocumentId(documento.id);
+    setDocumentError(null);
+
+    try {
+      await apiFetch<Documento>(`/api/v1/documentos/${documento.id}`, {
+        method: "DELETE",
+      });
+      setDocumentos((current) => current.filter((item) => item.id !== documento.id));
+    } catch (deleteError) {
+      setDocumentError(
+        deleteError instanceof ApiError
+          ? deleteError.message
+          : "No se pudo eliminar el documento",
+      );
+    } finally {
+      setDeletingDocumentId(null);
     }
   }
 
@@ -434,6 +505,7 @@ export default function CreditoDetailPage() {
   }
 
   const availableTransitions = getAvailableTransitions(credito.estado);
+  const cooperativaActual = cooperativas.find((item) => item.id === credito.cooperativa_id);
 
   return (
     <section className="space-y-4">
@@ -577,7 +649,24 @@ export default function CreditoDetailPage() {
             <Detail label="Aprobado" value={formatCurrency(credito.monto_aprobado)} />
             <Detail label="Plazo" value={`${credito.plazo} meses`} />
             <Detail label="Cuota" value={formatCurrency(credito.valor_cuota)} />
+            <Detail label="Cooperativa" value={cooperativaActual?.nombre ?? "Sin cooperativa"} />
             <Detail label="Tipo" value={credito.tipo_credito ?? "Sin tipo"} />
+            {credito.tipo_credito === "Refinanciacion" ? (
+              <Detail
+                label="Credito refinanciado"
+                value={
+                  credito.credito_refinanciado_id
+                    ? `#${credito.credito_refinanciado_id}`
+                    : "Sin credito relacionado"
+                }
+              />
+            ) : null}
+            {credito.tipo_credito === "Compra de cartera" ? (
+              <Detail
+                label="Entidad de origen"
+                value={credito.entidad_financiera_origen ?? "Sin entidad registrada"}
+              />
+            ) : null}
             <Detail label="Libranza" value={credito.nro_libranza ?? "Sin libranza"} />
           </div>
           {credito.observaciones ? (
@@ -621,12 +710,35 @@ export default function CreditoDetailPage() {
           {documentError ? <div className="mt-4"><StateMessage tone="error" text={documentError} /></div> : null}
           <div className="mt-4 divide-y divide-stone-800/10">
             {documentos.map((documento) => (
-              <div key={documento.id} className="py-3 text-sm">
-                <p className="font-semibold text-stone-950">{documento.nombre}</p>
-                <p className="mt-1 text-stone-500">
-                  {documento.tipo} - version {documento.version} -{" "}
-                  {formatDateTime(documento.created_at)}
-                </p>
+              <div
+                key={documento.id}
+                className="grid gap-3 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-stone-950">{documento.nombre}</p>
+                  <p className="mt-1 text-stone-500">
+                    {documento.tipo} - version {documento.version} -{" "}
+                    {formatDateTime(documento.created_at)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    className="button-muted px-3 py-2 text-sm"
+                    disabled={openingDocumentId === documento.id}
+                    onClick={() => void handleOpenDocument(documento)}
+                  >
+                    {openingDocumentId === documento.id ? "Abriendo..." : "Ver"}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-xl border border-red-500/15 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={deletingDocumentId === documento.id}
+                    onClick={() => void handleDeleteDocument(documento)}
+                  >
+                    {deletingDocumentId === documento.id ? "Eliminando..." : "Eliminar"}
+                  </button>
+                </div>
               </div>
             ))}
             {documentos.length === 0 ? (
@@ -745,6 +857,7 @@ export default function CreditoDetailPage() {
           saving={savingEdit}
           cooperativas={cooperativas}
           pagadurias={pagadurias}
+          creditosPensionado={creditosPensionado}
           onChange={setEditForm}
           onClose={closeEditModal}
           onSubmit={handleUpdateCredito}
@@ -761,6 +874,7 @@ function EditCreditoModal({
   saving,
   cooperativas,
   pagadurias,
+  creditosPensionado,
   onChange,
   onClose,
   onSubmit,
@@ -771,13 +885,27 @@ function EditCreditoModal({
   saving: boolean;
   cooperativas: Cooperativa[];
   pagadurias: Pagaduria[];
+  creditosPensionado: Credito[];
   onChange: (form: EditForm) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   function updateField(field: keyof EditForm, value: string | boolean) {
+    if (field === "tipo_credito") {
+      onChange({
+        ...form,
+        tipo_credito: String(value),
+        credito_refinanciado_id: "",
+        entidad_financiera_origen: "",
+      });
+      return;
+    }
     onChange({ ...form, [field]: value });
   }
+
+  const creditosRefinanciables = creditosPensionado.filter(
+    (item) => item.estado === "Aprobado" && item.id !== credito.id,
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
@@ -823,7 +951,39 @@ function EditCreditoModal({
           <Field label="Monto solicitado" type="number" value={form.monto_solicitado} onChange={(value) => updateField("monto_solicitado", value)} required />
           <Field label="Plazo" type="number" value={form.plazo} onChange={(value) => updateField("plazo", value)} required />
           <Field label="Nro libranza" value={form.nro_libranza} onChange={(value) => updateField("nro_libranza", value)} />
-          <Field label="Tipo de credito" value={form.tipo_credito} onChange={(value) => updateField("tipo_credito", value)} />
+          <SelectField
+            label="Tipo de credito"
+            value={form.tipo_credito}
+            onChange={(value) => updateField("tipo_credito", value)}
+            options={[
+              { value: "Nuevo", label: "Nuevo" },
+              { value: "Refinanciacion", label: "Refinanciacion" },
+              { value: "Compra de cartera", label: "Compra de cartera" },
+            ]}
+            required
+          />
+          {form.tipo_credito === "Refinanciacion" ? (
+            <SelectField
+              label="Credito que refinancia"
+              value={form.credito_refinanciado_id}
+              onChange={(value) => updateField("credito_refinanciado_id", value)}
+              options={creditosRefinanciables.map((item) => ({
+                value: String(item.id),
+                label: `#${item.id} - ${formatCurrency(
+                  item.monto_aprobado ?? item.monto_solicitado,
+                )}`,
+              }))}
+              required
+            />
+          ) : null}
+          {form.tipo_credito === "Compra de cartera" ? (
+            <Field
+              label="Entidad financiera de origen"
+              value={form.entidad_financiera_origen}
+              onChange={(value) => updateField("entidad_financiera_origen", value)}
+              required
+            />
+          ) : null}
           <label className="flex items-center gap-3 rounded-2xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm font-medium text-stone-700">
             <input
               type="checkbox"

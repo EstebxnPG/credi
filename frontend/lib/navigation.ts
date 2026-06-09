@@ -27,6 +27,12 @@ export const navItems: NavItem[] = [
     section: "operacion",
   },
   {
+    href: "/refinanciaciones",
+    label: "Refinanciaciones",
+    description: "Creditos listos para renovar cupo",
+    section: "operacion",
+  },
+  {
     href: "/pensionados",
     label: "Pensionados",
     description: "Contactos, datos base e historial comercial",

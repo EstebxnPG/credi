@@ -1,4 +1,5 @@
 from datetime import datetime
+from datetime import date
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
@@ -83,3 +84,19 @@ class RefinanciacionRead(RefinanciacionBase):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class RefinanciacionElegibleRead(BaseModel):
+    credito_id: int
+    pensionado_id: int
+    pensionado_nombre: str | None = None
+    documento: str | None = None
+    cooperativa_id: int
+    cooperativa_nombre: str | None = None
+    monto_aprobado: float | None = None
+    plazo: int
+    fecha_base: date
+    disponible_desde: date
+    meses_transcurridos: int
+    meses_requeridos: int
+    estado_refinanciacion: str
