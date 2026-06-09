@@ -5,7 +5,15 @@ import { useParams } from "next/navigation";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 import { ApiError, apiDownload, apiFetch } from "@/lib/api";
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  formatMoneyInput,
+  parseMoneyInput,
+  parseNullableMoneyInput,
+  sanitizeMoneyInput,
+} from "@/lib/format";
 
 type Credito = {
   id: number;
@@ -284,7 +292,7 @@ export default function CreditoDetailPage() {
         body: JSON.stringify({
           cooperativa_id: Number(editForm.cooperativa_id),
           pagaduria_id: Number(editForm.pagaduria_id),
-          monto_solicitado: Number(editForm.monto_solicitado),
+          monto_solicitado: parseMoneyInput(editForm.monto_solicitado),
           plazo: Number(editForm.plazo),
           nro_libranza: nullableText(editForm.nro_libranza),
           tipo_credito: editForm.tipo_credito,
@@ -315,6 +323,7 @@ export default function CreditoDetailPage() {
 
   async function handleUploadDocument(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
 
     if (!credito || !documentFile) {
       setDocumentError("Selecciona un archivo para adjuntar.");
@@ -336,7 +345,7 @@ export default function CreditoDetailPage() {
 
       setDocumentos((current) => [created, ...current]);
       setDocumentFile(null);
-      event.currentTarget.reset();
+      formElement.reset();
     } catch (uploadError) {
       setDocumentError(
         uploadError instanceof ApiError ? uploadError.message : "No se pudo adjuntar el documento",
@@ -349,13 +358,21 @@ export default function CreditoDetailPage() {
   async function handleOpenDocument(documento: Documento) {
     setOpeningDocumentId(documento.id);
     setDocumentError(null);
+    const previewWindow = window.open("", "_blank");
 
     try {
       const blob = await apiDownload(`/api/v1/documentos/${documento.id}/descargar`);
-      const objectUrl = window.URL.createObjectURL(blob);
-      window.open(objectUrl, "_blank", "noopener,noreferrer");
+      const typedBlob = new Blob([blob], { type: documentMimeType(documento.tipo) });
+      const objectUrl = window.URL.createObjectURL(typedBlob);
+      if (previewWindow) {
+        previewWindow.opener = null;
+        previewWindow.location.href = objectUrl;
+      } else {
+        window.location.href = objectUrl;
+      }
       window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 60_000);
     } catch (downloadError) {
+      previewWindow?.close();
       setDocumentError(
         downloadError instanceof ApiError
           ? downloadError.message
@@ -412,8 +429,10 @@ export default function CreditoDetailPage() {
           estado_nuevo: toApiStatus(estadoForm.estado_nuevo),
           observaciones: nullableText(estadoForm.observaciones),
           monto_aprobado:
-            estadoForm.estado_nuevo === "Aprobado" ? Number(estadoForm.monto_aprobado) : null,
-          valor_cuota: nullableNumber(estadoForm.valor_cuota),
+            estadoForm.estado_nuevo === "Aprobado"
+              ? parseMoneyInput(estadoForm.monto_aprobado)
+              : null,
+          valor_cuota: parseNullableMoneyInput(estadoForm.valor_cuota),
           fecha_desembolso: nullableText(estadoForm.fecha_desembolso),
           fecha_fin_estimada: nullableText(estadoForm.fecha_fin_estimada),
         }),
@@ -592,14 +611,22 @@ export default function CreditoDetailPage() {
                 <SelectField
                   label="Nuevo estado"
                   value={estadoForm.estado_nuevo}
-                  onChange={(value) => setEstadoForm((current) => ({ ...current, estado_nuevo: value }))}
+                  onChange={(value) =>
+                    setEstadoForm((current) => ({
+                      ...current,
+                      estado_nuevo: value,
+                      monto_aprobado:
+                        value === "Aprobado"
+                          ? String(credito.monto_solicitado)
+                          : current.monto_aprobado,
+                    }))
+                  }
                   options={availableTransitions.map((estado) => ({ value: estado, label: estado }))}
                   required
                 />
                 {estadoForm.estado_nuevo === "Aprobado" ? (
-                  <Field
+                  <MoneyField
                     label="Monto aprobado"
-                    type="number"
                     value={estadoForm.monto_aprobado}
                     onChange={(value) =>
                       setEstadoForm((current) => ({ ...current, monto_aprobado: value }))
@@ -611,7 +638,7 @@ export default function CreditoDetailPage() {
 
               {estadoForm.estado_nuevo === "Aprobado" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Valor cuota" type="number" value={estadoForm.valor_cuota} onChange={(value) => setEstadoForm((current) => ({ ...current, valor_cuota: value }))} />
+                  <MoneyField label="Valor cuota" value={estadoForm.valor_cuota} onChange={(value) => setEstadoForm((current) => ({ ...current, valor_cuota: value }))} />
                   <Field label="Fecha desembolso" type="date" value={estadoForm.fecha_desembolso} onChange={(value) => setEstadoForm((current) => ({ ...current, fecha_desembolso: value }))} />
                   <Field label="Fecha fin estimada" type="date" value={estadoForm.fecha_fin_estimada} onChange={(value) => setEstadoForm((current) => ({ ...current, fecha_fin_estimada: value }))} />
                 </div>
@@ -669,11 +696,14 @@ export default function CreditoDetailPage() {
             ) : null}
             <Detail label="Libranza" value={credito.nro_libranza ?? "Sin libranza"} />
           </div>
-          {credito.observaciones ? (
-            <p className="mt-4 rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3 text-sm text-stone-700">
-              {credito.observaciones}
+          <div className="mt-4 rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-stone-500">
+              Descripcion / observaciones
             </p>
-          ) : null}
+            <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-stone-800">
+              {credito.observaciones ?? "Sin descripcion registrada"}
+            </p>
+          </div>
         </article>
 
         <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
@@ -948,7 +978,7 @@ function EditCreditoModal({
             }))}
             required
           />
-          <Field label="Monto solicitado" type="number" value={form.monto_solicitado} onChange={(value) => updateField("monto_solicitado", value)} required />
+          <MoneyField label="Monto solicitado" value={form.monto_solicitado} onChange={(value) => updateField("monto_solicitado", value)} required />
           <Field label="Plazo" type="number" value={form.plazo} onChange={(value) => updateField("plazo", value)} required />
           <Field label="Nro libranza" value={form.nro_libranza} onChange={(value) => updateField("nro_libranza", value)} />
           <SelectField
@@ -1082,6 +1112,33 @@ function Field({
   );
 }
 
+function MoneyField({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <input
+        className="input-base mt-2"
+        type="text"
+        inputMode="numeric"
+        value={formatMoneyInput(value)}
+        onChange={(event) => onChange(sanitizeMoneyInput(event.target.value))}
+        placeholder="0"
+        required={required}
+      />
+    </label>
+  );
+}
+
 function TextareaField({
   label,
   value,
@@ -1141,9 +1198,15 @@ function nullableText(value: string) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function nullableNumber(value: string) {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? Number(trimmed) : null;
+function documentMimeType(tipo: string) {
+  const normalized = tipo.toUpperCase();
+  if (normalized === "PDF") {
+    return "application/pdf";
+  }
+  if (normalized === "PNG") {
+    return "image/png";
+  }
+  return "image/jpeg";
 }
 
 function normalizeStatus(value: string) {

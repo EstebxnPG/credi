@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { formatCurrency } from "@/lib/format";
+import {
+  formatCurrency,
+  formatMoneyInput,
+  parseMoneyInput,
+  sanitizeMoneyInput,
+} from "@/lib/format";
 import { readSession, readSessionUserId } from "@/lib/session";
 
 type Pensionado = {
@@ -351,7 +356,7 @@ export default function PensionadosPage() {
               oficina_id: Number(creditoForm.oficina_id),
               cooperativa_id: Number(creditoForm.cooperativa_id),
               pagaduria_id: Number(creditoForm.pagaduria_id),
-              monto_solicitado: Number(creditoForm.monto_solicitado),
+              monto_solicitado: parseMoneyInput(creditoForm.monto_solicitado),
               plazo: Number(creditoForm.plazo),
               nro_libranza: nullableText(creditoForm.nro_libranza),
               tipo_credito: creditoForm.tipo_credito,
@@ -790,9 +795,8 @@ function PensionadoModal({
                     </p>
                   ) : null}
                 </div>
-                <Field
+                <MoneyField
                   label="Monto solicitado"
-                  type="number"
                   value={creditoForm.monto_solicitado}
                   onChange={(value) => updateCreditoField("monto_solicitado", value)}
                   required
@@ -914,6 +918,33 @@ function Field({
         required={required}
         disabled={disabled}
         inputMode={inputMode}
+      />
+    </label>
+  );
+}
+
+function MoneyField({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <input
+        className="input-base mt-2"
+        type="text"
+        inputMode="numeric"
+        value={formatMoneyInput(value)}
+        onChange={(event) => onChange(sanitizeMoneyInput(event.target.value))}
+        placeholder="0"
+        required={required}
       />
     </label>
   );

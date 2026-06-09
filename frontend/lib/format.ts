@@ -6,6 +6,25 @@ export function formatCurrency(value: number | null | undefined) {
   }).format(value ?? 0);
 }
 
+export function sanitizeMoneyInput(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+export function formatMoneyInput(value: string) {
+  const digits = sanitizeMoneyInput(value);
+  return digits ? new Intl.NumberFormat("es-CO").format(Number(digits)) : "";
+}
+
+export function parseMoneyInput(value: string) {
+  const digits = sanitizeMoneyInput(value);
+  return digits ? Number(digits) : 0;
+}
+
+export function parseNullableMoneyInput(value: string) {
+  const digits = sanitizeMoneyInput(value);
+  return digits ? Number(digits) : null;
+}
+
 export function formatDate(value: string | null | undefined) {
   if (!value) {
     return "Sin fecha";

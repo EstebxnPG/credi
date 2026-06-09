@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDate,
+  formatMoneyInput,
+  parseMoneyInput,
+  sanitizeMoneyInput,
+} from "@/lib/format";
 import { readSession, readSessionUserId } from "@/lib/session";
 
 type Credito = {
@@ -332,7 +338,7 @@ export default function CreditosPage() {
             cooperativa_id: Number(form.cooperativa_id),
             credito_refinanciado_id: form.tipo_credito === "Refinanciacion" ? Number(form.credito_refinanciado_id) : null,
             pagaduria_id: Number(form.pagaduria_id),
-            monto_solicitado: Number(form.monto_solicitado),
+            monto_solicitado: parseMoneyInput(form.monto_solicitado),
             plazo: Number(form.plazo),
             nro_libranza: nullableText(form.nro_libranza),
             tipo_credito: form.tipo_credito,
@@ -356,7 +362,7 @@ export default function CreditosPage() {
             cooperativa_id: Number(form.cooperativa_id),
             credito_refinanciado_id: form.tipo_credito === "Refinanciacion" ? Number(form.credito_refinanciado_id) : null,
             pagaduria_id: Number(form.pagaduria_id),
-          monto_solicitado: Number(form.monto_solicitado),
+          monto_solicitado: parseMoneyInput(form.monto_solicitado),
           plazo: Number(form.plazo),
           nro_libranza: nullableText(form.nro_libranza),
           tipo_credito: form.tipo_credito,
@@ -717,9 +723,8 @@ function CreditoModal({
               ) : null}
             </div>
           ) : null}
-          <Field
+          <MoneyField
             label="Monto solicitado"
-            type="number"
             value={form.monto_solicitado}
             onChange={(value) => updateField("monto_solicitado", value)}
             required
@@ -992,6 +997,33 @@ function Field({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        required={required}
+      />
+    </label>
+  );
+}
+
+function MoneyField({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <input
+        className="input-base mt-2"
+        type="text"
+        inputMode="numeric"
+        value={formatMoneyInput(value)}
+        onChange={(event) => onChange(sanitizeMoneyInput(event.target.value))}
+        placeholder="0"
         required={required}
       />
     </label>

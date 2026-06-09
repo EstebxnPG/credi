@@ -17,6 +17,12 @@ from app.services.log_service import registrar_log
 
 
 TIPOS_PERMITIDOS = {".pdf": "PDF", ".jpg": "JPG", ".jpeg": "JPG", ".png": "PNG"}
+MIME_TYPES = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+}
 MAX_FILE_SIZE = 10 * 1024 * 1024
 UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "data" / "uploads" / "documentos"
 
@@ -179,7 +185,8 @@ def descargar_documento(db: Session, documento_id: int) -> FileResponse:
     return FileResponse(
         path=ruta,
         filename=documento.nombre,
-        media_type="application/octet-stream",
+        media_type=MIME_TYPES.get(ruta.suffix.lower(), "application/octet-stream"),
+        content_disposition_type="inline",
     )
 
 
