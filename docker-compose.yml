@@ -48,6 +48,18 @@ services:
       db:
         condition: service_healthy
 
+  notification_worker:
+    build: ./backend
+    container_name: credi_notification_worker
+    restart: unless-stopped
+    command: ["python", "-m", "app.notification_worker"]
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
   frontend:
     build: ./frontend
     container_name: credi_frontend

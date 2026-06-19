@@ -3,7 +3,7 @@ credito_service.py
 Lógica de negocio de Créditos.
 Implementa CRUD, validación contra cooperativa y máquina de estados.
 """
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -15,6 +15,8 @@ from app.db.models.oficina import Oficina
 from app.db.models.pagaduria import Pagaduria
 from app.db.models.pensionado import Pensionado
 from app.db.models.usuario import Usuario
+from app.db.models.refinanciacion import OportunidadRefinanciacion, HistorialOportunidadRefinanciacion
+from app.db.models.notificacion import Notificacion
 from app.schemas.credito import (
     CreditoCambioEstado,
     CreditoCreate,
@@ -242,6 +244,15 @@ def _validar_tipo_credito(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El credito refinanciado debe ser aprobado y pertenecer al mismo pensionado",
         )
+    duplicado = db.query(Credito.id).filter(
+        Credito.credito_refinanciado_id == credito_refinanciado_id,
+        Credito.is_active == True,  # noqa: E712
+    ).first()
+    if duplicado:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este credito ya tiene una refinanciacion asociada",
+        )
 
 
 def _validar_credito_editable(credito: Credito) -> None:
@@ -312,6 +323,24 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
     credito = Credito(**payload, estado="Prospecto")
     db.add(credito)
     db.flush()
+
+    if credito.tipo_credito == "Refinanciacion" and credito.credito_refinanciado_id:
+        oportunidad = db.query(OportunidadRefinanciacion).filter(
+            OportunidadRefinanciacion.credito_id == credito.credito_refinanciado_id
+        ).first()
+        if oportunidad:
+            anterior = oportunidad.estado
+            oportunidad.estado = "convertido"
+            oportunidad.credito_nuevo_id = credito.id
+            oportunidad.reactivar_en = None
+            db.add(HistorialOportunidadRefinanciacion(
+                oportunidad_id=oportunidad.id, usuario_id=usuario_actual.id,
+                estado_anterior=anterior, estado_nuevo="convertido",
+                justificacion=f"Credito #{credito.id} creado",
+            ))
+        db.query(Notificacion).filter(
+            Notificacion.clave == f"refinanciacion-{credito.credito_refinanciado_id}"
+        ).update({Notificacion.estado: "resuelta", Notificacion.resuelta_en: datetime.now(timezone.utc), Notificacion.resuelta_por: usuario_actual.id}, synchronize_session=False)
 
     _registrar_historial(
         db=db,

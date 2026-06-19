@@ -23,3 +23,6 @@ class Usuario(Base, TimestampMixin, SoftDeleteMixin):
     historial: Mapped[list["HistorialCredito"]] = relationship(back_populates="usuario")
     logs: Mapped[list["Log"]] = relationship(back_populates="usuario")
     seguimientos: Mapped[list["Seguimiento"]] = relationship(back_populates="usuario")
+    notificaciones: Mapped[list["Notificacion"]] = relationship(
+        foreign_keys="Notificacion.responsable_id", back_populates="responsable"
+    )

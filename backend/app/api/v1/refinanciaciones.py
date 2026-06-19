@@ -14,6 +14,7 @@ from app.schemas.refinanciacion import (
     RefinanciacionElegibleRead,
     RefinanciacionRead,
     RefinanciacionUpdate,
+    OportunidadEstadoUpdate,
 )
 from app.services import refinanciacion_service
 
@@ -33,26 +34,31 @@ def crear_refinanciacion(
 def listar_refinanciaciones(
     credito_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(get_current_user),
 ):
-    return refinanciacion_service.listar_refinanciaciones(db, credito_id)
+    return refinanciacion_service.listar_refinanciaciones(db, credito_id, usuario)
 
 
 @router.get("/elegibles/", response_model=list[RefinanciacionElegibleRead])
 def listar_creditos_elegibles(
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(get_current_user),
 ):
-    return refinanciacion_service.listar_creditos_elegibles(db)
+    return refinanciacion_service.listar_creditos_elegibles(db, usuario)
+
+
+@router.patch("/oportunidades/{oportunidad_id}/estado")
+def cambiar_estado_oportunidad(oportunidad_id: int, data: OportunidadEstadoUpdate, db: Session = Depends(get_db), usuario: Usuario = Depends(get_current_user)):
+    return refinanciacion_service.cambiar_estado_oportunidad(db, oportunidad_id, data, usuario)
 
 
 @router.get("/{refinanciacion_id}", response_model=RefinanciacionRead)
 def obtener_refinanciacion(
     refinanciacion_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(get_current_user),
 ):
-    return refinanciacion_service.obtener_refinanciacion(db, refinanciacion_id)
+    return refinanciacion_service.obtener_refinanciacion(db, refinanciacion_id, usuario)
 
 
 @router.patch("/{refinanciacion_id}", response_model=RefinanciacionRead)

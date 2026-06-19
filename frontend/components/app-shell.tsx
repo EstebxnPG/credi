@@ -2,9 +2,25 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
+import { apiFetch } from "@/lib/api";
 import { navItems, navSections } from "@/lib/navigation";
 import { clearSession, readSession } from "@/lib/session";
+
+type Notificacion = {
+  id: number;
+  titulo: string;
+  mensaje: string;
+  href: string;
+  leida: boolean;
+};
+
+type NotificationPage = {
+  items: Notificacion[];
+  total: number;
+  unread: number;
+};
 
 export function AppShell({
   children,
@@ -14,6 +30,66 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const session = readSession();
+  const [notifications, setNotifications] = useState<Notificacion[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [toast, setToast] = useState<Notificacion | null>(null);
+  const knownIds = useRef<Set<number> | null>(null);
+
+  async function loadNotifications() {
+    try {
+      const response = await apiFetch<NotificationPage>(
+        "/api/v1/notificaciones/?incluir_resueltas=true&page_size=6",
+      );
+      const next = response.items;
+      const unread = next.filter((item) => !item.leida);
+      if (knownIds.current) {
+        const nueva = unread.find((item) => !knownIds.current?.has(item.id));
+        if (nueva) setToast(nueva);
+      } else if (unread[0]) {
+        setToast(unread[0]);
+      }
+      knownIds.current = new Set(next.map((item) => item.id));
+      setNotifications(next);
+      setUnreadCount(response.unread);
+    } catch {
+      // The shell stays usable if notification polling fails.
+    }
+  }
+
+  async function markRead(item: Notificacion) {
+    if (!item.leida) {
+      await apiFetch<void>(`/api/v1/notificaciones/${item.id}/leer`, {
+        method: "PATCH",
+      });
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === item.id ? { ...notification, leida: true } : notification,
+        ),
+      );
+    }
+    setBellOpen(false);
+    setToast(null);
+    router.push(item.href);
+  }
+
+  useEffect(() => {
+    void loadNotifications();
+    const interval = window.setInterval(() => void loadNotifications(), 60_000);
+    const refresh = () => void loadNotifications();
+    window.addEventListener("notifications-updated", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("notifications-updated", refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
   const visibleItems = navItems.filter((item) => {
     if (!item.adminOnly) {
       return true;
@@ -43,6 +119,75 @@ export function AppShell({
               </div>
 
               <div className="flex items-center gap-2 self-start lg:self-auto">
+                <div className="relative">
+                  <button
+                    type="button"
+                    title="Notificaciones"
+                    aria-label="Abrir notificaciones"
+                    onClick={() => setBellOpen((open) => !open)}
+                    className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-stone-800/10 bg-white text-stone-700 transition hover:bg-stone-50"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      className="h-5 w-5"
+                      aria-hidden="true"
+                    >
+                      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                      <path d="M10 21h4" />
+                    </svg>
+                    {unreadCount > 0 ? (
+                      <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  {bellOpen ? (
+                    <div className="absolute right-0 top-11 z-50 w-[min(360px,calc(100vw-2rem))] border border-stone-800/10 bg-white shadow-2xl">
+                      <div className="flex items-center justify-between border-b border-stone-800/10 px-4 py-3">
+                        <p className="text-sm font-semibold text-stone-950">Notificaciones</p>
+                        <span className="text-xs text-stone-500">
+                          Historial reciente
+                        </span>
+                      </div>
+                      <div className="max-h-80 divide-y divide-stone-800/10 overflow-y-auto">
+                        {notifications.slice(0, 6).map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => void markRead(item)}
+                            className={[
+                              "block w-full px-4 py-3 text-left transition hover:bg-teal-50",
+                              item.leida
+                                ? "bg-stone-50 text-stone-500"
+                                : "bg-white text-stone-950",
+                            ].join(" ")}
+                          >
+                            <p className={item.leida ? "text-sm font-medium text-stone-500" : "text-sm font-bold text-stone-950"}>{item.titulo}</p>
+                            <p className={item.leida ? "mt-1 line-clamp-2 text-xs text-stone-400" : "mt-1 line-clamp-2 text-xs font-medium text-stone-700"}>
+                              {item.mensaje}
+                            </p>
+                          </button>
+                        ))}
+                        {notifications.length === 0 ? (
+                          <p className="px-4 py-8 text-center text-sm text-stone-500">
+                            No hay notificaciones.
+                          </p>
+                        ) : null}
+                      </div>
+                      <Link
+                        href="/notificaciones"
+                        onClick={() => setBellOpen(false)}
+                        className="block border-t border-stone-800/10 px-4 py-3 text-center text-sm font-semibold text-teal-800 hover:bg-stone-50"
+                      >
+                        Ver todas
+                      </Link>
+                    </div>
+                  ) : null}
+                </div>
                 <div className="rounded-lg border border-stone-800/10 bg-white/70 px-3 py-1.5">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-stone-500">
                     Sesion
@@ -111,6 +256,22 @@ export function AppShell({
 
         <main className="space-y-4 pt-4">{children}</main>
       </div>
+
+      {toast ? (
+        <button
+          type="button"
+          onClick={() => void markRead(toast)}
+          className="fixed right-4 top-24 z-[60] w-[min(380px,calc(100vw-2rem))] border border-amber-600/20 bg-white p-4 text-left shadow-2xl"
+        >
+          <div className="flex gap-3">
+            <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" />
+            <div>
+              <p className="text-sm font-semibold text-stone-950">{toast.titulo}</p>
+              <p className="mt-1 text-sm text-stone-600">{toast.mensaje}</p>
+            </div>
+          </div>
+        </button>
+      ) : null}
     </div>
   );
 }

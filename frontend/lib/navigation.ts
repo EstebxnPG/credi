@@ -45,6 +45,12 @@ export const navItems: NavItem[] = [
     section: "operacion",
   },
   {
+    href: "/notificaciones",
+    label: "Notificaciones",
+    description: "Alertas y eventos de la operacion",
+    section: "operacion",
+  },
+  {
     href: "/usuarios",
     label: "Usuarios",
     description: "Roles, oficinas y accesos",

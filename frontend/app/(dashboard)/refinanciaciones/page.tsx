@@ -1,137 +1,35 @@
 "use client";
-
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/format";
 
-type RefinanciacionElegible = {
-  credito_id: number;
-  pensionado_id: number;
-  pensionado_nombre: string | null;
-  documento: string | null;
-  cooperativa_nombre: string | null;
-  monto_aprobado: number | null;
-  plazo: number;
-  fecha_base: string;
-  disponible_desde: string;
-  meses_transcurridos: number;
-  meses_requeridos: number;
-  estado_refinanciacion: string;
-};
+type Estado = "programado"|"disponible"|"contactado"|"aceptado"|"rechazado"|"convertido";
+type Item={credito_id:number;pensionado_nombre:string|null;documento:string|null;cooperativa_nombre:string|null;monto_aprobado:number|null;fecha_base:string;disponible_desde:string;estado_refinanciacion:string;oportunidad_id:number;estado_comercial:Estado;reactivar_en:string|null;credito_nuevo_id:number|null};
+type Vista="hoy"|"proximos"|"gestionados"|"convertidos"|"todos";
+const tabs:Array<{key:Vista;label:string}>=[{key:"hoy",label:"Disponibles ahora"},{key:"proximos",label:"Próximos"},{key:"gestionados",label:"En gestión"},{key:"convertidos",label:"Convertidos"},{key:"todos",label:"Todos"}];
 
-export default function RefinanciacionesPage() {
-  const [items, setItems] = useState<RefinanciacionElegible[]>([]);
-  const [query, setQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function loadItems() {
-      setLoading(true);
-      setError(null);
-      try {
-        setItems(await apiFetch<RefinanciacionElegible[]>("/api/v1/refinanciaciones/elegibles/"));
-      } catch (loadError) {
-        setError(loadError instanceof ApiError ? loadError.message : "No se pudo cargar refinanciaciones");
-      } finally {
-        setLoading(false);
-      }
-    }
-    void loadItems();
-  }, []);
-
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return items.filter((item) => {
-      const disponible = item.disponible_desde.slice(0, 10);
-      const matchesDate = (!dateFrom || disponible >= dateFrom) && (!dateTo || disponible <= dateTo);
-      const matchesQuery =
-        !term ||
-        [
-          item.credito_id,
-          item.pensionado_nombre,
-          item.documento,
-          item.cooperativa_nombre,
-          item.monto_aprobado,
-          item.plazo,
-        ]
-          .filter((value) => value !== null && value !== undefined)
-          .some((value) => String(value).toLowerCase().includes(term));
-      return matchesDate && matchesQuery;
-    });
-  }, [items, query, dateFrom, dateTo]);
-
-  const totalMonto = filtered.reduce((total, item) => total + Number(item.monto_aprobado ?? 0), 0);
-  const cooperativas = new Set(filtered.map((item) => item.cooperativa_nombre).filter(Boolean)).size;
-
-  return (
-    <section className="space-y-4">
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">Operacion</p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">Refinanciaciones</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
-              Creditos aprobados con fecha estimada de refinanciacion segun regla configurada por plazo.
-            </p>
-          </div>
-          <div className="grid w-full gap-3 sm:grid-cols-3 lg:w-auto">
-            <input className="input-base" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar credito, pensionado, documento" />
-            <input className="input-base" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-            <input className="input-base" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-          </div>
-        </div>
-      </article>
-
-      {!loading && !error ? (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Metric label="Creditos filtrados" value={String(filtered.length)} />
-          <Metric label="Monto aprobado" value={formatCurrency(totalMonto)} />
-          <Metric label="Cooperativas" value={String(cooperativas)} />
-        </div>
-      ) : null}
-
-      {loading ? <StateMessage text="Cargando refinanciaciones..." /> : null}
-      {error ? <StateMessage tone="error" text={error} /> : null}
-
-      {!loading && !error ? (
-        <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[0.7fr_1.3fr_1fr_1fr_0.9fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
-            <span>Credito</span><span>Pensionado</span><span>Cooperativa</span><span>Disponible</span><span>Regla</span><span className="text-right">Accion</span>
-          </div>
-          <div className="divide-y divide-stone-800/10">
-            {filtered.map((item) => (
-              <div key={item.credito_id} className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[0.7fr_1.3fr_1fr_1fr_0.9fr_120px] md:items-center md:py-3">
-                <span className="font-semibold text-stone-950">#{item.credito_id}</span>
-                <div><p className="font-medium text-stone-900">{item.pensionado_nombre ?? "Sin nombre"}</p><p className="mt-1 text-xs text-stone-500">{item.documento ?? "Sin documento"}</p></div>
-                <span className="text-stone-700">{item.cooperativa_nombre ?? "Sin cooperativa"}</span>
-                <div>
-                  <p className="font-medium text-stone-800">{formatDate(item.disponible_desde)}</p>
-                  <p className="mt-1 text-xs text-stone-500">Base {formatDate(item.fecha_base)} - {formatCurrency(item.monto_aprobado)}</p>
-                </div>
-                <span className="text-stone-700">
-                  {item.meses_transcurridos}/{item.meses_requeridos} meses
-                  <span className="mt-1 block text-xs text-stone-500">{item.estado_refinanciacion}</span>
-                </span>
-                <div className="md:text-right"><Link className="button-muted px-3 py-2 text-sm" href={`/creditos/${item.credito_id}`}>Ver</Link></div>
-              </div>
-            ))}
-            {filtered.length === 0 ? <p className="px-4 py-8 text-center text-sm text-stone-500">No hay creditos para los filtros actuales.</p> : null}
-          </div>
-        </div>
-      ) : null}
-    </section>
-  );
+export default function RefinanciacionesPage(){
+ const [items,setItems]=useState<Item[]>([]),[query,setQuery]=useState(""),[vista,setVista]=useState<Vista>("hoy");
+ const [loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null),[success,setSuccess]=useState<string|null>(null),[savingId,setSavingId]=useState<number|null>(null),[rejecting,setRejecting]=useState<Item|null>(null);
+ useEffect(()=>{(async()=>{try{setItems(await apiFetch<Item[]>("/api/v1/refinanciaciones/elegibles/"));}catch(e){setError(e instanceof ApiError?e.message:"No se pudieron cargar las oportunidades");}finally{setLoading(false)}})()},[]);
+ const counts=useMemo(()=>({hoy:items.filter(x=>x.estado_refinanciacion==="Listo"&&!['convertido','rechazado'].includes(x.estado_comercial)).length,proximos:items.filter(x=>x.estado_comercial==="programado").length,gestionados:items.filter(x=>['contactado','aceptado','rechazado'].includes(x.estado_comercial)).length,convertidos:items.filter(x=>x.estado_comercial==="convertido").length}),[items]);
+ const filtered=useMemo(()=>items.filter(x=>{const matches=vista==="todos"||(vista==="hoy"&&x.estado_refinanciacion==="Listo"&&!['convertido','rechazado'].includes(x.estado_comercial))||(vista==="proximos"&&x.estado_comercial==="programado")||(vista==="gestionados"&&['contactado','aceptado','rechazado'].includes(x.estado_comercial))||(vista==="convertidos"&&x.estado_comercial==="convertido");const term=query.toLowerCase().trim();return matches&&(!term||[x.credito_id,x.pensionado_nombre,x.documento,x.cooperativa_nombre].some(v=>String(v??"").toLowerCase().includes(term)))}),[items,query,vista]);
+ async function change(item:Item,estado:Estado,justificacion?:string){setSavingId(item.oportunidad_id);setError(null);setSuccess(null);try{await apiFetch(`/api/v1/refinanciaciones/oportunidades/${item.oportunidad_id}/estado`,{method:"PATCH",body:JSON.stringify({estado,justificacion})});setItems(c=>c.map(x=>x.credito_id===item.credito_id?{...x,estado_comercial:estado,reactivar_en:estado==="rechazado"?new Date(Date.now()+20*86400000).toISOString():null}:x));setSuccess(`Crédito #${item.credito_id}: estado actualizado a ${estado}.`);window.dispatchEvent(new Event("notifications-updated"));}catch(e){setError(e instanceof ApiError?e.message:"No se pudo actualizar la oportunidad");}finally{setSavingId(null)}}
+ if(loading)return <Message text="Cargando refinanciaciones..."/>;
+ return <section className="space-y-4">
+  <header className="rounded-2xl border bg-white/85 p-5"><p className="text-xs font-semibold uppercase tracking-[.22em] text-stone-500">Operación comercial</p><h1 className="mt-2 text-2xl font-semibold">Refinanciaciones</h1><p className="mt-2 text-sm text-stone-600">Oportunidades liberadas según las reglas de cada cooperativa.</p></header>
+  {error&&<Message tone="error" text={error}/>}
+  {success&&<Message tone="success" text={success}/>}
+  <div className="grid gap-3 sm:grid-cols-4"><Metric label="Disponibles ahora" value={counts.hoy}/><Metric label="Próximos" value={counts.proximos}/><Metric label="En gestión" value={counts.gestionados}/><Metric label="Convertidos" value={counts.convertidos}/></div>
+  <div className="flex flex-wrap gap-2 border-b pb-3">{tabs.map(t=><button key={t.key} onClick={()=>setVista(t.key)} className={vista===t.key?"rounded-lg bg-teal-950 px-3 py-2 text-sm text-white":"rounded-lg border bg-white px-3 py-2 text-sm text-stone-700"}>{t.label}</button>)}</div>
+  <input className="input-base max-w-lg" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar crédito, pensionado, documento o cooperativa"/>
+  <div className="overflow-x-auto border-y bg-white/80"><table className="min-w-full text-left text-sm"><thead className="border-b bg-stone-50 text-xs uppercase text-stone-500"><tr>{["Crédito","Pensionado","Cooperativa","Disponible desde","Estado","Gestión"].map(h=><th key={h} className="px-4 py-3">{h}</th>)}</tr></thead><tbody className="divide-y">{filtered.map(item=><tr key={item.credito_id}><td className="px-4 py-3 font-semibold">#{item.credito_id}</td><td className="px-4 py-3"><p>{item.pensionado_nombre}</p><p className="text-xs text-stone-500">{item.documento}</p></td><td className="px-4 py-3">{item.cooperativa_nombre}</td><td className="px-4 py-3"><p>{formatDate(item.disponible_desde)}</p><p className="text-xs text-stone-500">Base {formatDate(item.fecha_base)} · {formatCurrency(item.monto_aprobado)}</p></td><td className="px-4 py-3"><Badge estado={item.estado_comercial}/>{item.estado_comercial==="rechazado"&&item.reactivar_en?<p className="mt-1 text-xs text-stone-500">Alerta: {formatDate(item.reactivar_en)}</p>:null}</td><td className="px-4 py-3"><div className="flex min-w-72 flex-wrap gap-1.5">{item.estado_refinanciacion==="Listo"&&item.estado_comercial!=="convertido"?<><Action disabled={savingId===item.oportunidad_id} text="Contactado" onClick={()=>void change(item,"contactado")}/><Action disabled={savingId===item.oportunidad_id} text="Aceptado" onClick={()=>void change(item,"aceptado")}/><Action disabled={savingId===item.oportunidad_id} text="Rechazado" onClick={()=>setRejecting(item)}/></>:null}{item.estado_refinanciacion==="Listo"&&!['rechazado','convertido'].includes(item.estado_comercial)?<Link className="button-primary px-2.5 py-1.5 text-xs" href={`/creditos?refinanciar=${item.credito_id}`}>Refinanciar</Link>:null}</div></td></tr>)}{!filtered.length?<tr><td colSpan={6} className="px-4 py-10 text-center text-stone-500">No hay oportunidades en esta vista.</td></tr>:null}</tbody></table></div>
+  {rejecting?<RejectModal item={rejecting} saving={savingId===rejecting.oportunidad_id} onClose={()=>setRejecting(null)} onConfirm={async reason=>{await change(rejecting,"rechazado",reason);setRejecting(null)}}/>:null}
+ </section>
 }
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-stone-800/10 bg-white/85 px-5 py-4 shadow-lg shadow-stone-900/5"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">{label}</p><p className="mt-2 text-xl font-semibold text-stone-950">{value}</p></div>;
-}
-
-function StateMessage({ text, tone = "default" }: { text: string; tone?: "default" | "error" }) {
-  return <div className={["rounded-2xl border px-5 py-4 text-sm", tone === "error" ? "border-red-500/20 bg-red-50 text-red-700" : "border-stone-800/10 bg-white/65 text-stone-500"].join(" ")}>{text}</div>;
-}
+function Badge({estado}:{estado:Estado}){const tone:{[K in Estado]:string}={programado:"bg-sky-50 text-sky-700 border-sky-200",disponible:"bg-emerald-50 text-emerald-700 border-emerald-200",contactado:"bg-amber-50 text-amber-700 border-amber-200",aceptado:"bg-teal-50 text-teal-700 border-teal-200",rechazado:"bg-rose-50 text-rose-700 border-rose-200",convertido:"bg-violet-50 text-violet-700 border-violet-200"};return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${tone[estado]}`}>{estado}</span>}
+function Action({text,onClick,disabled}:{text:string;onClick:()=>void;disabled:boolean}){return <button disabled={disabled} onClick={onClick} className="button-muted px-2.5 py-1.5 text-xs disabled:opacity-40">{disabled?"Guardando...":text}</button>}
+function RejectModal({item,saving,onClose,onConfirm}:{item:Item;saving:boolean;onClose:()=>void;onConfirm:(reason:string)=>Promise<void>}){const [reason,setReason]=useState("");return <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><h2 className="text-lg font-semibold">Rechazar oportunidad #{item.credito_id}</h2><p className="mt-2 text-sm text-stone-600">La oportunidad seguirá visible y la alerta reaparecerá dentro de 20 días.</p><label className="mt-4 block text-sm font-medium">Motivo<textarea autoFocus className="input-base mt-1 min-h-28" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Explica por qué no continuará ahora"/></label><div className="mt-5 flex justify-end gap-2"><button className="button-muted" disabled={saving} onClick={onClose}>Cancelar</button><button className="button-primary" disabled={saving||!reason.trim()} onClick={()=>void onConfirm(reason.trim())}>{saving?"Guardando...":"Confirmar rechazo"}</button></div></div></div>}
+function Metric({label,value}:{label:string;value:number}){return <div className="border-b px-1 py-3"><p className="text-xs uppercase tracking-wider text-stone-500">{label}</p><p className="mt-2 text-xl font-semibold">{value}</p></div>}
+function Message({text,tone="default"}:{text:string;tone?:"default"|"error"|"success"}){return <div className={tone==="error"?"border border-red-200 bg-red-50 p-4 text-sm text-red-700":tone==="success"?"border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700":"border bg-white p-4 text-sm text-stone-500"}>{text}</div>}

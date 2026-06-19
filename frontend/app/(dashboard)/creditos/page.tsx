@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
 import {
@@ -123,6 +123,8 @@ type FormMode = "create" | "edit";
 
 export default function CreditosPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const refinanceOpened = useRef(false);
   const [creditos, setCreditos] = useState<Credito[]>([]);
   const [pensionados, setPensionados] = useState<Pensionado[]>([]);
   const [pendientes, setPendientes] = useState<PendienteCredito[]>([]);
@@ -271,6 +273,28 @@ export default function CreditosPage() {
     setFormError(null);
     setModalMode("create");
   }
+
+  useEffect(() => {
+    const sourceId = Number(searchParams.get("refinanciar"));
+    if (loading || !sourceId || refinanceOpened.current) return;
+    const source = creditos.find((item) => item.id === sourceId && item.estado === "Aprobado");
+    if (!source) return;
+    refinanceOpened.current = true;
+    setSelected(null);
+    setForm({
+      ...emptyForm,
+      pensionado_id: String(source.pensionado_id),
+      asesor_id: String(source.asesor_id),
+      oficina_id: String(source.oficina_id),
+      cooperativa_id: String(source.cooperativa_id),
+      pagaduria_id: String(source.pagaduria_id),
+      tipo_credito: "Refinanciacion",
+      credito_refinanciado_id: String(source.id),
+      observaciones: `Refinanciación del crédito #${source.id}`,
+    });
+    setFormError(null);
+    setModalMode("create");
+  }, [creditos, loading, searchParams]);
 
   function openEditModal(credito: Credito) {
     setSelected(credito);

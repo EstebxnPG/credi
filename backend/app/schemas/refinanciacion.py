@@ -100,3 +100,19 @@ class RefinanciacionElegibleRead(BaseModel):
     meses_transcurridos: int
     meses_requeridos: int
     estado_refinanciacion: str
+    oportunidad_id: int | None = None
+    estado_comercial: str = "programado"
+    reactivar_en: datetime | None = None
+    credito_nuevo_id: int | None = None
+
+
+class OportunidadEstadoUpdate(BaseModel):
+    estado: str
+    justificacion: str | None = None
+
+    @field_validator("estado")
+    @classmethod
+    def estado_valido(cls, value):
+        if value not in {"disponible", "contactado", "aceptado", "rechazado"}:
+            raise ValueError("Estado comercial no válido")
+        return value
