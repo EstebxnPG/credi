@@ -13,5 +13,13 @@ class LogRead(BaseModel):
     valores_antes: Optional[dict[str, Any]] = None
     valores_despues: Optional[dict[str, Any]] = None
     created_at: datetime
+    usuario_nombre: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class LogPage(BaseModel):
+    items: list[LogRead]
+    total: int
+    page: int
+    page_size: int

@@ -13,9 +13,9 @@ router = APIRouter(prefix="/pensionados", tags=["Pensionados"])
 def crear_pensionado(
     data: PensionadoCreate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(get_current_user),
 ):
-    return PensionadoService(db).crear(data)
+    return PensionadoService(db).crear(data, usuario)
 
 @router.get("/", response_model=List[PensionadoRead])
 def listar_pensionados(
@@ -23,10 +23,10 @@ def listar_pensionados(
     limit: int = 100,
     solo_activos: bool = False,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(get_current_user),
 ):
     return PensionadoService(db).listar(
-        skip=skip,
+        usuario=usuario, skip=skip,
         limit=limit,
         solo_activos=solo_activos,
     )
@@ -35,23 +35,23 @@ def listar_pensionados(
 def obtener_pensionado(
     pensionado_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(get_current_user),
 ):
-    return PensionadoService(db).obtener_o_404(pensionado_id)
+    return PensionadoService(db).obtener_o_404(pensionado_id, usuario)
 
 @router.patch("/{pensionado_id}", response_model=PensionadoRead)
 def actualizar_pensionado(
     pensionado_id: int,
     data: PensionadoUpdate,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario: Usuario = Depends(get_current_user),
 ):
-    return PensionadoService(db).actualizar(pensionado_id, data)
+    return PensionadoService(db).actualizar(pensionado_id, data, usuario)
 
 @router.delete("/{pensionado_id}", response_model=PensionadoRead)
 def eliminar_pensionado(
     pensionado_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(solo_admin),
+    usuario: Usuario = Depends(solo_admin),
 ):
-    return PensionadoService(db).eliminar(pensionado_id)
+    return PensionadoService(db).eliminar(pensionado_id, usuario)

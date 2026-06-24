@@ -104,6 +104,9 @@ def crear_seguimiento(
         },
     )
 
+    from app.services.notificacion_service import sincronizar_reglas
+
+    sincronizar_reglas(db, commit=False)
     db.commit()
     db.refresh(seguimiento)
     return obtener_seguimiento(db, seguimiento.id, usuario_actual)

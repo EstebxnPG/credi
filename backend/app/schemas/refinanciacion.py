@@ -93,6 +93,7 @@ class RefinanciacionElegibleRead(BaseModel):
     documento: str | None = None
     cooperativa_id: int
     cooperativa_nombre: str | None = None
+    simulador_url: str | None = None
     monto_aprobado: float | None = None
     plazo: int
     fecha_base: date

@@ -21,6 +21,12 @@ node_modules/
 *.sqlite
 *.db
 
+# Archivos cargados por usuarios / datos sensibles
+backend/data/uploads/
+
+# Artefactos temporales manuales
+tmp-test.*
+
 # Notebooks outputs
 .ipynb_checkpoints/
 

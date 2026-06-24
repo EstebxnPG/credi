@@ -5,7 +5,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { writeSession } from "@/lib/session";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+function getApiUrl() {
+  if (API_URL) {
+    return API_URL;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("NEXT_PUBLIC_API_URL debe estar configurado en producción.");
+  }
+
+  return "http://localhost:8000";
+}
 
 type LoginResponse = {
   access_token: string;
@@ -23,7 +35,7 @@ export default function LoginPage() {
 }
 
 function LoginContent() {
-  const [correo, setCorreo] = useState("admin@crediconfiemos.com");
+  const [correo, setCorreo] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,7 +56,7 @@ function LoginContent() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+      const response = await fetch(`${getApiUrl()}/api/v1/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -133,7 +145,7 @@ function LoginContent() {
                 className="input-base"
                 value={correo}
                 onChange={(event) => setCorreo(event.target.value)}
-                placeholder="admin@crediconfiemos.com"
+                placeholder="Ingresa tu correo"
                 type="email"
                 autoComplete="email"
               />

@@ -108,6 +108,9 @@ def crear_pendiente(
         valores_despues=data.model_dump(),
     )
 
+    from app.services.notificacion_service import sincronizar_reglas
+
+    sincronizar_reglas(db, commit=False)
     db.commit()
     db.refresh(pendiente)
     return pendiente
@@ -148,6 +151,9 @@ def actualizar_pendiente(
         valores_despues=cambios,
     )
 
+    from app.services.notificacion_service import sincronizar_reglas
+
+    sincronizar_reglas(db, commit=False)
     db.commit()
     db.refresh(pendiente)
     return pendiente
@@ -189,6 +195,9 @@ def resolver_pendiente(
         },
     )
 
+    from app.services.notificacion_service import sincronizar_reglas
+
+    sincronizar_reglas(db, commit=False)
     db.commit()
     db.refresh(pendiente)
     return pendiente

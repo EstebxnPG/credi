@@ -39,6 +39,7 @@ class CooperativaBase(BaseModel):
     monto_maximo: float
     plazo_minimo: int
     plazo_maximo: int
+    simulador_url: Optional[str] = None
     reglas_refinanciacion: list[CooperativaRefinanciacionReglaBase] = []
 
     @field_validator("nombre")
@@ -47,6 +48,16 @@ class CooperativaBase(BaseModel):
         if not value or not value.strip():
             raise ValueError("El nombre no puede estar vacio")
         return value.strip()
+
+    @field_validator("simulador_url")
+    @classmethod
+    def url_simulador_valida(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("El enlace de la simuladora debe iniciar con http:// o https://")
+        return value
 
     @field_validator("edad_minima", "edad_maxima")
     @classmethod
@@ -97,8 +108,19 @@ class CooperativaUpdate(BaseModel):
     monto_maximo: Optional[float] = None
     plazo_minimo: Optional[int] = None
     plazo_maximo: Optional[int] = None
+    simulador_url: Optional[str] = None
     reglas_refinanciacion: Optional[list[CooperativaRefinanciacionReglaBase]] = None
     is_active: Optional[bool] = None
+
+    @field_validator("simulador_url")
+    @classmethod
+    def url_simulador_valida(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not value.startswith(("https://", "http://")):
+            raise ValueError("El enlace de la simuladora debe iniciar con http:// o https://")
+        return value
 
     @model_validator(mode="after")
     def reglas_no_solapadas(self):

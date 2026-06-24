@@ -15,4 +15,4 @@ if __name__ == "__main__":
     while True:
         try: run_once()
         except Exception: log.exception("Falló la sincronización")
-        time.sleep(3600)
+        time.sleep(300)

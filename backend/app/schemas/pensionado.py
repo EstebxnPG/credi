@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 import re
 
@@ -133,6 +133,10 @@ class PensionadoUpdate(BaseModel):
 # ── Read: lo que devuelve la API ─────────────────────────────────
 class PensionadoRead(PensionadoBase):
     id: int
+    oficina_id: int
+    created_by: Optional[int] = None
+    creador_nombre: Optional[str] = None
+    created_at: datetime
     nombre_completo: str
     is_active: bool
 

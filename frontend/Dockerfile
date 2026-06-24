@@ -4,11 +4,13 @@ WORKDIR /app
 
 # Copia dependencias primero (mejor uso de caché de Docker)
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 
 # Copia el resto del código
 COPY . .
 
+RUN npm run build
+
 EXPOSE 3000
 
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start:prod"]

@@ -2,7 +2,19 @@
 
 import { clearSession, readSession } from "@/lib/session";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+function getApiUrl() {
+  if (API_URL) {
+    return API_URL;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("NEXT_PUBLIC_API_URL debe estar configurado en producción.");
+  }
+
+  return "http://localhost:8000";
+}
 
 export class ApiError extends Error {
   status: number;
@@ -22,7 +34,7 @@ const fieldLabels: Record<string, string> = {
   nombre: "Nombre",
   segundo_nombre: "Segundo nombre",
   apellidos: "Apellidos",
-  genero: "Genero",
+  genero: "Género",
   documento: "Documento",
   fecha_nacimiento: "Fecha de nacimiento",
   telefono: "Teléfono",
@@ -120,7 +132,7 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${getApiUrl()}${path}`, {
     ...init,
     headers,
   });
@@ -128,10 +140,10 @@ export async function apiFetch<T>(
   if (!response.ok) {
     if (response.status === 401) {
       redirectToLogin();
-      throw new ApiError("Sesion expirada. Inicia sesion nuevamente.", 401);
+      throw new ApiError("Sesión expirada. Inicia sesión nuevamente.", 401);
     }
 
-    let message = "Ocurrio un error al consultar la API";
+    let message = "Ocurrió un error al consultar la API";
 
     try {
       const payload = (await response.json()) as { detail?: unknown };
@@ -163,7 +175,7 @@ export async function apiDownload(path: string, init?: RequestInit): Promise<Blo
     headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${getApiUrl()}${path}`, {
     ...init,
     headers,
   });
@@ -171,7 +183,7 @@ export async function apiDownload(path: string, init?: RequestInit): Promise<Blo
   if (!response.ok) {
     if (response.status === 401) {
       redirectToLogin();
-      throw new ApiError("Sesion expirada. Inicia sesion nuevamente.", 401);
+      throw new ApiError("Sesión expirada. Inicia sesión nuevamente.", 401);
     }
 
     let message = response.statusText || "No se pudo descargar el archivo";

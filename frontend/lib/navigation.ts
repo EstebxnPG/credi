@@ -62,7 +62,6 @@ export const navItems: NavItem[] = [
     label: "Cooperativas",
     description: "Reglas comerciales de aprobacion",
     section: "configuracion",
-    adminOnly: true,
   },
   {
     href: "/oficinas",

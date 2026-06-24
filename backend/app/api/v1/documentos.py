@@ -41,27 +41,27 @@ def listar_documentos(
     credito_id: Optional[int] = Query(None),
     solo_activos: bool = Query(True),
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return documento_service.listar_documentos(db, credito_id, solo_activos)
+    return documento_service.listar_documentos(db, usuario_actual, credito_id, solo_activos)
 
 
 @router.get("/{documento_id}", response_model=DocumentoRead)
 def obtener_documento(
     documento_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return documento_service.obtener_documento(db, documento_id)
+    return documento_service.obtener_documento(db, documento_id, usuario_actual)
 
 
 @router.get("/{documento_id}/descargar", response_class=FileResponse)
 def descargar_documento(
     documento_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return documento_service.descargar_documento(db, documento_id)
+    return documento_service.descargar_documento(db, documento_id, usuario_actual)
 
 
 @router.patch("/{documento_id}/reemplazar", response_model=DocumentoReplaceResponse)

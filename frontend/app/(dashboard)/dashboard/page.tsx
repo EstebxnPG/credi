@@ -1,245 +1,40 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
-
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { ApiError, apiFetch } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 import { readSession, type SessionUser } from "@/lib/session";
 
-type Credito = {
-  id: number;
-  estado: string;
-  monto_solicitado: number;
-  monto_aprobado: number | null;
-  tiene_documentos_pendientes?: boolean;
-  created_at: string;
-};
+type Credito={id:number;estado:string;monto_solicitado:number;monto_aprobado:number|null;tiene_documentos_pendientes:boolean;documentos_pendientes:string|null;created_at:string};
+type Seguimiento={id:number;pensionado_nombre:string|null;tipo:string;fecha_proximo_contacto:string|null;usuario_nombre:string|null};
+type Notificacion={id:number;titulo:string;mensaje:string;href:string;prioridad:string;estado:string;fecha:string};
+type Opportunity={credito_id:number;pensionado_nombre:string|null;estado_refinanciacion:string;estado_comercial:string};
+type Summary={kpis:{creditos_total:number;creditos_mes:number;creditos_activos:number;creditos_aprobados:number;creditos_aprobados_mes:number;tasa_aprobacion:number;cumpleanos_30_dias:number};creditos_por_estado:Array<{estado:string;total:number}>;productividad_oficinas:Array<{nombre:string;creditos:number}>;productividad_asesoras:Array<{nombre:string;creditos:number}>};
 
-type Seguimiento = {
-  id: number;
-  tipo: string;
-  resultado: string | null;
-  fecha_proximo_contacto: string | null;
-};
-
-const estadosActivos = [
-  "Prospecto",
-  "Enviado a cooperativa",
-  "Devuelto por correccion",
-  "Devuelto por corrección",
-  "Reenviado",
-  "Aprobado",
-];
-
-function formatCurrency(value: number | null) {
-  return new Intl.NumberFormat("es-CO", {
-    style: "currency",
-    currency: "COP",
-    maximumFractionDigits: 0,
-  }).format(value ?? 0);
+export default function DashboardPage(){
+ const [session,setSession]=useState<SessionUser|null>(null),[creditos,setCreditos]=useState<Credito[]>([]),[seguimientos,setSeguimientos]=useState<Seguimiento[]>([]),[notifications,setNotifications]=useState<Notificacion[]>([]),[opportunities,setOpportunities]=useState<Opportunity[]>([]),[summary,setSummary]=useState<Summary|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null);
+ useEffect(()=>setSession(readSession()),[]);
+ useEffect(()=>{if(!session)return;(async()=>{try{const [c,s,n,o,r]=await Promise.all([apiFetch<Credito[]>("/api/v1/creditos/"),apiFetch<Seguimiento[]>("/api/v1/seguimientos/"),apiFetch<{items:Notificacion[]}>("/api/v1/notificaciones/?estado=pendiente&page_size=8"),apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/"),apiFetch<Summary>("/api/v1/reportes/resumen")]);setCreditos(c);setSeguimientos(s);setNotifications(n.items);setOpportunities(o);setSummary(r)}catch(e){setError(e instanceof ApiError?e.message:"No se pudo cargar el inicio")}finally{setLoading(false)}})()},[session]);
+ if(loading||!session)return <State text="Preparando tu espacio de trabajo..."/>;
+ if(error)return <State text={error} error/>;
+ return session.rol==="administrador"?<AdminHome session={session} summary={summary} notifications={notifications} opportunities={opportunities}/>:<AdvisorHome session={session} credits={creditos} followups={seguimientos} notifications={notifications} opportunities={opportunities}/>;
 }
 
-function isDevuelto(estado: string) {
-  return estado.toLowerCase().includes("devuelto");
+function AdminHome({session,summary,notifications,opportunities}:{session:SessionUser;summary:Summary|null;notifications:Notificacion[];opportunities:Opportunity[]}){
+ const k=summary?.kpis;const ready=opportunities.filter(x=>x.estado_refinanciacion==="Listo"&&!['rechazado','convertido'].includes(x.estado_comercial)).length;const maxOffice=Math.max(...(summary?.productividad_oficinas.map(x=>x.creditos)??[1]));
+ return <section className="space-y-5"><Hero eyebrow="Visión general" title={`Buenos días, ${session.nombre}`} text="Pulso operativo de la empresa y asuntos que requieren atención." links={[['Ver reportes','/reportes'],['Exportar créditos','/reportes'],['Auditoría','/logs']]}/><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Créditos del mes" value={k?.creditos_mes??0} note={`${k?.creditos_total??0} históricos`}/><Metric label="Aprobados del mes" value={k?.creditos_aprobados_mes??0} note={`${k?.tasa_aprobacion??0}% aprobación global`} tone="teal"/><Metric label="Oportunidades disponibles" value={ready} note={`${opportunities.length} entre próximas y activas`} tone="amber"/><Metric label="Alertas pendientes" value={notifications.length} note="Prioridad operativa" tone="rose"/></div><div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]"><Panel title="Actividad por oficina" subtitle="Créditos visibles por sede">{summary?.productividad_oficinas.length?summary.productividad_oficinas.map(x=><Bar key={x.nombre} label={x.nombre} value={x.creditos} max={maxOffice}/>):<Empty text="Sin actividad por oficina"/>}</Panel><Panel title="Créditos por estado" subtitle="Distribución actual del flujo"><div className="grid grid-cols-2 gap-2">{summary?.creditos_por_estado.map(x=><div key={x.estado} className="rounded-xl bg-stone-50 p-3"><p className="text-xs text-stone-500">{x.estado}</p><p className="mt-1 text-xl font-semibold">{x.total}</p></div>)}</div></Panel></div><Attention items={notifications}/></section>
 }
 
-export default function DashboardPage() {
-  const [session, setSession] = useState<SessionUser | null>(null);
-  const [creditos, setCreditos] = useState<Credito[]>([]);
-  const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const accessToken = session?.accessToken;
-
-  useEffect(() => {
-    setSession(readSession());
-  }, []);
-
-  useEffect(() => {
-    if (!accessToken) {
-      return;
-    }
-
-    let ignore = false;
-    const controller = new AbortController();
-
-    async function loadDashboard() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const [creditosData, seguimientosData] = await Promise.all([
-          apiFetch<Credito[]>("/api/v1/creditos/", {
-            signal: controller.signal,
-          }),
-          apiFetch<Seguimiento[]>("/api/v1/seguimientos/", {
-            signal: controller.signal,
-          }),
-        ]);
-
-        if (!ignore) {
-          setCreditos(creditosData);
-          setSeguimientos(seguimientosData);
-        }
-      } catch (loadError) {
-        if (!ignore) {
-          setError(
-            loadError instanceof ApiError
-              ? loadError.message
-              : "No se pudo cargar el inicio operativo",
-          );
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
-    }
-
-    const timeout = window.setTimeout(() => {
-      controller.abort();
-    }, 10000);
-
-    void loadDashboard();
-
-    return () => {
-      ignore = true;
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [accessToken]);
-
-  const resumen = useMemo(() => {
-    const activos = creditos.filter((credito) => estadosActivos.includes(credito.estado));
-    const devueltos = creditos.filter((credito) => isDevuelto(credito.estado));
-    const documentosPendientes = creditos.filter(
-      (credito) => credito.tiene_documentos_pendientes,
-    );
-    const seguimientosProgramados = seguimientos.filter(
-      (seguimiento) => seguimiento.fecha_proximo_contacto,
-    );
-    const montoSolicitado = creditos.reduce(
-      (total, credito) => total + Number(credito.monto_solicitado),
-      0,
-    );
-    const montoAprobado = creditos.reduce(
-      (total, credito) => total + Number(credito.monto_aprobado ?? 0),
-      0,
-    );
-
-    return {
-      activos,
-      devueltos,
-      documentosPendientes,
-      seguimientosProgramados,
-      montoSolicitado,
-      montoAprobado,
-    };
-  }, [creditos, seguimientos]);
-
-  if (loading) {
-    return <EmptyState text="Cargando inicio operativo..." />;
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-2xl border border-red-500/20 bg-red-50 px-5 py-4 text-sm text-red-700">
-        {error}
-      </div>
-    );
-  }
-
-  return (
-    <section className="space-y-4">
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-        <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">
-          Inicio
-        </p>
-        <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
-              Base limpia para reconstruir la operacion
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
-              Dashboard analitico 
-            </p>
-          </div>
-          <div className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm text-stone-600">
-            Usuario: <span className="font-semibold text-stone-900">{session?.nombre}</span>
-          </div>
-        </div>
-      </article>
-
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Creditos activos" value={String(resumen.activos.length)} />
-        <Metric label="Devueltos" value={String(resumen.devueltos.length)} tone="text-red-700" />
-        <Metric
-          label="Docs pendientes"
-          value={String(resumen.documentosPendientes.length)}
-          tone="text-amber-700"
-        />
-        <Metric label="Seguimientos" value={String(resumen.seguimientosProgramados.length)} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-          <h2 className="text-lg font-semibold text-stone-950">Cartera visible</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <DetailRow label="Solicitado" value={formatCurrency(resumen.montoSolicitado)} />
-            <DetailRow label="Aprobado" value={formatCurrency(resumen.montoAprobado)} />
-          </div>
-        </article>
-
-        <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-          <h2 className="text-lg font-semibold text-stone-950">Estado del frontend</h2>
-          <div className="mt-4 space-y-2">
-            <StatusLine text="Login conservado" />
-            <StatusLine text="Dashboard conservado" />
-            <StatusLine text="Vistas del navbar eliminadas" />
-          </div>
-        </article>
-      </div>
-    </section>
-  );
+function AdvisorHome({session,credits,followups,notifications,opportunities}:{session:SessionUser;credits:Credito[];followups:Seguimiento[];notifications:Notificacion[];opportunities:Opportunity[]}){
+ const now=new Date(),today=now.toISOString().slice(0,10);const overdue=followups.filter(x=>x.fecha_proximo_contacto&&x.fecha_proximo_contacto.slice(0,10)<today);const todayItems=followups.filter(x=>x.fecha_proximo_contacto?.slice(0,10)===today);const returned=credits.filter(x=>x.estado.toLowerCase().includes("devuelto"));const docs=credits.filter(x=>x.tiene_documentos_pendientes);const ready=opportunities.filter(x=>x.estado_refinanciacion==="Listo"&&!['rechazado','convertido'].includes(x.estado_comercial));
+ return <section className="space-y-5"><Hero eyebrow="Tu jornada" title={`Hola, ${session.nombre}`} text="Empieza por lo vencido, continúa con lo programado y no pierdas oportunidades comerciales." links={[['Nuevo crédito','/creditos'],['Registrar seguimiento','/seguimientos'],['Ver refinanciaciones','/refinanciaciones']]}/><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Seguimientos vencidos" value={overdue.length} note="Requieren contacto" tone="rose"/><Metric label="Seguimientos hoy" value={todayItems.length} note="Agenda del día" tone="amber"/><Metric label="Créditos devueltos" value={returned.length} note="Pendientes de corrección"/><Metric label="Para refinanciar" value={ready.length} note="Oportunidades disponibles" tone="teal"/></div><div className="grid gap-4 lg:grid-cols-2"><Panel title="Prioridad de hoy" subtitle="Seguimientos vencidos y programados"><TaskList items={[...overdue,...todayItems].slice(0,6).map(x=>({id:x.id,title:x.pensionado_nombre??`Seguimiento #${x.id}`,detail:x.fecha_proximo_contacto?formatDateTime(x.fecha_proximo_contacto):x.tipo,href:`/seguimientos/${x.id}`}))}/></Panel><Panel title="Créditos que necesitan cuidado" subtitle="Correcciones y documentación"><TaskList items={[...returned.map(x=>({id:x.id,title:`Crédito #${x.id} devuelto`,detail:x.estado,href:`/creditos/${x.id}`})),...docs.map(x=>({id:x.id+100000,title:`Crédito #${x.id} · documentos`,detail:x.documentos_pendientes??"Documentación pendiente",href:`/creditos/${x.id}`}))].slice(0,6)}/></Panel></div><Attention items={notifications}/></section>
 }
 
-function Metric({
-  label,
-  value,
-  tone = "text-stone-950",
-}: {
-  label: string;
-  value: string;
-  tone?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/75 p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
-      <p className={`mt-2 text-2xl font-semibold ${tone}`}>{value}</p>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-stone-900">{value}</p>
-    </div>
-  );
-}
-
-function StatusLine({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3 text-sm font-medium text-stone-700">
-      {text}
-    </div>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-stone-800/15 bg-white/45 px-5 py-6 text-center text-sm text-stone-500">
-      {text}
-    </div>
-  );
-}
+function Hero({eyebrow,title,text,links}:{eyebrow:string;title:string;text:string;links:string[][]}){return <article className="relative overflow-hidden rounded-3xl border border-teal-900/10 bg-gradient-to-br from-white via-white to-teal-50 p-6 shadow-lg shadow-stone-900/5"><div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-amber-300/20 blur-3xl"/><div className="relative flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div><p className="text-xs font-semibold uppercase tracking-[.24em] text-teal-700">{eyebrow}</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-stone-950">{title}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{text}</p></div><div className="flex flex-wrap gap-2">{links.map(([label,href],i)=><Link key={label} href={href} className={i===0?"button-primary":"button-muted"}>{label}</Link>)}</div></div></article>}
+function Metric({label,value,note,tone="stone"}:{label:string;value:number;note:string;tone?:string}){const colors:Record<string,string>={stone:"text-stone-950",teal:"text-teal-800",amber:"text-amber-700",rose:"text-rose-700"};return <div className="rounded-2xl border border-stone-800/10 bg-white/85 p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.15em] text-stone-500">{label}</p><p className={`mt-2 text-3xl font-semibold ${colors[tone]}`}>{value}</p><p className="mt-1 text-xs text-stone-500">{note}</p></div>}
+function Panel({title,subtitle,children}:{title:string;subtitle:string;children:React.ReactNode}){return <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-sm"><h2 className="text-lg font-semibold">{title}</h2><p className="mt-1 text-xs text-stone-500">{subtitle}</p><div className="mt-4 space-y-3">{children}</div></article>}
+function Bar({label,value,max}:{label:string;value:number;max:number}){return <div><div className="mb-1 flex justify-between text-sm"><span>{label}</span><strong>{value}</strong></div><div className="h-2 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-teal-600/70" style={{width:`${Math.max(5,value/max*100)}%`}}/></div></div>}
+function Attention({items}:{items:Notificacion[]}){return <Panel title="Atención operativa" subtitle="Alertas pendientes más recientes"><TaskList items={items.map(x=>({id:x.id,title:x.titulo,detail:x.mensaje,href:x.href}))}/></Panel>}
+function TaskList({items}:{items:Array<{id:number;title:string;detail:string;href:string}>}){return items.length?<div className="divide-y divide-stone-800/10">{items.map(x=><Link key={x.id} href={x.href} className="flex items-center justify-between gap-3 py-3 transition hover:text-teal-800"><div><p className="text-sm font-semibold">{x.title}</p><p className="mt-1 line-clamp-1 text-xs text-stone-500">{x.detail}</p></div><span aria-hidden>→</span></Link>)}</div>:<Empty text="Nada pendiente por aquí"/>}
+function Empty({text}:{text:string}){return <p className="rounded-xl bg-stone-50 p-5 text-center text-sm text-stone-500">{text}</p>}
+function State({text,error=false}:{text:string;error?:boolean}){return <div className={error?"rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700":"rounded-xl border bg-white p-5 text-sm text-stone-500"}>{text}</div>}

@@ -23,5 +23,5 @@ COPY . .
 # Expone el puerto
 EXPOSE 8000
 
-# Comando de arranque
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Comando de arranque productivo. Para desarrollo usa docker-compose.override.yml.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

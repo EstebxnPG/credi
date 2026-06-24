@@ -1,0 +1,21 @@
+services:
+  backend:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./backend:/app
+      - ./backend/data/migrations:/app/data/migrations
+
+  notification_worker:
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    command: ["npm", "run", "dev"]
+    environment:
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - frontend_next:/app/.next

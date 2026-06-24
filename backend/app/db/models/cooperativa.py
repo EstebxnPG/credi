@@ -15,6 +15,7 @@ class Cooperativa(Base, TimestampMixin, SoftDeleteMixin):
     monto_maximo: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     plazo_minimo: Mapped[int] = mapped_column(Integer, nullable=False)
     plazo_maximo: Mapped[int] = mapped_column(Integer, nullable=False)
+    simulador_url: Mapped[str | None] = mapped_column(String(500))
     creditos: Mapped[list["Credito"]] = relationship(back_populates="cooperativa")
     reglas_refinanciacion: Mapped[list["CooperativaRefinanciacionRegla"]] = relationship(
         back_populates="cooperativa",

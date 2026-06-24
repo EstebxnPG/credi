@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
+import { readSession } from "@/lib/session";
 
 type Cooperativa = {
   id: number;
@@ -14,6 +15,7 @@ type Cooperativa = {
   monto_maximo: number;
   plazo_minimo: number;
   plazo_maximo: number;
+  simulador_url: string | null;
   reglas_refinanciacion: ReglaRefinanciacion[];
   is_active: boolean;
 };
@@ -35,10 +37,12 @@ const emptyForm: FormValues = {
   monto_maximo: 50000000,
   plazo_minimo: 6,
   plazo_maximo: 120,
+  simulador_url: null,
   reglas_refinanciacion: [],
 };
 
 export default function CooperativasPage() {
+  const isAdmin = readSession()?.rol === "administrador";
   const [items, setItems] = useState<Cooperativa[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -49,21 +53,21 @@ export default function CooperativasPage() {
   const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
   const [form, setForm] = useState<FormValues>(emptyForm);
 
-  async function loadItems() {
+  const loadItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setItems(await apiFetch<Cooperativa[]>("/api/v1/cooperativas/?solo_activas=false"));
+      setItems(await apiFetch<Cooperativa[]>(`/api/v1/cooperativas/?solo_activas=${isAdmin ? "false" : "true"}`));
     } catch (loadError) {
       setError(loadError instanceof ApiError ? loadError.message : "No se pudo cargar cooperativas");
     } finally {
       setLoading(false);
     }
-  }
+  }, [isAdmin]);
 
   useEffect(() => {
     void loadItems();
-  }, []);
+  }, [loadItems]);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -92,6 +96,7 @@ export default function CooperativasPage() {
       monto_maximo: item.monto_maximo,
       plazo_minimo: item.plazo_minimo,
       plazo_maximo: item.plazo_maximo,
+      simulador_url: item.simulador_url,
       reglas_refinanciacion: item.reglas_refinanciacion ?? [],
     });
     setFormError(null);
@@ -161,11 +166,11 @@ export default function CooperativasPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">Configuracion</p>
             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">Cooperativas</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Reglas comerciales que validan monto, plazo y edad.</p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Consulta condiciones, reglas de refinanciación y simuladores de cada cooperativa.</p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:items-center">
             <input className="input-base min-w-0 sm:w-80" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nombre o estado" />
-            <button type="button" className="button-primary whitespace-nowrap" onClick={openCreate}>Crear cooperativa</button>
+            {isAdmin ? <button type="button" className="button-primary whitespace-nowrap" onClick={openCreate}>Crear cooperativa</button> : null}
           </div>
         </div>
       </article>
@@ -181,7 +186,7 @@ export default function CooperativasPage() {
           <div className="divide-y divide-stone-800/10">
             {filtered.map((item) => (
               <div key={item.id} className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.1fr_0.9fr_1.2fr_0.9fr_0.9fr_120px] md:items-center md:py-3">
-                <div><p className="font-semibold text-stone-950">{item.nombre}</p><p className="mt-1 text-xs text-stone-500">Cooperativa financiera</p></div>
+                <div><p className="font-semibold text-stone-950">{item.nombre}</p>{item.simulador_url ? <a href={item.simulador_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex text-xs font-semibold text-teal-700 hover:underline">Abrir simuladora ↗</a> : <p className="mt-1 text-xs text-stone-400">Sin simuladora configurada</p>}</div>
                 <p className="text-stone-700">{item.edad_minima} a {item.edad_maxima}</p>
                 <p className="text-stone-700">{formatCurrency(item.monto_minimo)} a {formatCurrency(item.monto_maximo)}</p>
                 <p className="text-stone-700">
@@ -189,9 +194,10 @@ export default function CooperativasPage() {
                   <span className="mt-1 block text-xs text-stone-500">
                     Refi: {item.reglas_refinanciacion?.length ?? 0} regla(s)
                   </span>
+                  {item.reglas_refinanciacion?.map((rule) => <span key={rule.id} className="block text-xs text-stone-500">{rule.plazo_minimo}-{rule.plazo_maximo} meses: libera al mes {rule.meses_para_refinanciar}</span>)}
                 </p>
                 <StatusBadge active={item.is_active} />
-                <Actions onEdit={() => openEdit(item)} onDelete={() => void handleDelete(item)} deleteDisabled={!item.is_active} />
+                {isAdmin ? <Actions onEdit={() => openEdit(item)} onDelete={() => void handleDelete(item)} deleteDisabled={!item.is_active} /> : <span className="text-right text-xs text-stone-400">Solo lectura</span>}
               </div>
             ))}
             {filtered.length === 0 ? <EmptyState text="No hay cooperativas para la busqueda actual." /> : null}
@@ -202,6 +208,7 @@ export default function CooperativasPage() {
       {modalMode ? (
         <Modal title={modalMode === "create" ? "Crear cooperativa" : "Editar cooperativa"} error={formError} saving={saving} submitLabel={modalMode === "create" ? "Crear cooperativa" : "Guardar cambios"} onClose={closeModal} onSubmit={handleSubmit}>
           <Field label="Nombre" value={form.nombre} onChange={(value) => setForm({ ...form, nombre: value })} required />
+          <Field label="Enlace de la simuladora" value={form.simulador_url ?? ""} onChange={(value) => setForm({ ...form, simulador_url: value || null })} />
           <div className="grid gap-4 sm:grid-cols-2">
             <NumberField label="Edad minima" value={form.edad_minima} onChange={(value) => setForm({ ...form, edad_minima: value })} />
             <NumberField label="Edad maxima" value={form.edad_maxima} onChange={(value) => setForm({ ...form, edad_maxima: value })} />

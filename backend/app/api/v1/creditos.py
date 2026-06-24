@@ -31,27 +31,27 @@ def listar_creditos(
     oficina_id: Optional[int] = Query(None),
     estado: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return credito_service.listar_creditos(db, pensionado_id, asesor_id, oficina_id, estado)
+    return credito_service.listar_creditos(db, pensionado_id, asesor_id, oficina_id, estado, usuario_actual)
 
 
 @router.get("/{credito_id}/historial", response_model=list[HistorialCreditoRead])
 def obtener_historial_credito(
     credito_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return credito_service.obtener_historial_credito(db, credito_id)
+    return credito_service.obtener_historial_credito(db, credito_id, usuario_actual)
 
 
 @router.get("/{credito_id}", response_model=CreditoRead)
 def obtener_credito(
     credito_id: int,
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return credito_service.obtener_credito(db, credito_id)
+    return credito_service.obtener_credito(db, credito_id, usuario_actual)
 
 
 @router.patch("/{credito_id}", response_model=CreditoRead)

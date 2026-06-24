@@ -41,13 +41,34 @@ def _get_credito_activo_or_404(db: Session, credito_id: int) -> Credito:
     return credito
 
 
-def _get_or_404(db: Session, documento_id: int) -> Documento:
+def _validar_alcance_credito(credito: Credito, usuario_actual: Usuario) -> None:
+    if usuario_actual.rol == "administrador":
+        return
+    if credito.oficina_id != usuario_actual.oficina_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documento no encontrado",
+        )
+
+
+def _get_credito_activo_autorizado_or_404(
+    db: Session,
+    credito_id: int,
+    usuario_actual: Usuario,
+) -> Credito:
+    credito = _get_credito_activo_or_404(db, credito_id)
+    _validar_alcance_credito(credito, usuario_actual)
+    return credito
+
+
+def _get_or_404(db: Session, documento_id: int, usuario_actual: Usuario) -> Documento:
     documento = db.query(Documento).filter(Documento.id == documento_id).first()
     if not documento:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Documento con id {documento_id} no encontrado",
         )
+    _validar_alcance_credito(documento.credito, usuario_actual)
     return documento
 
 
@@ -90,7 +111,7 @@ def crear_documento(
     contenido: bytes,
     usuario_actual: Usuario,
 ) -> Documento:
-    _get_credito_activo_or_404(db, credito_id)
+    _get_credito_activo_autorizado_or_404(db, credito_id, usuario_actual)
     extension, tipo = _validar_archivo(nombre_archivo, contenido)
 
     nombre_logico = Path(nombre_archivo).name
@@ -149,10 +170,13 @@ def crear_documento(
 
 def listar_documentos(
     db: Session,
+    usuario_actual: Usuario,
     credito_id: int | None = None,
     solo_activos: bool = True,
 ) -> list[Documento]:
-    query = db.query(Documento)
+    query = db.query(Documento).join(Documento.credito)
+    if usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
     if credito_id is not None:
         query = query.filter(Documento.credito_id == credito_id)
     if solo_activos:
@@ -160,12 +184,12 @@ def listar_documentos(
     return query.order_by(Documento.created_at.desc()).all()
 
 
-def obtener_documento(db: Session, documento_id: int) -> Documento:
-    return _get_or_404(db, documento_id)
+def obtener_documento(db: Session, documento_id: int, usuario_actual: Usuario) -> Documento:
+    return _get_or_404(db, documento_id, usuario_actual)
 
 
-def descargar_documento(db: Session, documento_id: int) -> FileResponse:
-    documento = _get_or_404(db, documento_id)
+def descargar_documento(db: Session, documento_id: int, usuario_actual: Usuario) -> FileResponse:
+    documento = _get_or_404(db, documento_id, usuario_actual)
     if not documento.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -197,7 +221,7 @@ def reemplazar_documento(
     contenido: bytes,
     usuario_actual: Usuario,
 ) -> DocumentoReplaceResponse:
-    documento_actual = _get_or_404(db, documento_id)
+    documento_actual = _get_or_404(db, documento_id, usuario_actual)
     if not documento_actual.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -253,7 +277,7 @@ def reemplazar_documento(
 def desactivar_documento(
     db: Session, documento_id: int, usuario_actual: Usuario
 ) -> Documento:
-    documento = _get_or_404(db, documento_id)
+    documento = _get_or_404(db, documento_id, usuario_actual)
     if not documento.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

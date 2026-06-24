@@ -82,7 +82,10 @@ def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
 
     tasas_cooperativa.sort(key=lambda item: item["tasa_aprobacion"], reverse=True)
 
-    pensionados = db.query(Pensionado).filter(Pensionado.is_active == True).all()  # noqa: E712
+    pensionados_query = db.query(Pensionado).filter(Pensionado.is_active == True)  # noqa: E712
+    if usuario_actual.rol != "administrador":
+        pensionados_query = pensionados_query.filter(Pensionado.oficina_id == usuario_actual.oficina_id)
+    pensionados = pensionados_query.all()
     cumpleanos = [
         {
             "id": pensionado.id,

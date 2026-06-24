@@ -51,6 +51,22 @@ def _get_credito_or_404(db: Session, credito_id: int) -> Credito:
     return credito
 
 
+def _validar_alcance_credito(credito: Credito, usuario_actual: Usuario) -> None:
+    if usuario_actual.rol == "administrador":
+        return
+    if credito.oficina_id != usuario_actual.oficina_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Crédito con id {credito.id} no encontrado",
+        )
+
+
+def _obtener_credito_autorizado(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:
+    credito = _get_credito_or_404(db, credito_id)
+    _validar_alcance_credito(credito, usuario_actual)
+    return credito
+
+
 def _get_pensionado_activo_or_404(db: Session, pensionado_id: int) -> Pensionado:
     pensionado = (
         db.query(Pensionado)
@@ -168,6 +184,7 @@ def _validar_reglas_credito(
 
 
 def _validar_contexto_creacion(
+    pensionado: Pensionado,
     data: CreditoCreate,
     usuario_actual: Usuario,
     asesor: Usuario,
@@ -189,6 +206,17 @@ def _validar_contexto_creacion(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Una asesora solo puede crear créditos para su oficina",
             )
+
+    if asesor.oficina_id != data.oficina_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El asesor asignado debe pertenecer a la oficina del crédito",
+        )
+    if pensionado.oficina_id != data.oficina_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El pensionado debe pertenecer a la oficina del crédito",
+        )
 
 
 def _validar_tipo_credito(
@@ -293,9 +321,10 @@ def _normalizar_pendientes_documentales(
 
 def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> Credito:
     asesor = _get_usuario_activo_or_404(db, data.asesor_id)
+    pensionado = _get_pensionado_activo_or_404(db, data.pensionado_id)
     _get_oficina_activa_or_404(db, data.oficina_id)
     _get_pagaduria_activa_or_404(db, data.pagaduria_id)
-    _validar_contexto_creacion(data, usuario_actual, asesor)
+    _validar_contexto_creacion(pensionado, data, usuario_actual, asesor)
     _validar_tipo_credito(
         db,
         data.pensionado_id,
@@ -360,6 +389,9 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
         valores_despues={**payload, "estado": "Prospecto"},
     )
 
+    from app.services.notificacion_service import sincronizar_reglas
+
+    sincronizar_reglas(db, commit=False)
     db.commit()
     db.refresh(credito)
     return credito
@@ -371,8 +403,12 @@ def listar_creditos(
     asesor_id: int | None = None,
     oficina_id: int | None = None,
     estado: str | None = None,
+    usuario_actual: Usuario | None = None,
 ) -> list[Credito]:
     query = db.query(Credito).filter(Credito.is_active == True)  # noqa: E712
+
+    if usuario_actual and usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
 
     if pensionado_id is not None:
         query = query.filter(Credito.pensionado_id == pensionado_id)
@@ -386,8 +422,8 @@ def listar_creditos(
     return query.order_by(Credito.created_at.desc()).all()
 
 
-def obtener_credito(db: Session, credito_id: int) -> Credito:
-    credito = _get_credito_or_404(db, credito_id)
+def obtener_credito(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:
+    credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
     if not credito.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -397,9 +433,9 @@ def obtener_credito(db: Session, credito_id: int) -> Credito:
 
 
 def obtener_historial_credito(
-    db: Session, credito_id: int
+    db: Session, credito_id: int, usuario_actual: Usuario
 ) -> list[HistorialCreditoRead]:
-    obtener_credito(db, credito_id)
+    obtener_credito(db, credito_id, usuario_actual)
     historial = (
         db.query(HistorialCredito)
         .filter(HistorialCredito.credito_id == credito_id)
@@ -428,7 +464,7 @@ def actualizar_credito(
     data: CreditoUpdate,
     usuario_actual: Usuario,
 ) -> Credito:
-    credito = obtener_credito(db, credito_id)
+    credito = obtener_credito(db, credito_id, usuario_actual)
     _validar_credito_editable(credito)
 
     cambios = data.model_dump(exclude_unset=True)
@@ -503,6 +539,9 @@ def actualizar_credito(
         valores_despues=cambios,
     )
 
+    from app.services.notificacion_service import sincronizar_reglas
+
+    sincronizar_reglas(db, commit=False)
     db.commit()
     db.refresh(credito)
     return credito
@@ -514,7 +553,7 @@ def cambiar_estado(
     data: CreditoCambioEstado,
     usuario_actual: Usuario,
 ) -> Credito:
-    credito = obtener_credito(db, credito_id)
+    credito = obtener_credito(db, credito_id, usuario_actual)
     estado_actual = credito.estado
     estado_nuevo = data.estado_nuevo
 
@@ -581,7 +620,7 @@ def cambiar_estado(
 def desactivar_credito(
     db: Session, credito_id: int, usuario_actual: Usuario
 ) -> Credito:
-    credito = _get_credito_or_404(db, credito_id)
+    credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
     if not credito.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

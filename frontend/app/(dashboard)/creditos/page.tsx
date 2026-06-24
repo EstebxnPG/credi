@@ -62,6 +62,7 @@ type Cooperativa = {
   monto_maximo: number;
   plazo_minimo: number;
   plazo_maximo: number;
+  simulador_url: string | null;
   is_active: boolean;
 };
 
@@ -546,7 +547,7 @@ export default function CreditosPage() {
                     </ActionLink>
                     <ActionButton
                       label="Editar"
-                      disabled={!isEditable(credito)}
+                      disabled={!credito.is_active}
                       onClick={() => openEditModal(credito)}
                     >
                       <EditIcon />
@@ -698,20 +699,29 @@ function CreditoModal({
               />
             </div>
           ) : null}
-          <SearchSelectField
-            label="Cooperativa"
-            value={form.cooperativa_id}
-            options={cooperativas.map((cooperativa) => ({
-              value: String(cooperativa.id),
-              label: cooperativa.nombre,
-              description: `${formatCurrency(cooperativa.monto_minimo)} a ${formatCurrency(
-                cooperativa.monto_maximo,
-              )} - ${cooperativa.plazo_minimo} a ${cooperativa.plazo_maximo} meses`,
-            }))}
-            onChange={(value) => updateField("cooperativa_id", value)}
-            placeholder="Buscar cooperativa"
-            required
-          />
+          <div>
+            <SearchSelectField
+              label="Cooperativa"
+              value={form.cooperativa_id}
+              options={cooperativas.map((cooperativa) => ({
+                value: String(cooperativa.id),
+                label: cooperativa.nombre,
+                description: `${formatCurrency(cooperativa.monto_minimo)} a ${formatCurrency(
+                  cooperativa.monto_maximo,
+                )} - ${cooperativa.plazo_minimo} a ${cooperativa.plazo_maximo} meses`,
+              }))}
+              onChange={(value) => updateField("cooperativa_id", value)}
+              placeholder="Buscar cooperativa"
+              required
+            />
+            {selectedCooperativa?.simulador_url ? (
+              <a href={selectedCooperativa.simulador_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-teal-700 hover:underline">
+                Abrir simuladora de {selectedCooperativa.nombre} ↗
+              </a>
+            ) : selectedCooperativa ? (
+              <p className="mt-2 text-xs text-stone-400">Esta cooperativa no tiene simuladora configurada.</p>
+            ) : null}
+          </div>
           <SearchSelectField
             label="Pagaduria"
             value={form.pagaduria_id}
@@ -824,12 +834,12 @@ function CreditoModal({
         </div>
 
         {selectedCooperativa ? (
-          <p className="mt-4 text-xs text-stone-500">
+          <div className="mt-4 text-xs text-stone-500">
             Regla de cooperativa: monto entre {formatCurrency(selectedCooperativa.monto_minimo)} y{" "}
             {formatCurrency(selectedCooperativa.monto_maximo)}, plazo entre{" "}
             {selectedCooperativa.plazo_minimo} y {selectedCooperativa.plazo_maximo} meses. El
             backend tambien valida edad, monto y plazo.
-          </p>
+          </div>
         ) : null}
 
         {!isCreate ? (
@@ -1221,12 +1231,6 @@ function TrashIcon() {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-function isEditable(credito: Credito) {
-  return ["Prospecto", "Devuelto por correccion", "Devuelto por corrección"].includes(
-    credito.estado,
   );
 }
 

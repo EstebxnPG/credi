@@ -11,7 +11,7 @@ from app.db.models.credito import Credito
 from app.db.models.usuario import Usuario
 
 
-DEFAULT_COLUMNS = ["tipo_credito", "fecha_registro", "nro_libranza", "monto", "meses", "cedula", "telefono", "correo", "celular", "pagaduria", "cooperativa", "cedula_asesor", "direccion"]
+DEFAULT_COLUMNS = ["tipo_credito", "fecha_registro", "nro_libranza", "monto", "meses", "pensionado", "cedula", "telefono", "correo", "celular", "pagaduria", "cooperativa", "cedula_asesor", "direccion"]
 COLUMNS = {
     "tipo_credito": ("Tipo de crédito", lambda c: c.tipo_credito),
     "fecha_registro": ("Fecha de registro", lambda c: c.fecha_registro.replace(tzinfo=None) if c.fecha_registro else None),

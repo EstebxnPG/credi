@@ -38,7 +38,9 @@ def listar_logs(
     tipo_accion: str | None = None,
     fecha_desde: datetime | None = None,
     fecha_hasta: datetime | None = None,
-) -> list[Log]:
+    page: int = 1,
+    page_size: int = 25,
+) -> dict:
     query = db.query(Log)
 
     if usuario_id is not None:
@@ -52,4 +54,20 @@ def listar_logs(
     if fecha_hasta:
         query = query.filter(Log.created_at <= fecha_hasta)
 
-    return query.order_by(Log.created_at.desc()).all()
+    total = query.count()
+    items = query.order_by(Log.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [
+            {
+                "id": item.id, "usuario_id": item.usuario_id,
+                "usuario_nombre": item.usuario.nombre if item.usuario else None,
+                "tabla_afectada": item.tabla_afectada,
+                "registro_afectado": item.registro_afectado,
+                "tipo_accion": item.tipo_accion,
+                "valores_antes": item.valores_antes,
+                "valores_despues": item.valores_despues,
+                "created_at": item.created_at,
+            } for item in items
+        ],
+        "total": total, "page": page, "page_size": page_size,
+    }

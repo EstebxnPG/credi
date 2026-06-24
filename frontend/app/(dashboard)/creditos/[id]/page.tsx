@@ -17,6 +17,7 @@ import {
 
 type Credito = {
   id: number;
+  is_active: boolean;
   pensionado_id: number;
   asesor_id: number;
   oficina_id: number;
@@ -94,6 +95,7 @@ type PendienteForm = {
 type Cooperativa = {
   id: number;
   nombre: string;
+  simulador_url: string | null;
 };
 
 type Pagaduria = {
@@ -568,8 +570,8 @@ export default function CreditoDetailPage() {
               type="button"
               className="button-primary whitespace-nowrap"
               onClick={openEditModal}
-              disabled={!isEditable(credito)}
-              title={isEditable(credito) ? "Editar credito" : "Este credito no se puede editar"}
+              disabled={!credito.is_active}
+              title={credito.is_active ? "Editar credito" : "Este credito no se puede editar"}
             >
               Editar
             </button>
@@ -677,6 +679,7 @@ export default function CreditoDetailPage() {
             <Detail label="Plazo" value={`${credito.plazo} meses`} />
             <Detail label="Cuota" value={formatCurrency(credito.valor_cuota)} />
             <Detail label="Cooperativa" value={cooperativaActual?.nombre ?? "Sin cooperativa"} />
+            {cooperativaActual?.simulador_url ? <a href={cooperativaActual.simulador_url} target="_blank" rel="noopener noreferrer" className="self-end pb-3 text-sm font-semibold text-teal-700 hover:underline">Abrir simuladora ↗</a> : null}
             <Detail label="Tipo" value={credito.tipo_credito ?? "Sin tipo"} />
             {credito.tipo_credito === "Refinanciacion" ? (
               <Detail
@@ -1187,10 +1190,6 @@ function PendingBadge({ estado }: { estado: string }) {
       {isOpen ? "Pendiente" : "Resuelto"}
     </span>
   );
-}
-
-function isEditable(credito: Credito) {
-  return ["Prospecto", "Devuelto por correccion"].includes(normalizeStatus(credito.estado));
 }
 
 function nullableText(value: string) {

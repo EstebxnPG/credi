@@ -8,6 +8,7 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
 type ReportKey =
   | "creditos"
+  | "pensionados"
   | "seguimientos"
   | "documentos"
   | "pendientes"
@@ -31,6 +32,13 @@ type Pensionado = {
   id: number;
   nombre_completo: string;
   documento: string;
+  oficina_id: number;
+  created_by: number | null;
+  creador_nombre: string | null;
+  created_at: string;
+  telefono?: string;
+  celular?: string | null;
+  correo?: string | null;
 };
 
 type Seguimiento = {
@@ -98,6 +106,7 @@ type Asesora = {
 
 const reports: Array<{ key: ReportKey; label: string }> = [
   { key: "creditos", label: "Creditos" },
+  { key: "pensionados", label: "Pensionados" },
   { key: "seguimientos", label: "Seguimientos" },
   { key: "documentos", label: "Documentos" },
   { key: "pendientes", label: "Pendientes operativos" },
@@ -213,6 +222,15 @@ export default function ReportesPage() {
           ]);
       }),
     [creditos, desde, hasta, oficinaById, oficinaId, pensionadoById, query],
+  );
+
+  const filteredPensionados = useMemo(
+    () => pensionados.filter((item) =>
+      (!oficinaId || item.oficina_id === Number(oficinaId)) &&
+      inDateRange(item.created_at, desde, hasta) &&
+      matchesQuery(query, [item.nombre_completo, item.documento, item.creador_nombre, item.telefono, item.celular, item.correo, oficinaById.get(item.oficina_id)?.nombre]),
+    ),
+    [desde, hasta, oficinaById, oficinaId, pensionados, query],
   );
 
   const filteredSeguimientos = useMemo(
@@ -429,6 +447,7 @@ export default function ReportesPage() {
       {active === "creditos" ? (
         <CreditosReport items={filteredCreditos} pensionadoById={pensionadoById} oficinaById={oficinaById} />
       ) : null}
+      {active === "pensionados" ? <PensionadosReport items={filteredPensionados} oficinaById={oficinaById} /> : null}
       {active === "seguimientos" ? <SeguimientosReport items={filteredSeguimientos} /> : null}
       {active === "documentos" ? <DocumentosReport items={filteredDocumentos} /> : null}
       {active === "pendientes" ? <PendientesReport items={filteredPendientes} /> : null}
@@ -447,10 +466,10 @@ export default function ReportesPage() {
 }
 
 const exportColumns = [
-  ["tipo_credito","Tipo de crédito"],["fecha_registro","Fecha de registro"],["nro_libranza","Número de libranza"],["monto","Monto"],["meses","Meses"],["cedula","Cédula"],["telefono","Teléfono"],["correo","Correo"],["celular","Celular"],["pagaduria","Pagaduría"],["cooperativa","Cooperativa"],["cedula_asesor","Cédula asesor"],["direccion","Dirección"],
+  ["tipo_credito","Tipo de crédito"],["fecha_registro","Fecha de registro"],["nro_libranza","Número de libranza"],["monto","Monto"],["meses","Meses"],["pensionado","Nombre del pensionado"],["cedula","Cédula"],["telefono","Teléfono"],["correo","Correo"],["celular","Celular"],["pagaduria","Pagaduría"],["cooperativa","Cooperativa"],["cedula_asesor","Cédula asesor"],["direccion","Dirección"],
   ["credito_id","ID crédito"],["estado","Estado"],["pensionado","Pensionado"],["asesor","Asesor"],["oficina","Oficina"],["monto_solicitado","Monto solicitado"],["monto_aprobado","Monto aprobado"],["plazo","Plazo"],
 ] as const;
-const defaultExportColumns = exportColumns.slice(0,13).map(([key])=>key);
+const defaultExportColumns = exportColumns.slice(0,14).map(([key])=>key);
 
 function ExportCreditsModal({oficinas,initialDesde,initialHasta,initialOficina,onClose}:{oficinas:Oficina[];initialDesde:string;initialHasta:string;initialOficina:string;onClose:()=>void}){
   const [columns,setColumns]=useState<string[]>(defaultExportColumns),[desdeExport,setDesdeExport]=useState(initialDesde),[hastaExport,setHastaExport]=useState(initialHasta),[office,setOffice]=useState(initialOficina),[min,setMin]=useState(""),[max,setMax]=useState(""),[saving,setSaving]=useState(false),[exportError,setExportError]=useState<string|null>(null);
@@ -458,6 +477,25 @@ function ExportCreditsModal({oficinas,initialDesde,initialHasta,initialOficina,o
   function move(key:string,delta:number){setColumns(c=>{const i=c.indexOf(key),j=i+delta;if(i<0||j<0||j>=c.length)return c;const n=[...c];[n[i],n[j]]=[n[j],n[i]];return n})}
   async function download(selected:string[]){setSaving(true);setExportError(null);try{const q=new URLSearchParams({columnas:selected.join(",")});if(desdeExport)q.set("desde",desdeExport);if(hastaExport)q.set("hasta",hastaExport);if(office)q.set("oficina_id",office);if(min)q.set("monto_desde",min);if(max)q.set("monto_hasta",max);const blob=await apiDownload(`/api/v1/reportes/creditos/exportar.xlsx?${q}`);const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`creditos_${new Date().toISOString().slice(0,10)}.xlsx`;a.click();URL.revokeObjectURL(url);onClose()}catch(e){setExportError(e instanceof ApiError?e.message:"No se pudo generar el Excel")}finally{setSaving(false)}}
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4"><div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="flex justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Excel</p><h2 className="mt-1 text-xl font-semibold">Exportar créditos</h2><p className="mt-1 text-sm text-stone-600">Usa el formato estándar o arma las columnas en el orden requerido.</p></div><button className="button-muted h-fit" onClick={onClose}>Cerrar</button></div>{exportError?<p className="mt-4 border border-red-200 bg-red-50 p-3 text-sm text-red-700">{exportError}</p>:null}<div className="mt-5 grid gap-3 sm:grid-cols-3"><DateField label="Desde" value={desdeExport} onChange={setDesdeExport}/><DateField label="Hasta" value={hastaExport} onChange={setHastaExport}/><label className="text-xs font-medium text-stone-600">Oficina<select className="input-base mt-1" value={office} onChange={e=>setOffice(e.target.value)}><option value="">Todas</option>{oficinas.map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select></label><label className="text-xs font-medium text-stone-600">Monto mínimo<input className="input-base mt-1" type="number" min="0" value={min} onChange={e=>setMin(e.target.value)}/></label><label className="text-xs font-medium text-stone-600">Monto máximo<input className="input-base mt-1" type="number" min="0" value={max} onChange={e=>setMax(e.target.value)}/></label></div><div className="mt-5 grid gap-5 md:grid-cols-2"><div><h3 className="text-sm font-semibold">Columnas disponibles</h3><div className="mt-2 space-y-1">{exportColumns.map(([key,label])=><label key={key} className="flex gap-2 rounded-lg border px-3 py-2 text-sm"><input type="checkbox" checked={columns.includes(key)} onChange={()=>toggle(key)}/>{label}</label>)}</div></div><div><h3 className="text-sm font-semibold">Orden del Excel</h3><div className="mt-2 space-y-1">{columns.map((key,index)=><div key={key} className="flex items-center justify-between rounded-lg bg-stone-50 px-3 py-2 text-sm"><span>{index+1}. {exportColumns.find(([k])=>k===key)?.[1]}</span><span className="flex gap-1"><button disabled={index===0} onClick={()=>move(key,-1)} className="rounded border px-2 disabled:opacity-30">↑</button><button disabled={index===columns.length-1} onClick={()=>move(key,1)} className="rounded border px-2 disabled:opacity-30">↓</button></span></div>)}</div></div></div><div className="mt-6 flex flex-wrap justify-end gap-2"><button disabled={saving} className="button-muted" onClick={()=>void download(defaultExportColumns)}>Exportar formato estándar</button><button disabled={saving||!columns.length} className="button-primary" onClick={()=>void download(columns)}>{saving?"Generando...":"Exportar personalizado"}</button></div></div></div>
+}
+
+function PensionadosReport({ items, oficinaById }: { items: Pensionado[]; oficinaById: Map<number, Oficina> }) {
+  const offices = new Set(items.map((item) => item.oficina_id)).size;
+  const creators = new Set(items.map((item) => item.created_by).filter(Boolean)).size;
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  return <>
+    <Metrics values={[["Pensionados", String(items.length)],["Registrados este mes", String(items.filter((item) => item.created_at.slice(0,7) === thisMonth).length)],["Oficinas", String(offices)],["Usuarios registradores", String(creators)]]}/>
+    <ReportTable headers={["Pensionado","Documento","Oficina","Agregado por","Fecha de registro","Contacto"]}>
+      {items.map((item) => <tr key={item.id}>
+        <Cell><Link href={`/pensionados/${item.id}`} className="font-semibold text-teal-800">{item.nombre_completo}</Link></Cell>
+        <Cell>{item.documento}</Cell>
+        <Cell>{oficinaById.get(item.oficina_id)?.nombre ?? `Oficina #${item.oficina_id}`}</Cell>
+        <Cell>{item.creador_nombre ?? "Histórico sin autor identificado"}</Cell>
+        <Cell>{formatDateTime(item.created_at)}</Cell>
+        <Cell><p>{item.celular ?? item.telefono ?? "Sin teléfono"}</p><p className="text-xs text-stone-500">{item.correo ?? "Sin correo"}</p></Cell>
+      </tr>)}
+    </ReportTable>
+  </>;
 }
 
 function CreditosReport({
@@ -636,7 +674,7 @@ function RefinanciacionesReport({
           "Credito",
           "Pensionado",
           "Cooperativa",
-          "Disponible desde",
+          "Tentativa para refi",
           "Estado comercial",
           "Monto anterior",
         ]}

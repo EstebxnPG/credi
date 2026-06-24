@@ -40,8 +40,7 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - ./backend:/app
-      - ./backend/data/migrations:/app/data/migrations
+      - ./backend/data/uploads:/app/data/uploads
     ports:
       - "8000:8000"
     depends_on:
@@ -55,7 +54,7 @@ services:
     command: ["python", "-m", "app.notification_worker"]
     env_file: .env
     volumes:
-      - ./backend:/app
+      - ./backend/data/uploads:/app/data/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -66,13 +65,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      WATCHPACK_POLLING: "true"
-      CHOKIDAR_USEPOLLING: "true"
       NEXT_TELEMETRY_DISABLED: "1"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - frontend_next:/app/.next
     ports:
       - "3000:3000"
     depends_on:

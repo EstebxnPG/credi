@@ -112,7 +112,7 @@ def _sumar_meses(fecha: date, meses: int) -> date:
     return date(year, month, day)
 
 
-def listar_creditos_elegibles(db: Session, usuario_actual: Usuario | None = None) -> list[dict]:
+def listar_creditos_elegibles(db: Session, usuario_actual: Usuario | None = None, commit: bool = True) -> list[dict]:
     creditos = (
         db.query(Credito)
         .filter(
@@ -164,6 +164,7 @@ def listar_creditos_elegibles(db: Session, usuario_actual: Usuario | None = None
                 "documento": credito.pensionado.documento if credito.pensionado else None,
                 "cooperativa_id": credito.cooperativa_id,
                 "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
+                "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,
                 "monto_aprobado": credito.monto_aprobado,
                 "plazo": credito.plazo,
                 "fecha_base": fecha_base,
@@ -177,7 +178,8 @@ def listar_creditos_elegibles(db: Session, usuario_actual: Usuario | None = None
                 "credito_nuevo_id": oportunidad.credito_nuevo_id,
             }
         )
-    db.commit()
+    if commit:
+        db.commit()
     return elegibles
 
 
@@ -203,6 +205,9 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
         notificacion.estado = "pendiente"; notificacion.resuelta_en = None; notificacion.resuelta_por = None
     db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, usuario_id=usuario.id, estado_anterior=anterior, estado_nuevo=data.estado, justificacion=data.justificacion))
     registrar_log(db, usuario.id, "oportunidades_refinanciacion", oportunidad.id, "cambiar_estado", {"estado": anterior}, {"estado": data.estado, "justificacion": data.justificacion})
+    from app.services.notificacion_service import sincronizar_reglas
+
+    sincronizar_reglas(db, commit=False)
     db.commit(); db.refresh(oportunidad); return {"id": oportunidad.id, "estado": oportunidad.estado, "reactivar_en": oportunidad.reactivar_en}
 
 

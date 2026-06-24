@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
 import { navItems, navSections } from "@/lib/navigation";
@@ -36,18 +36,16 @@ export function AppShell({
   const [toast, setToast] = useState<Notificacion | null>(null);
   const knownIds = useRef<Set<number> | null>(null);
 
-  async function loadNotifications() {
+  const loadNotifications = useCallback(async () => {
     try {
       const response = await apiFetch<NotificationPage>(
-        "/api/v1/notificaciones/?incluir_resueltas=true&page_size=6",
+        "/api/v1/notificaciones/?page_size=6",
       );
       const next = response.items;
       const unread = next.filter((item) => !item.leida);
       if (knownIds.current) {
         const nueva = unread.find((item) => !knownIds.current?.has(item.id));
-        if (nueva) setToast(nueva);
-      } else if (unread[0]) {
-        setToast(unread[0]);
+        if (nueva && pathname !== "/notificaciones") setToast(nueva);
       }
       knownIds.current = new Set(next.map((item) => item.id));
       setNotifications(next);
@@ -55,7 +53,7 @@ export function AppShell({
     } catch {
       // The shell stays usable if notification polling fails.
     }
-  }
+  }, [pathname]);
 
   async function markRead(item: Notificacion) {
     if (!item.leida) {
@@ -75,20 +73,24 @@ export function AppShell({
 
   useEffect(() => {
     void loadNotifications();
-    const interval = window.setInterval(() => void loadNotifications(), 60_000);
+    const interval = window.setInterval(() => void loadNotifications(), 15_000);
     const refresh = () => void loadNotifications();
     window.addEventListener("notifications-updated", refresh);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("notifications-updated", refresh);
     };
-  }, []);
+  }, [loadNotifications]);
 
   useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(null), 7000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    setBellOpen(false);
+  }, [pathname]);
 
   const visibleItems = navItems.filter((item) => {
     if (!item.adminOnly) {
@@ -101,7 +103,7 @@ export function AppShell({
   return (
     <div className="min-h-screen px-4 py-4 sm:px-6 sm:py-6">
       <div className="mx-auto max-w-[1600px]">
-        <header className="sticky top-4 z-30 overflow-hidden rounded-2xl border border-stone-800/10 bg-white/90 shadow-lg shadow-stone-900/5 backdrop-blur-xl">
+        <header className="sticky top-4 z-30 rounded-2xl border border-stone-800/10 bg-white/90 shadow-lg shadow-stone-900/5 backdrop-blur-xl">
           <div className="border-b border-stone-800/10 px-3 py-2.5 md:px-4">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3">
@@ -150,7 +152,7 @@ export function AppShell({
                       <div className="flex items-center justify-between border-b border-stone-800/10 px-4 py-3">
                         <p className="text-sm font-semibold text-stone-950">Notificaciones</p>
                         <span className="text-xs text-stone-500">
-                          Historial reciente
+                          Abiertas ahora
                         </span>
                       </div>
                       <div className="max-h-80 divide-y divide-stone-800/10 overflow-y-auto">
@@ -190,7 +192,7 @@ export function AppShell({
                 </div>
                 <div className="rounded-lg border border-stone-800/10 bg-white/70 px-3 py-1.5">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-stone-500">
-                    Sesion
+                    Sesión
                   </p>
                   <p className="max-w-[140px] truncate text-xs font-semibold text-stone-900 sm:max-w-[180px]">
                     {session?.nombre ?? "Sin usuario"}
