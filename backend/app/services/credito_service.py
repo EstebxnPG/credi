@@ -7,13 +7,14 @@ from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import joinedload
 
 from app.db.models.cooperativa import Cooperativa
 from app.db.models.credito import Credito
 from app.db.models.historial_credito import HistorialCredito
 from app.db.models.oficina import Oficina
 from app.db.models.pagaduria import Pagaduria
-from app.db.models.pensionado import Pensionado
+from app.db.models.pensionado import Pensionado, PensionadoOficina
 from app.db.models.usuario import Usuario
 from app.db.models.refinanciacion import OportunidadRefinanciacion, HistorialOportunidadRefinanciacion
 from app.db.models.notificacion import Notificacion
@@ -30,7 +31,7 @@ from app.services.pendiente_credito_service import credito_tiene_pendientes_abie
 
 
 ESTADOS_EDITABLES = {"Prospecto", "Devuelto por corrección"}
-ESTADOS_FINALES = {"Aprobado", "Rechazado"}
+ESTADOS_FINALES = {"Aprobado", "Rechazado", "Finalizado"}
 
 
 def _calcular_edad(fecha_nacimiento: date, fecha_referencia: date | None = None) -> int:
@@ -42,7 +43,12 @@ def _calcular_edad(fecha_nacimiento: date, fecha_referencia: date | None = None)
 
 
 def _get_credito_or_404(db: Session, credito_id: int) -> Credito:
-    credito = db.query(Credito).filter(Credito.id == credito_id).first()
+    credito = (
+        db.query(Credito)
+        .options(joinedload(Credito.asesor))
+        .filter(Credito.id == credito_id)
+        .first()
+    )
     if not credito:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -158,6 +164,34 @@ def _registrar_historial(
     db.add(historial)
 
 
+def _sincronizar_creditos_finalizados(
+    db: Session,
+    usuario_id: int | None = None,
+    oficina_id: int | None = None,
+) -> None:
+    hoy = date.today()
+    query = db.query(Credito).filter(
+        Credito.estado == "Aprobado",
+        Credito.fecha_fin_estimada.isnot(None),
+        Credito.fecha_fin_estimada <= hoy,
+        Credito.is_active == True,  # noqa: E712
+    )
+    if oficina_id is not None:
+        query = query.filter(Credito.oficina_id == oficina_id)
+
+    for credito in query.all():
+        credito.estado = "Finalizado"
+        if usuario_id is not None:
+            _registrar_historial(
+                db=db,
+                credito_id=credito.id,
+                usuario_id=usuario_id,
+                estado_anterior="Aprobado",
+                estado_nuevo="Finalizado",
+                observacion="Finalizado automaticamente por fecha fin estimada",
+            )
+
+
 def _validar_reglas_credito(
     db: Session,
     pensionado_id: int,
@@ -188,6 +222,7 @@ def _validar_contexto_creacion(
     data: CreditoCreate,
     usuario_actual: Usuario,
     asesor: Usuario,
+    db: Session | None = None,
 ) -> None:
     if asesor.rol != "asesora" and asesor.rol != "administrador":
         raise HTTPException(
@@ -213,9 +248,21 @@ def _validar_contexto_creacion(
             detail="El asesor asignado debe pertenecer a la oficina del crédito",
         )
     if pensionado.oficina_id != data.oficina_id:
+        if db is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El pensionado debe estar vinculado a la oficina del crédito",
+            )
+        vinculo = db.query(PensionadoOficina.id).filter(
+            PensionadoOficina.pensionado_id == pensionado.id,
+            PensionadoOficina.oficina_id == data.oficina_id,
+            PensionadoOficina.is_active == True,  # noqa: E712
+        ).first()
+        if vinculo:
+            return
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El pensionado debe pertenecer a la oficina del crédito",
+            detail="El pensionado debe estar vinculado a la oficina del crédito",
         )
 
 
@@ -225,6 +272,7 @@ def _validar_tipo_credito(
     tipo_credito: str | None,
     credito_refinanciado_id: int | None,
     entidad_financiera_origen: str | None,
+    credito_actual_id: int | None = None,
 ) -> None:
     if tipo_credito == "Nuevo":
         if credito_refinanciado_id or entidad_financiera_origen:
@@ -262,7 +310,7 @@ def _validar_tipo_credito(
         .filter(
             Credito.id == credito_refinanciado_id,
             Credito.pensionado_id == pensionado_id,
-            Credito.estado == "Aprobado",
+            Credito.estado.in_(["Aprobado", "Finalizado"]),
             Credito.is_active == True,  # noqa: E712
         )
         .first()
@@ -272,10 +320,19 @@ def _validar_tipo_credito(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El credito refinanciado debe ser aprobado y pertenecer al mismo pensionado",
         )
-    duplicado = db.query(Credito.id).filter(
+
+    from app.services.refinanciacion_service import validar_credito_refinanciable
+
+    validar_credito_refinanciable(db, credito_anterior)
+
+    duplicado_query = db.query(Credito.id).filter(
         Credito.credito_refinanciado_id == credito_refinanciado_id,
         Credito.is_active == True,  # noqa: E712
-    ).first()
+    )
+    if credito_actual_id is not None:
+        duplicado_query = duplicado_query.filter(Credito.id != credito_actual_id)
+
+    duplicado = duplicado_query.first()
     if duplicado:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -293,6 +350,25 @@ def _validar_credito_editable(credito: Credito) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Solo se pueden editar créditos en Prospecto o Devuelto por corrección",
+        )
+
+
+def _validar_regla_refinanciacion_configurada(credito: Credito) -> None:
+    regla = next(
+        (
+            regla
+            for regla in credito.cooperativa.reglas_refinanciacion
+            if regla.plazo_minimo <= credito.plazo <= regla.plazo_maximo
+        ),
+        None,
+    )
+    if regla is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "No se puede aprobar: la cooperativa no tiene regla de refinanciacion "
+                f"para plazo {credito.plazo} meses"
+            ),
         )
 
 
@@ -324,7 +400,7 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
     pensionado = _get_pensionado_activo_or_404(db, data.pensionado_id)
     _get_oficina_activa_or_404(db, data.oficina_id)
     _get_pagaduria_activa_or_404(db, data.pagaduria_id)
-    _validar_contexto_creacion(pensionado, data, usuario_actual, asesor)
+    _validar_contexto_creacion(pensionado, data, usuario_actual, asesor, db=db)
     _validar_tipo_credito(
         db,
         data.pensionado_id,
@@ -405,7 +481,20 @@ def listar_creditos(
     estado: str | None = None,
     usuario_actual: Usuario | None = None,
 ) -> list[Credito]:
-    query = db.query(Credito).filter(Credito.is_active == True)  # noqa: E712
+    scope_oficina = (
+        usuario_actual.oficina_id
+        if usuario_actual and usuario_actual.rol != "administrador"
+        else None
+    )
+    if usuario_actual:
+        _sincronizar_creditos_finalizados(db, usuario_actual.id, scope_oficina)
+        db.commit()
+
+    query = (
+        db.query(Credito)
+        .options(joinedload(Credito.asesor))
+        .filter(Credito.is_active == True)  # noqa: E712
+    )
 
     if usuario_actual and usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
@@ -423,6 +512,9 @@ def listar_creditos(
 
 
 def obtener_credito(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:
+    scope_oficina = None if usuario_actual.rol == "administrador" else usuario_actual.oficina_id
+    _sincronizar_creditos_finalizados(db, usuario_actual.id, scope_oficina)
+    db.commit()
     credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
     if not credito.is_active:
         raise HTTPException(
@@ -456,6 +548,55 @@ def obtener_historial_credito(
         )
         for item in historial
     ]
+
+
+def _sumar_meses_credito(fecha: date, meses: int) -> date:
+    mes_total = fecha.month - 1 + meses
+    year = fecha.year + mes_total // 12
+    month = mes_total % 12 + 1
+    dias_mes = [
+        31,
+        29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ]
+    day = min(fecha.day, dias_mes[month - 1])
+    return date(year, month, day)
+
+
+def _validar_fecha_fin_por_plazo(
+    fecha_desembolso: date | None,
+    fecha_fin_estimada: date | None,
+    plazo: int,
+) -> None:
+    if fecha_desembolso is None or fecha_fin_estimada is None:
+        return
+    fecha_esperada = _sumar_meses_credito(fecha_desembolso, plazo)
+    if fecha_fin_estimada != fecha_esperada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "La fecha fin estimada debe coincidir con el plazo: "
+                f"{plazo} cuotas desde {fecha_desembolso.isoformat()} terminan "
+                f"el {fecha_esperada.isoformat()}"
+            ),
+        )
+
+
+def _validar_credito_editable(credito: Credito) -> None:
+    if credito.estado in ESTADOS_FINALES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Un credito aprobado, finalizado o rechazado no puede editarse",
+        )
 
 
 def actualizar_credito(
@@ -503,6 +644,7 @@ def actualizar_credito(
                 "entidad_financiera_origen",
                 credito.entidad_financiera_origen,
             ),
+            credito_actual_id=credito.id,
         )
 
     if "tiene_documentos_pendientes" in cambios or "documentos_pendientes" in cambios:
@@ -579,6 +721,16 @@ def cambiar_estado(
             detail="No se puede aprobar un credito con documentos o tareas pendientes",
         )
 
+    if estado_nuevo == "Aprobado":
+        _validar_fecha_fin_por_plazo(data.fecha_desembolso, data.fecha_fin_estimada, credito.plazo)
+        _validar_regla_refinanciacion_configurada(credito)
+
+    if estado_nuevo == "Finalizado" and credito.estado != "Aprobado":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo un credito aprobado puede finalizarse",
+        )
+
     credito.estado = estado_nuevo
 
     if estado_nuevo == "Aprobado":
@@ -611,6 +763,11 @@ def cambiar_estado(
             "fecha_fin_estimada": data.fecha_fin_estimada,
         },
     )
+
+    if estado_nuevo == "Aprobado":
+        from app.services.refinanciacion_service import listar_creditos_elegibles
+
+        listar_creditos_elegibles(db, usuario_actual, commit=False)
 
     db.commit()
     db.refresh(credito)

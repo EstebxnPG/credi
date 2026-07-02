@@ -80,6 +80,15 @@ def actualizar_cooperativa(
         raise HTTPException(status_code=400, detail="monto_minimo debe ser menor que monto_maximo")
     if plazo_min >= plazo_max:
         raise HTTPException(status_code=400, detail="plazo_minimo debe ser menor que plazo_maximo")
+    if reglas is not None:
+        for regla in reglas:
+            regla_plazo_min = regla["plazo_minimo"] if isinstance(regla, dict) else regla.plazo_minimo
+            regla_plazo_max = regla["plazo_maximo"] if isinstance(regla, dict) else regla.plazo_maximo
+            if regla_plazo_min < plazo_min or regla_plazo_max > plazo_max:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Las reglas de refinanciacion deben estar dentro del rango de plazo de la cooperativa",
+                )
 
     for campo, valor in cambios.items():
         setattr(cooperativa, campo, valor)

@@ -3,7 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, get_db
 from app.db.models.usuario import Usuario
-from app.schemas.seguimiento import SeguimientoCreate, SeguimientoRead
+from app.schemas.seguimiento import (
+    SeguimientoCreate,
+    SeguimientoRead,
+    SeguimientoSolucionCreate,
+    SeguimientoUpdate,
+)
 from app.services import seguimiento_service
 
 router = APIRouter(prefix="/seguimientos", tags=["Seguimientos"])
@@ -44,3 +49,23 @@ def obtener_seguimiento(
     usuario_actual: Usuario = Depends(get_current_user),
 ):
     return seguimiento_service.obtener_seguimiento(db, seguimiento_id, usuario_actual)
+
+
+@router.patch("/{seguimiento_id}", response_model=SeguimientoRead)
+def actualizar_seguimiento(
+    seguimiento_id: int,
+    data: SeguimientoUpdate,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return seguimiento_service.actualizar_seguimiento(db, seguimiento_id, data, usuario_actual)
+
+
+@router.post("/{seguimiento_id}/soluciones", response_model=SeguimientoRead, status_code=201)
+def agregar_solucion(
+    seguimiento_id: int,
+    data: SeguimientoSolucionCreate,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return seguimiento_service.agregar_solucion(db, seguimiento_id, data, usuario_actual)

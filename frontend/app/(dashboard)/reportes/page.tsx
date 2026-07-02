@@ -52,6 +52,19 @@ type Seguimiento = {
   tipo: string;
   comentario: string;
   resultado: string | null;
+  estado: string;
+  fecha_proximo_contacto: string | null;
+  created_at: string;
+  soluciones: SeguimientoSolucion[];
+};
+
+type SeguimientoSolucion = {
+  id: number;
+  usuario_id: number;
+  usuario_nombre: string | null;
+  comentario: string;
+  resultado: string | null;
+  estado_resultante: string | null;
   fecha_proximo_contacto: string | null;
   created_at: string;
 };
@@ -251,6 +264,31 @@ export default function ReportesPage() {
     [desde, hasta, oficinaId, query, seguimientos],
   );
 
+  const filteredSolucionesSeguimiento = useMemo(
+    () =>
+      seguimientos
+        .flatMap((seguimiento) =>
+          (seguimiento.soluciones ?? []).map((solucion) => ({
+            ...solucion,
+            oficina_id: seguimiento.oficina_id,
+            pensionado_nombre: seguimiento.pensionado_nombre,
+          })),
+        )
+        .filter(
+          (item) =>
+            (!oficinaId || item.oficina_id === Number(oficinaId)) &&
+            inDateRange(item.created_at, desde, hasta) &&
+            matchesQuery(query, [
+              item.pensionado_nombre,
+              item.comentario,
+              item.resultado,
+              item.estado_resultante,
+              item.usuario_nombre,
+            ]),
+        ),
+    [desde, hasta, oficinaId, query, seguimientos],
+  );
+
   const filteredDocumentos = useMemo(
     () =>
       documentos.filter((item) => {
@@ -332,6 +370,9 @@ export default function ReportesPage() {
           const asesoraSeguimientos = filteredSeguimientos.filter(
             (item) => item.usuario_id === asesora.id,
           );
+          const asesoraSoluciones = filteredSolucionesSeguimiento.filter(
+            (item) => item.usuario_id === asesora.id,
+          );
           const aprobados = asesoraCreditos.filter((item) => item.estado === "Aprobado");
           return {
             ...asesora,
@@ -346,6 +387,7 @@ export default function ReportesPage() {
               0,
             ),
             seguimientos: asesoraSeguimientos.length,
+            solucionesSeguimiento: asesoraSoluciones.length,
           };
         })
         .filter((item) =>
@@ -356,7 +398,7 @@ export default function ReportesPage() {
             item.oficinaNombre,
           ]),
         ),
-    [asesoras, filteredCreditos, filteredSeguimientos, oficinaById, oficinaId, query],
+    [asesoras, filteredCreditos, filteredSeguimientos, filteredSolucionesSeguimiento, oficinaById, oficinaId, query],
   );
 
   function filterToday() {
@@ -566,6 +608,29 @@ function SeguimientosReport({ items }: { items: Seguimiento[] }) {
 function DocumentosReport({ items }: { items: Documento[] }) {
   const pdf = items.filter((item) => item.tipo === "PDF").length;
   const imagenes = items.filter((item) => item.tipo !== "PDF").length;
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function downloadDocument(item: Documento) {
+    setDownloadingId(item.id);
+    setDownloadError(null);
+
+    try {
+      const blob = await apiDownload(`/api/v1/documentos/${item.id}/descargar`);
+      const typedBlob = new Blob([blob], { type: documentMimeType(item.tipo) });
+      const url = URL.createObjectURL(typedBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = documentFileName(item);
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setDownloadError(error instanceof ApiError ? error.message : "No se pudo descargar el documento");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   return (
     <>
       <Metrics values={[
@@ -574,7 +639,8 @@ function DocumentosReport({ items }: { items: Documento[] }) {
         ["Imagenes", String(imagenes)],
         ["Creditos con docs", String(new Set(items.map((item) => item.credito_id)).size)],
       ]} />
-      <ReportTable headers={["Documento", "Credito", "Tipo", "Version", "Registro"]}>
+      {downloadError ? <StateMessage tone="error" text={downloadError} /> : null}
+      <ReportTable headers={["Documento", "Credito", "Tipo", "Version", "Registro", "Archivo"]}>
         {items.map((item) => (
           <tr key={item.id}>
             <Cell>{item.nombre}</Cell>
@@ -582,6 +648,16 @@ function DocumentosReport({ items }: { items: Documento[] }) {
             <Cell>{item.tipo}</Cell>
             <Cell>{String(item.version)}</Cell>
             <Cell>{formatDateTime(item.created_at)}</Cell>
+            <Cell>
+              <button
+                type="button"
+                className="button-muted px-2.5 py-1.5 text-xs"
+                disabled={downloadingId === item.id}
+                onClick={() => void downloadDocument(item)}
+              >
+                {downloadingId === item.id ? "Descargando..." : "Descargar"}
+              </button>
+            </Cell>
           </tr>
         ))}
       </ReportTable>
@@ -716,6 +792,7 @@ function AsesorasReport({
       tasaAprobacion: number;
       montoAprobado: number;
       seguimientos: number;
+      solucionesSeguimiento: number;
     }
   >;
 }) {
@@ -726,6 +803,7 @@ function AsesorasReport({
           ["Asesoras", String(items.length)],
           ["Activas", String(items.filter((item) => item.is_active).length)],
           ["Creditos", String(items.reduce((total, item) => total + item.creditos, 0))],
+          ["Soluciones", String(items.reduce((total, item) => total + item.solucionesSeguimiento, 0))],
           [
             "Monto aprobado",
             formatCurrency(items.reduce((total, item) => total + item.montoAprobado, 0)),
@@ -742,6 +820,7 @@ function AsesorasReport({
           "Tasa",
           "Monto aprobado",
           "Seguimientos",
+          "Soluciones",
         ]}
       >
         {items.map((item) => (
@@ -762,6 +841,7 @@ function AsesorasReport({
             <Cell>{`${item.tasaAprobacion.toFixed(1)}%`}</Cell>
             <Cell>{formatCurrency(item.montoAprobado)}</Cell>
             <Cell>{String(item.seguimientos)}</Cell>
+            <Cell>{String(item.solucionesSeguimiento)}</Cell>
           </tr>
         ))}
       </ReportTable>
@@ -835,6 +915,28 @@ function localDateValue(value: Date) {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function documentMimeType(tipo: string) {
+  const normalized = tipo.toUpperCase();
+  if (normalized === "PDF") {
+    return "application/pdf";
+  }
+  if (normalized === "PNG") {
+    return "image/png";
+  }
+  return "image/jpeg";
+}
+
+function documentFileName(item: Documento) {
+  const cleanName = item.nombre.trim() || `documento-${item.id}`;
+  const lowerName = cleanName.toLowerCase();
+  if (/\.(pdf|png|jpe?g)$/.test(lowerName)) {
+    return cleanName;
+  }
+
+  const extension = item.tipo.toUpperCase() === "PDF" ? "pdf" : item.tipo.toUpperCase() === "PNG" ? "png" : "jpg";
+  return `${cleanName}.${extension}`;
 }
 
 function StateMessage({ text, tone = "default" }: { text: string; tone?: "default" | "error" }) {

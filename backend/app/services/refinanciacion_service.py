@@ -5,6 +5,7 @@ Lógica de negocio para refinanciaciones asociadas a créditos.
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.db.models.credito import Credito
@@ -49,8 +50,7 @@ def crear_refinanciacion(
     credito = _get_credito_activo_or_404(db, data.credito_id)
     if usuario_actual.rol != "administrador" and credito.oficina_id != usuario_actual.oficina_id:
         raise HTTPException(status_code=403, detail="No puedes operar créditos de otra oficina")
-    if credito.estado != "Aprobado":
-        raise HTTPException(status_code=422, detail="Solo los créditos aprobados pueden refinanciarse")
+    validar_credito_refinanciable(db, credito)
     refinanciacion = Refinanciacion(**data.model_dump())
     db.add(refinanciacion)
     db.flush()
@@ -112,11 +112,50 @@ def _sumar_meses(fecha: date, meses: int) -> date:
     return date(year, month, day)
 
 
+def _regla_refinanciacion_para_credito(credito: Credito):
+    return next(
+        (
+            regla
+            for regla in credito.cooperativa.reglas_refinanciacion
+            if regla.plazo_minimo <= credito.plazo <= regla.plazo_maximo
+        ),
+        None,
+    )
+
+
+def validar_credito_refinanciable(db: Session, credito: Credito) -> None:
+    if credito.estado not in {"Aprobado", "Finalizado"} or not credito.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Solo los créditos aprobados y activos pueden refinanciarse",
+        )
+    if not credito.cooperativa or not credito.cooperativa.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La cooperativa del crédito no está activa",
+        )
+
+    regla = _regla_refinanciacion_para_credito(credito)
+    fecha_base = credito.fecha_desembolso or _fecha_aprobacion(db, credito.id)
+    if not regla or not fecha_base:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La refinanciación no está disponible según las reglas de la cooperativa",
+        )
+
+    disponible_desde = _sumar_meses(fecha_base, regla.meses_para_refinanciar)
+    if date.today() < disponible_desde:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"La refinanciación estará disponible desde {disponible_desde.isoformat()} según la regla de la cooperativa",
+        )
+
+
 def listar_creditos_elegibles(db: Session, usuario_actual: Usuario | None = None, commit: bool = True) -> list[dict]:
     creditos = (
         db.query(Credito)
         .filter(
-            Credito.estado == "Aprobado",
+            Credito.estado.in_(["Aprobado", "Finalizado"]),
             Credito.is_active == True,  # noqa: E712
         )
         .order_by(Credito.fecha_desembolso.asc())
@@ -128,14 +167,10 @@ def listar_creditos_elegibles(db: Session, usuario_actual: Usuario | None = None
     elegibles = []
     ahora = datetime.now(timezone.utc)
     for credito in creditos:
-        regla = next(
-            (
-                regla
-                for regla in credito.cooperativa.reglas_refinanciacion
-                if regla.plazo_minimo <= credito.plazo <= regla.plazo_maximo
-            ),
-            None,
-        )
+        if not credito.cooperativa or not credito.cooperativa.is_active:
+            continue
+
+        regla = _regla_refinanciacion_para_credito(credito)
         if regla is None:
             continue
 
@@ -189,6 +224,9 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
     oportunidad = q.first()
     if not oportunidad: raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
     credito = oportunidad.credito
+    validar_credito_refinanciable(db, credito)
+    if oportunidad.estado == "rechazado" and oportunidad.reactivar_en and oportunidad.reactivar_en > datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="La oportunidad rechazada se reactivará en la fecha programada")
     regla = next((r for r in credito.cooperativa.reglas_refinanciacion if r.plazo_minimo <= credito.plazo <= r.plazo_maximo), None)
     fecha_base = credito.fecha_desembolso or _fecha_aprobacion(db, credito.id)
     if not regla or not fecha_base or date.today() < _sumar_meses(fecha_base, regla.meses_para_refinanciar):
@@ -199,9 +237,9 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
     anterior = oportunidad.estado; oportunidad.estado = data.estado; oportunidad.justificacion = data.justificacion
     oportunidad.reactivar_en = datetime.now(timezone.utc) + timedelta(days=20) if data.estado == "rechazado" else None
     notificacion = db.query(Notificacion).filter(Notificacion.clave == f"refinanciacion-{oportunidad.credito_id}").first()
-    if notificacion and data.estado == "rechazado":
+    if notificacion and data.estado in ("aceptado", "rechazado"):
         notificacion.estado = "resuelta"; notificacion.resuelta_en = datetime.now(timezone.utc); notificacion.resuelta_por = usuario.id
-    elif notificacion and data.estado in ("disponible", "contactado", "aceptado"):
+    elif notificacion and data.estado in ("disponible", "contactado"):
         notificacion.estado = "pendiente"; notificacion.resuelta_en = None; notificacion.resuelta_por = None
     db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, usuario_id=usuario.id, estado_anterior=anterior, estado_nuevo=data.estado, justificacion=data.justificacion))
     registrar_log(db, usuario.id, "oportunidades_refinanciacion", oportunidad.id, "cambiar_estado", {"estado": anterior}, {"estado": data.estado, "justificacion": data.justificacion})

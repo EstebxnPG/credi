@@ -5,7 +5,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.db.models.credito import Credito
-from app.db.models.notificacion import Notificacion
+from app.db.models.notificacion import Notificacion, NotificacionLectura
 from app.db.models.pendiente_credito import PendienteCredito
 from app.db.models.seguimiento import Seguimiento
 from app.db.models.usuario import Usuario
@@ -37,13 +37,26 @@ def _reactivar(item: Notificacion, data: dict, forzar_reapertura: bool) -> bool:
     ahora = _ahora()
     estaba_cerrada = item.estado in CERRADOS
     esta_pospuesta = item.estado == "pospuesta" and item.pospuesta_hasta and item.pospuesta_hasta > ahora
+    if estaba_cerrada and not forzar_reapertura:
+        return False
+
     cambio = False
     for campo, valor in data.items():
         if esta_pospuesta and campo in {"estado", "leida", "leida_en", "pospuesta_hasta"}:
             continue
+        if campo == "responsable_id" and valor is None and item.responsable_id is not None:
+            continue
+        if campo == "leida" and valor is False and item.leida is True:
+            continue
+        if campo == "leida_en" and valor is None and item.leida_en is not None:
+            continue
         if getattr(item, campo) != valor:
             setattr(item, campo, valor)
             cambio = True
+
+    if item.leida is False and item.leida_en is not None and not esta_pospuesta:
+        item.leida_en = None
+        cambio = True
 
     if estaba_cerrada:
         item.estado = "pendiente"
@@ -110,6 +123,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
         db.query(Seguimiento)
         .filter(
             Seguimiento.is_active == True,  # noqa: E712
+            Seguimiento.estado.in_(("abierto", "pendiente")),
             Seguimiento.fecha_proximo_contacto.is_not(None),
             Seguimiento.fecha_proximo_contacto <= ahora + timedelta(days=1),
         )
@@ -213,7 +227,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
 
         credito = db.get(Credito, elegible["credito_id"])
         clave = f"refinanciacion-{credito.id}"
-        if elegible["estado_comercial"] in ("rechazado", "convertido"):
+        if elegible["estado_comercial"] in ("aceptado", "rechazado", "convertido"):
             _resolver_por_clave(db, clave)
             continue
 
@@ -288,6 +302,17 @@ def _visibles_ahora(query, ahora: datetime):
     )
 
 
+def _lectura_query(db: Session, usuario: Usuario):
+    return db.query(NotificacionLectura).filter(NotificacionLectura.usuario_id == usuario.id)
+
+
+def _aplicar_lectura_usuario(items: list[Notificacion], lecturas: dict[int, datetime]) -> None:
+    for item in items:
+        leida_en = lecturas.get(item.id)
+        item.leida = leida_en is not None
+        item.leida_en = leida_en
+
+
 def listar(
     db: Session,
     usuario: Usuario,
@@ -329,11 +354,22 @@ def listar(
         .limit(page_size)
         .all()
     )
-    unread = (
-        _visibles_ahora(_alcance(db.query(Notificacion), usuario), ahora)
-        .filter(Notificacion.leida == False)  # noqa: E712
-        .count()
+    lecturas = {
+        lectura.notificacion_id: lectura.leida_en
+        for lectura in _lectura_query(db, usuario)
+        .filter(NotificacionLectura.notificacion_id.in_([item.id for item in items]))
+        .all()
+    }
+    _aplicar_lectura_usuario(items, lecturas)
+
+    unread_q = _visibles_ahora(_alcance(db.query(Notificacion.id), usuario), ahora).outerjoin(
+        NotificacionLectura,
+        and_(
+            NotificacionLectura.notificacion_id == Notificacion.id,
+            NotificacionLectura.usuario_id == usuario.id,
+        ),
     )
+    unread = unread_q.filter(NotificacionLectura.id.is_(None)).count()
     return {"items": items, "total": total, "page": page, "page_size": page_size, "unread": unread}
 
 
@@ -346,18 +382,35 @@ def _get(db: Session, usuario: Usuario, item_id: int) -> Notificacion:
 
 def marcar_leida(db, usuario, item_id):
     item = _get(db, usuario, item_id)
-    item.leida = True
-    item.leida_en = _ahora()
+    lectura = (
+        _lectura_query(db, usuario)
+        .filter(NotificacionLectura.notificacion_id == item.id)
+        .first()
+    )
+    if not lectura:
+        leida_en = _ahora()
+        db.add(NotificacionLectura(notificacion_id=item.id, usuario_id=usuario.id, leida_en=leida_en))
+        item.leida = True
+        item.leida_en = leida_en
     db.commit()
 
 
 def marcar_todas_leidas(db, usuario):
-    _visibles_ahora(_alcance(db.query(Notificacion), usuario), _ahora()).filter(
-        Notificacion.leida == False  # noqa: E712
-    ).update(
-        {Notificacion.leida: True, Notificacion.leida_en: _ahora()},
-        synchronize_session=False,
-    )
+    ahora = _ahora()
+    visibles = _visibles_ahora(_alcance(db.query(Notificacion.id), usuario), ahora).all()
+    ids = [item.id for item in visibles]
+    if ids:
+        existentes = {
+            lectura.notificacion_id
+            for lectura in _lectura_query(db, usuario)
+            .filter(NotificacionLectura.notificacion_id.in_(ids))
+            .all()
+        }
+        db.add_all(
+            NotificacionLectura(notificacion_id=notificacion_id, usuario_id=usuario.id, leida_en=ahora)
+            for notificacion_id in ids
+            if notificacion_id not in existentes
+        )
     db.commit()
 
 
@@ -375,9 +428,12 @@ def cambiar_estado(db: Session, usuario: Usuario, item_id: int, data: Notificaci
         raise HTTPException(status_code=422, detail="La fecha de reactivación debe estar en el futuro")
 
     anterior = item.estado
+    responsable_anterior = item.responsable_id
     item.estado = data.estado
     item.justificacion = data.justificacion
     item.pospuesta_hasta = data.pospuesta_hasta if data.estado == "pospuesta" else None
+    if data.estado == "en_progreso" and item.responsable_id is None:
+        item.responsable_id = usuario.id
     if data.estado in CERRADOS:
         item.resuelta_en = _ahora()
         item.resuelta_por = usuario.id
@@ -391,8 +447,8 @@ def cambiar_estado(db: Session, usuario: Usuario, item_id: int, data: Notificaci
         "notificaciones",
         item.id,
         "cambiar_estado",
-        {"estado": anterior},
-        {"estado": data.estado, "justificacion": data.justificacion},
+        {"estado": anterior, "responsable_id": responsable_anterior},
+        {"estado": data.estado, "justificacion": data.justificacion, "responsable_id": item.responsable_id},
     )
     db.commit()
     db.refresh(item)

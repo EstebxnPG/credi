@@ -18,6 +18,7 @@ type Seguimiento = {
   usuario_id: number;
   usuario_nombre: string | null;
   tipo: string;
+  estado: string;
   comentario: string;
   resultado: string | null;
   fecha_proximo_contacto: string | null;
@@ -41,6 +42,7 @@ type FormValues = {
   pensionado_id: string;
   oficina_id: string;
   tipo: string;
+  estado: string;
   comentario: string;
   resultado: string;
   fecha_proximo_contacto: string;
@@ -57,10 +59,26 @@ const seguimientoTipos = [
   { value: "cierre_perdido", label: "Cierre perdido" },
 ];
 
+const seguimientoEstados = [
+  { value: "abierto", label: "Abierto" },
+  { value: "pendiente", label: "Pendiente" },
+  { value: "esperando", label: "Esperando" },
+  { value: "cerrado", label: "Cerrado" },
+];
+
+const fechaRapidaOptions = [
+  { value: "", label: "Todas las fechas" },
+  { value: "vencidos", label: "Vencidos" },
+  { value: "hoy", label: "Hoy" },
+  { value: "manana", label: "Manana" },
+  { value: "sin_programar", label: "Sin programar" },
+];
+
 const emptyForm: FormValues = {
   pensionado_id: "",
   oficina_id: "",
   tipo: "llamada",
+  estado: "abierto",
   comentario: "",
   resultado: "",
   fecha_proximo_contacto: "",
@@ -72,6 +90,11 @@ export default function SeguimientosPage() {
   const [pensionados, setPensionados] = useState<Pensionado[]>([]);
   const [oficinas, setOficinas] = useState<Oficina[]>([]);
   const [query, setQuery] = useState("");
+  const [tipoFilter, setTipoFilter] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [fechaRapida, setFechaRapida] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,25 +133,64 @@ export default function SeguimientosPage() {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) {
-      return seguimientos;
-    }
+    const today = localDateValue(new Date());
+    const tomorrow = addDaysValue(today, 1);
 
-    return seguimientos.filter((seguimiento) =>
-      [
-        seguimiento.id,
-        seguimiento.tipo,
-        seguimiento.comentario,
-        seguimiento.resultado,
-        seguimiento.pensionado_nombre,
-        seguimiento.pensionado_documento,
-        seguimiento.oficina_nombre,
-        seguimiento.usuario_nombre,
-      ]
-        .filter((value) => value !== null && value !== undefined)
-        .some((value) => String(value).toLowerCase().includes(term)),
-    );
-  }, [query, seguimientos]);
+    return seguimientos.filter((seguimiento) => {
+      const fechaContacto = seguimiento.fecha_proximo_contacto?.slice(0, 10) ?? "";
+
+      if (tipoFilter && seguimiento.tipo !== tipoFilter) {
+        return false;
+      }
+      if (estadoFilter && seguimiento.estado !== estadoFilter) {
+        return false;
+      }
+      if (fechaDesde && (!fechaContacto || fechaContacto < fechaDesde)) {
+        return false;
+      }
+      if (fechaHasta && (!fechaContacto || fechaContacto > fechaHasta)) {
+        return false;
+      }
+      if (fechaRapida === "vencidos" && (!fechaContacto || fechaContacto >= today)) {
+        return false;
+      }
+      if (fechaRapida === "hoy" && fechaContacto !== today) {
+        return false;
+      }
+      if (fechaRapida === "manana" && fechaContacto !== tomorrow) {
+        return false;
+      }
+      if (fechaRapida === "sin_programar" && fechaContacto) {
+        return false;
+      }
+      if (!term) {
+        return true;
+      }
+
+      return [
+          seguimiento.id,
+          seguimiento.tipo,
+          seguimiento.estado,
+          seguimiento.comentario,
+          seguimiento.resultado,
+          seguimiento.pensionado_nombre,
+          seguimiento.pensionado_documento,
+          seguimiento.oficina_nombre,
+          seguimiento.usuario_nombre,
+        ]
+          .filter((value) => value !== null && value !== undefined)
+          .some((value) => String(value).toLowerCase().includes(term));
+    });
+  }, [estadoFilter, fechaDesde, fechaHasta, fechaRapida, query, seguimientos, tipoFilter]);
+
+  function clearFilters() {
+    setQuery("");
+    setTipoFilter("");
+    setEstadoFilter("");
+    setFechaDesde("");
+    setFechaHasta("");
+    setFechaRapida("");
+  }
 
   function openCreateModal() {
     const session = readSession();
@@ -159,6 +221,14 @@ export default function SeguimientosPage() {
       setFormError("Selecciona pensionado y oficina.");
       return;
     }
+    if (form.estado === "pendiente" && !form.fecha_proximo_contacto) {
+      setFormError("Un seguimiento pendiente exige fecha y hora.");
+      return;
+    }
+    if (form.fecha_proximo_contacto && !isBusinessTime(form.fecha_proximo_contacto)) {
+      setFormError("Agenda seguimientos solo entre 8:00 a.m. y 5:30 p.m.");
+      return;
+    }
 
     setSaving(true);
     setFormError(null);
@@ -170,6 +240,7 @@ export default function SeguimientosPage() {
           pensionado_id: Number(form.pensionado_id),
           oficina_id: Number(form.oficina_id),
           tipo: form.tipo,
+          estado: form.estado,
           comentario: form.comentario.trim(),
           resultado: nullableText(form.resultado),
           fecha_proximo_contacto: form.fecha_proximo_contacto
@@ -203,7 +274,7 @@ export default function SeguimientosPage() {
   return (
     <section className="space-y-4">
       <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">
               Seguimientos
@@ -228,6 +299,60 @@ export default function SeguimientosPage() {
             </button>
           </div>
         </div>
+
+        <div className="mt-5 grid gap-3 border-t border-stone-800/10 pt-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
+          <SelectField
+            label="Tipo"
+            value={tipoFilter}
+            onChange={setTipoFilter}
+            options={seguimientoTipos}
+          />
+          <SelectField
+            label="Estado"
+            value={estadoFilter}
+            onChange={setEstadoFilter}
+            options={seguimientoEstados}
+          />
+          <SelectField
+            label="Proximo contacto"
+            value={fechaRapida}
+            onChange={(value) => {
+              setFechaRapida(value);
+              if (value) {
+                setFechaDesde("");
+                setFechaHasta("");
+              }
+            }}
+            options={fechaRapidaOptions}
+          />
+          <Field
+            label="Desde"
+            type="date"
+            value={fechaDesde}
+            onChange={(value) => {
+              setFechaDesde(value);
+              if (value) {
+                setFechaRapida("");
+              }
+            }}
+          />
+          <Field
+            label="Hasta"
+            type="date"
+            value={fechaHasta}
+            onChange={(value) => {
+              setFechaHasta(value);
+              if (value) {
+                setFechaRapida("");
+              }
+            }}
+          />
+          <div className="flex items-end">
+            <button type="button" className="button-muted w-full whitespace-nowrap" onClick={clearFilters}>
+              Limpiar
+            </button>
+          </div>
+        </div>
       </article>
 
       {loading ? <StateMessage text="Cargando seguimientos..." /> : null}
@@ -235,16 +360,20 @@ export default function SeguimientosPage() {
 
       {!loading && !error ? (
         <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[0.65fr_1.2fr_0.8fr_1fr_1fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+          <div className="hidden grid-cols-[0.55fr_1.15fr_0.8fr_0.8fr_1fr_1fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
             <span>ID</span>
             <span>Pensionado</span>
             <span>Tipo</span>
+            <span>Estado</span>
             <span>Oficina</span>
             <span>Proximo contacto</span>
             <span className="text-right">Acciones</span>
           </div>
 
           <div className="divide-y divide-stone-800/10">
+            <div className="px-4 py-3 text-xs font-medium text-stone-500">
+              Mostrando {filtered.length} de {seguimientos.length} seguimientos
+            </div>
             {filtered.map((seguimiento) => (
               <div
                 key={seguimiento.id}
@@ -252,7 +381,7 @@ export default function SeguimientosPage() {
                 tabIndex={0}
                 onClick={() => openDetail(seguimiento.id)}
                 onKeyDown={(event) => handleRowKeyDown(event, seguimiento.id)}
-                className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.65fr_1.2fr_0.8fr_1fr_1fr_120px] md:items-center md:py-3"
+                className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.55fr_1.15fr_0.8fr_0.8fr_1fr_1fr_120px] md:items-center md:py-3"
               >
                 <div className="min-w-0">
                   <p className="font-semibold text-stone-950">#{seguimiento.id}</p>
@@ -270,6 +399,9 @@ export default function SeguimientosPage() {
                 </div>
                 <span>
                   <TipoBadge tipo={seguimiento.tipo} />
+                </span>
+                <span>
+                  <EstadoBadge estado={seguimiento.estado} />
                 </span>
                 <span className="text-stone-700">
                   {seguimiento.oficina_nombre ?? `Oficina #${seguimiento.oficina_id}`}
@@ -389,6 +521,13 @@ function SeguimientoModal({
             required
           />
           <SelectField
+            label="Estado"
+            value={form.estado}
+            onChange={(value) => updateField("estado", value)}
+            options={seguimientoEstados}
+            required
+          />
+          <SelectField
             label="Oficina"
             value={form.oficina_id}
             onChange={(value) => updateField("oficina_id", value)}
@@ -416,6 +555,7 @@ function SeguimientoModal({
           <Field
             label="Proximo contacto"
             type="datetime-local"
+            step={1800}
             value={form.fecha_proximo_contacto}
             onChange={(value) => updateField("fecha_proximo_contacto", value)}
           />
@@ -567,11 +707,13 @@ function Field({
   value,
   onChange,
   type = "text",
+  step,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  step?: number;
 }) {
   return (
     <label className="block text-sm font-medium text-stone-700">
@@ -579,6 +721,7 @@ function Field({
       <input
         className="input-base mt-2"
         type={type}
+        step={step}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -614,6 +757,21 @@ function TipoBadge({ tipo }: { tipo: string }) {
   return (
     <span className="inline-flex items-center justify-center rounded-full border border-teal-700/20 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-800">
       {seguimientoTipos.find((item) => item.value === tipo)?.label ?? tipo}
+    </span>
+  );
+}
+
+function EstadoBadge({ estado }: { estado: string }) {
+  const styles: Record<string, string> = {
+    abierto: "border-sky-700/20 bg-sky-50 text-sky-800",
+    pendiente: "border-amber-700/20 bg-amber-50 text-amber-800",
+    esperando: "border-violet-700/20 bg-violet-50 text-violet-800",
+    cerrado: "border-emerald-700/20 bg-emerald-50 text-emerald-800",
+  };
+  const label = seguimientoEstados.find((item) => item.value === estado)?.label ?? estado;
+  return (
+    <span className={`inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[estado] ?? "border-stone-800/10 bg-stone-50 text-stone-700"}`}>
+      {label}
     </span>
   );
 }
@@ -667,6 +825,23 @@ function UserIcon() {
 function nullableText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function localDateValue(date: Date) {
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 10);
+}
+
+function addDaysValue(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return localDateValue(date);
+}
+
+function isBusinessTime(value: string) {
+  const date = new Date(value);
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return minutes >= 8 * 60 && minutes <= 17 * 60 + 30;
 }
 
 function StateMessage({

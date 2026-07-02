@@ -89,6 +89,9 @@ class CooperativaBase(BaseModel):
         if self.plazo_minimo >= self.plazo_maximo:
             raise ValueError("plazo_minimo debe ser menor que plazo_maximo")
         reglas = sorted(self.reglas_refinanciacion, key=lambda regla: regla.plazo_minimo)
+        for regla in reglas:
+            if regla.plazo_minimo < self.plazo_minimo or regla.plazo_maximo > self.plazo_maximo:
+                raise ValueError("Las reglas de refinanciacion deben estar dentro del rango de plazo de la cooperativa")
         for index, regla in enumerate(reglas[1:], start=1):
             anterior = reglas[index - 1]
             if regla.plazo_minimo <= anterior.plazo_maximo:

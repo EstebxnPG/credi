@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas.pensionado import PensionadoCreate, PensionadoRead, PensionadoUpdate
+from app.schemas.pensionado import PensionadoCreate, PensionadoLookup, PensionadoRead, PensionadoUpdate
 from app.services.pensionado_service import PensionadoService
 from typing import List
 from app.core.dependencies import get_current_user, solo_admin
@@ -30,6 +30,22 @@ def listar_pensionados(
         limit=limit,
         solo_activos=solo_activos,
     )
+
+@router.get("/buscar/documento/{documento}", response_model=PensionadoLookup)
+def buscar_pensionado_por_documento(
+    documento: str,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    return PensionadoService(db).buscar_por_documento(documento, usuario)
+
+@router.post("/{pensionado_id}/vincular-mi-oficina", response_model=PensionadoRead)
+def vincular_pensionado_mi_oficina(
+    pensionado_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    return PensionadoService(db).vincular_a_mi_oficina(pensionado_id, usuario)
 
 @router.get("/{pensionado_id}", response_model=PensionadoRead)
 def obtener_pensionado(

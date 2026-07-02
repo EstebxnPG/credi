@@ -10,7 +10,9 @@ class Oficina(Base, TimestampMixin, SoftDeleteMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String(100), nullable=False)
     direccion: Mapped[str] = mapped_column(String(200), nullable=False)
+    color: Mapped[str] = mapped_column(String(20), nullable=False, default="blue")
 
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="oficina")
     creditos: Mapped[list["Credito"]] = relationship(back_populates="oficina")
     seguimientos: Mapped[list["Seguimiento"]] = relationship(back_populates="oficina")
+    pensionado_vinculos: Mapped[list["PensionadoOficina"]] = relationship(back_populates="oficina")

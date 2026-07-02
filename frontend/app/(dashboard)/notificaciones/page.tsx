@@ -19,6 +19,9 @@ type Item = {
   fecha: string;
   leida: boolean;
   oficina_id: number;
+  responsable_id: number | null;
+  responsable_nombre: string | null;
+  pospuesta_hasta: string | null;
 };
 
 type Page = {
@@ -97,6 +100,16 @@ export default function NotificationsPage() {
     }
   }
 
+  async function markAllRead() {
+    try {
+      await apiFetch("/api/v1/notificaciones/leer-todas", { method: "PATCH" });
+      window.dispatchEvent(new Event("notifications-updated"));
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "No se pudieron marcar las notificaciones");
+    }
+  }
+
   return (
     <section className="space-y-4">
       <header className="border-b pb-4">
@@ -112,7 +125,7 @@ export default function NotificationsPage() {
         <Metric label="Página" value={data.page} />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <input
           className="input-base max-w-xs"
           value={search}
@@ -161,6 +174,14 @@ export default function NotificationsPage() {
           <option value="media">Media</option>
           <option value="baja">Baja</option>
         </select>
+        <button
+          type="button"
+          className="button-muted"
+          disabled={data.unread === 0}
+          onClick={() => void markAllRead()}
+        >
+          Marcar todas como leídas
+        </button>
       </div>
 
       <div className="divide-y border-y bg-white/80">
@@ -172,6 +193,10 @@ export default function NotificationsPage() {
                 <p className="mt-1 text-sm">{item.mensaje}</p>
                 <p className="mt-2 text-xs text-stone-400">
                   {formatDateTime(item.fecha)} · {item.prioridad} · Oficina {item.oficina_id}
+                </p>
+                <p className="mt-1 text-xs text-stone-400">
+                  Responsable: {item.responsable_nombre || "Sin asignar"}
+                  {item.pospuesta_hasta ? ` · Pospuesta hasta ${formatDateTime(item.pospuesta_hasta)}` : ""}
                 </p>
               </Link>
               <Actions item={item} saving={saving === item.id} onAction={action} />

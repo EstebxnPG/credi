@@ -42,3 +42,7 @@ class Credito(Base, TimestampMixin, SoftDeleteMixin):
     historial: Mapped[list["HistorialCredito"]] = relationship(back_populates="credito")
     refinanciaciones: Mapped[list["Refinanciacion"]] = relationship(back_populates="credito")
     credito_refinanciado: Mapped["Credito | None"] = relationship(remote_side=[id])
+
+    @property
+    def asesor_nombre(self) -> str | None:
+        return self.asesor.nombre if self.asesor else None

@@ -141,3 +141,9 @@ class PensionadoRead(PensionadoBase):
     is_active: bool
 
     model_config = {"from_attributes": True}  # permite leer desde modelo SQLAlchemy
+
+
+class PensionadoLookup(BaseModel):
+    exists: bool
+    linked_to_current_office: bool = False
+    pensionado: Optional[PensionadoRead] = None

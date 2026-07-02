@@ -1,5 +1,6 @@
 from datetime import date
-from sqlalchemy import String, Date, ForeignKey
+from datetime import datetime
+from sqlalchemy import String, Date, DateTime, ForeignKey, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.mixins import TimestampMixin, SoftDeleteMixin
@@ -23,6 +24,7 @@ class Pensionado(Base, TimestampMixin, SoftDeleteMixin):
     direccion: Mapped[str] = mapped_column(String(200), nullable=False)
     creditos: Mapped[list["Credito"]] = relationship(back_populates="pensionado")
     seguimientos: Mapped[list["Seguimiento"]] = relationship(back_populates="pensionado")
+    oficinas_vinculadas: Mapped[list["PensionadoOficina"]] = relationship(back_populates="pensionado")
     creador: Mapped["Usuario | None"] = relationship(foreign_keys=[created_by])
 
     @property
@@ -34,3 +36,20 @@ class Pensionado(Base, TimestampMixin, SoftDeleteMixin):
     @property
     def creador_nombre(self) -> str | None:
         return self.creador.nombre if self.creador else None
+
+
+class PensionadoOficina(Base, TimestampMixin, SoftDeleteMixin):
+    __tablename__ = "pensionado_oficinas"
+    __table_args__ = (
+        UniqueConstraint("pensionado_id", "oficina_id", name="uq_pensionado_oficina"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    pensionado_id: Mapped[int] = mapped_column(ForeignKey("pensionados.id"), nullable=False, index=True)
+    oficina_id: Mapped[int] = mapped_column(ForeignKey("oficinas.id"), nullable=False, index=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    vinculada_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+
+    pensionado: Mapped["Pensionado"] = relationship(back_populates="oficinas_vinculadas")
+    oficina: Mapped["Oficina"] = relationship(back_populates="pensionado_vinculos")
+    creador: Mapped["Usuario | None"] = relationship(foreign_keys=[created_by])

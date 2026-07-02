@@ -8,15 +8,17 @@ type Oficina = {
   id: number;
   nombre: string;
   direccion: string;
+  color: string;
   is_active: boolean;
 };
 
 type FormValues = {
   nombre: string;
   direccion: string;
+  color: string;
 };
 
-const emptyForm: FormValues = { nombre: "", direccion: "" };
+const emptyForm: FormValues = { nombre: "", direccion: "", color: "blue" };
 
 export default function OficinasPage() {
   const [items, setItems] = useState<Oficina[]>([]);
@@ -64,7 +66,7 @@ export default function OficinasPage() {
 
   function openEdit(item: Oficina) {
     setSelected(item);
-    setForm({ nombre: item.nombre, direccion: item.direccion });
+    setForm({ nombre: item.nombre, direccion: item.direccion, color: item.color ?? "blue" });
     setFormError(null);
     setModalMode("edit");
   }
@@ -87,13 +89,13 @@ export default function OficinasPage() {
       if (modalMode === "create") {
         const created = await apiFetch<Oficina>("/api/v1/oficinas/", {
           method: "POST",
-          body: JSON.stringify({ nombre: form.nombre.trim(), direccion: form.direccion.trim() }),
+          body: JSON.stringify({ nombre: form.nombre.trim(), direccion: form.direccion.trim(), color: form.color }),
         });
         setItems((current) => [created, ...current]);
       } else if (selected) {
         const updated = await apiFetch<Oficina>(`/api/v1/oficinas/${selected.id}`, {
           method: "PATCH",
-          body: JSON.stringify({ nombre: form.nombre.trim(), direccion: form.direccion.trim() }),
+          body: JSON.stringify({ nombre: form.nombre.trim(), direccion: form.direccion.trim(), color: form.color }),
         });
         setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       }
@@ -130,11 +132,12 @@ export default function OficinasPage() {
       {loading ? <StateMessage text="Cargando oficinas..." /> : null}
       {error ? <StateMessage tone="error" text={error} /> : null}
       {!loading && !error ? (
-        <CatalogTable headers={["Nombre", "Direccion", "Estado", "Acciones"]}>
+        <CatalogTable headers={["Nombre", "Direccion", "Color", "Estado", "Acciones"]}>
           {filtered.map((item) => (
-            <div key={item.id} className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1fr_1.4fr_0.7fr_120px] md:items-center md:py-3">
+            <div key={item.id} className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1fr_1.3fr_0.7fr_0.7fr_120px] md:items-center md:py-3">
               <p className="font-semibold text-stone-950">{item.nombre}</p>
               <p className="text-stone-700">{item.direccion}</p>
+              <OfficeColorBadge color={item.color} label={colorLabel(item.color)} />
               <StatusBadge active={item.is_active} />
               <Actions onEdit={() => openEdit(item)} onDelete={() => void handleDelete(item)} deleteDisabled={!item.is_active} />
             </div>
@@ -146,6 +149,7 @@ export default function OficinasPage() {
         <Modal title={modalMode === "create" ? "Crear oficina" : "Editar oficina"} error={formError} saving={saving} submitLabel={modalMode === "create" ? "Crear oficina" : "Guardar cambios"} onClose={closeModal} onSubmit={handleSubmit}>
           <Field label="Nombre" value={form.nombre} onChange={(value) => setForm({ ...form, nombre: value })} required />
           <Field label="Direccion" value={form.direccion} onChange={(value) => setForm({ ...form, direccion: value })} required />
+          <ColorSelect value={form.color} onChange={(value) => setForm({ ...form, color: value })} />
         </Modal>
       ) : null}
     </section>
@@ -173,7 +177,7 @@ function Header({ title, subtitle, query, queryPlaceholder, buttonLabel, onQuery
 function CatalogTable({ headers, children }: { headers: string[]; children: React.ReactNode }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-      <div className="hidden grid-cols-[1fr_1.4fr_0.7fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+      <div className="hidden grid-cols-[1fr_1.3fr_0.7fr_0.7fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
         {headers.map((header) => <span key={header} className={header === "Acciones" ? "text-right" : ""}>{header}</span>)}
       </div>
       <div className="divide-y divide-stone-800/10">{children}</div>
@@ -207,6 +211,40 @@ function Field({ label, value, onChange, type = "text", required = false }: { la
       <input className="input-base mt-2" type={type} value={value} onChange={(event) => onChange(event.target.value)} required={required} />
     </label>
   );
+}
+
+function ColorSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const options = [
+    { value: "blue", label: "Azul" },
+    { value: "red", label: "Rojo" },
+    { value: "teal", label: "Verde" },
+    { value: "amber", label: "Amarillo" },
+    { value: "stone", label: "Gris" },
+  ];
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>Color operativo</span>
+      <select className="input-base mt-2" value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <span className="mt-2 block"><OfficeColorBadge color={value} label={colorLabel(value)} /></span>
+    </label>
+  );
+}
+
+function OfficeColorBadge({ color, label }: { color: string; label: string }) {
+  const classes = {
+    blue: "border-blue-700/20 bg-blue-50 text-blue-800",
+    red: "border-red-500/20 bg-red-50 text-red-700",
+    teal: "border-teal-700/20 bg-teal-50 text-teal-800",
+    amber: "border-amber-700/20 bg-amber-50 text-amber-800",
+    stone: "border-stone-800/10 bg-stone-100 text-stone-700",
+  }[color] ?? "border-stone-800/10 bg-stone-100 text-stone-700";
+  return <span className={["inline-flex w-fit items-center justify-center rounded-full border px-2.5 py-1 text-xs font-semibold", classes].join(" ")}>{label}</span>;
+}
+
+function colorLabel(color: string) {
+  return ({ blue: "Azul", red: "Rojo", teal: "Verde", amber: "Amarillo", stone: "Gris" } as Record<string, string>)[color] ?? "Gris";
 }
 
 function Actions({ onEdit, onDelete, deleteDisabled }: { onEdit: () => void; onDelete: () => void; deleteDisabled?: boolean }) {

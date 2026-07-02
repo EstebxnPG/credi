@@ -20,6 +20,7 @@ type Credito = {
   is_active: boolean;
   pensionado_id: number;
   asesor_id: number;
+  asesor_nombre: string | null;
   oficina_id: number;
   cooperativa_id: number;
   credito_refinanciado_id: number | null;
@@ -103,6 +104,21 @@ type Pagaduria = {
   nombre: string;
 };
 
+type Oficina = {
+  id: number;
+  nombre: string;
+  color: string;
+};
+
+type Opportunity = {
+  credito_id: number;
+  estado_refinanciacion: string;
+  estado_comercial: string;
+  disponible_desde: string;
+  meses_transcurridos: number;
+  meses_requeridos: number;
+};
+
 type EditForm = {
   cooperativa_id: string;
   pagaduria_id: string;
@@ -145,8 +161,9 @@ const transitionsByStatus: Record<string, string[]> = {
   "Enviado a cooperativa": ["Devuelto por correccion", "Aprobado", "Rechazado"],
   "Devuelto por correccion": ["Reenviado"],
   Reenviado: ["Devuelto por correccion", "Aprobado", "Rechazado"],
-  Aprobado: [],
+  Aprobado: ["Finalizado"],
   Rechazado: [],
+  Finalizado: [],
 };
 
 export default function CreditoDetailPage() {
@@ -159,7 +176,9 @@ export default function CreditoDetailPage() {
   const [pendientes, setPendientes] = useState<PendienteCredito[]>([]);
   const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
   const [pagadurias, setPagadurias] = useState<Pagaduria[]>([]);
+  const [oficinas, setOficinas] = useState<Oficina[]>([]);
   const [creditosPensionado, setCreditosPensionado] = useState<Credito[]>([]);
+  const [refinanceOpportunity, setRefinanceOpportunity] = useState<Opportunity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendienteForm, setPendienteForm] = useState<PendienteForm>(emptyPendienteForm);
@@ -199,6 +218,8 @@ export default function CreditoDetailPage() {
           pendientesData,
           cooperativasData,
           pagaduriasData,
+          oficinasData,
+          opportunitiesData,
         ] = await Promise.all([
           apiFetch<Credito>(`/api/v1/creditos/${creditoId}`),
           apiFetch<HistorialCredito[]>(`/api/v1/creditos/${creditoId}/historial`),
@@ -206,6 +227,8 @@ export default function CreditoDetailPage() {
           apiFetch<PendienteCredito[]>(`/api/v1/pendientes-credito/?credito_id=${creditoId}`),
           apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
           apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
+          apiFetch<Oficina[]>("/api/v1/oficinas/"),
+          apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/"),
         ]);
         const [pensionadoData, creditosPensionadoData] = await Promise.all([
           apiFetch<Pensionado>(`/api/v1/pensionados/${creditoData.pensionado_id}`),
@@ -222,7 +245,11 @@ export default function CreditoDetailPage() {
           setPendientes(pendientesData);
           setCooperativas(cooperativasData);
           setPagadurias(pagaduriasData);
+          setOficinas(oficinasData);
           setCreditosPensionado(creditosPensionadoData);
+          setRefinanceOpportunity(
+            opportunitiesData.find((item) => item.credito_id === creditoData.id) ?? null,
+          );
         }
       } catch (loadError) {
         if (!ignore) {
@@ -527,6 +554,8 @@ export default function CreditoDetailPage() {
 
   const availableTransitions = getAvailableTransitions(credito.estado);
   const cooperativaActual = cooperativas.find((item) => item.id === credito.cooperativa_id);
+  const oficinaActual = oficinas.find((item) => item.id === credito.oficina_id);
+  const canRefinance = isReadyToRefinance(refinanceOpportunity);
 
   return (
     <section className="space-y-4">
@@ -544,6 +573,15 @@ export default function CreditoDetailPage() {
             </h1>
             <p className="mt-2 text-sm text-stone-600">
               Estado actual: <span className="font-semibold">{credito.estado}</span>
+            </p>
+            <div className="mt-2">
+              <OfficeBadge oficina={oficinaActual} />
+            </div>
+            <p className="mt-2 text-sm text-stone-700">
+              Responsable del credito:{" "}
+              <span className="font-semibold text-stone-950">
+                {credito.asesor_nombre ?? `Asesor #${credito.asesor_id}`}
+              </span>
             </p>
             <p className="mt-2 text-sm text-stone-700">
               {pensionado ? (
@@ -566,12 +604,28 @@ export default function CreditoDetailPage() {
             <div className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm text-stone-700">
               Registrado {formatDate(credito.fecha_registro)}
             </div>
+            {canRefinance ? (
+              <Link
+                href={`/creditos?refinanciar=${credito.id}`}
+                className="button-primary whitespace-nowrap text-center"
+              >
+                Refinanciar
+              </Link>
+            ) : refinanceOpportunity ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                Refinanciacion {refinanceOpportunity.estado_refinanciacion.toLowerCase()}
+              </div>
+            ) : null}
             <button
               type="button"
               className="button-primary whitespace-nowrap"
               onClick={openEditModal}
-              disabled={!credito.is_active}
-              title={credito.is_active ? "Editar credito" : "Este credito no se puede editar"}
+              disabled={!credito.is_active || !isCreditoEditable(credito)}
+              title={
+                credito.is_active && isCreditoEditable(credito)
+                  ? "Editar credito"
+                  : "Solo se pueden editar creditos que no esten aprobados, finalizados o rechazados"
+              }
             >
               Editar
             </button>
@@ -588,6 +642,8 @@ export default function CreditoDetailPage() {
               <Detail label="Documento" value={pensionado.documento} />
               <Detail label="Telefono" value={pensionado.celular ?? pensionado.telefono} />
               <Detail label="Correo" value={pensionado.correo ?? "Sin correo"} />
+              <Detail label="Oficina del credito" value={oficinaActual?.nombre ?? `Oficina #${credito.oficina_id}`} />
+              <Detail label="Responsable del credito" value={credito.asesor_nombre ?? `Asesor #${credito.asesor_id}`} />
             </div>
           ) : (
             <p className="mt-4 text-sm text-stone-500">No se pudo cargar el pensionado.</p>
@@ -621,6 +677,10 @@ export default function CreditoDetailPage() {
                         value === "Aprobado"
                           ? String(credito.monto_solicitado)
                           : current.monto_aprobado,
+                      fecha_fin_estimada:
+                        value === "Aprobado" && current.fecha_desembolso
+                          ? addMonthsToIsoDate(current.fecha_desembolso, credito.plazo)
+                          : current.fecha_fin_estimada,
                     }))
                   }
                   options={availableTransitions.map((estado) => ({ value: estado, label: estado }))}
@@ -641,13 +701,35 @@ export default function CreditoDetailPage() {
               {estadoForm.estado_nuevo === "Aprobado" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <MoneyField label="Valor cuota" value={estadoForm.valor_cuota} onChange={(value) => setEstadoForm((current) => ({ ...current, valor_cuota: value }))} />
-                  <Field label="Fecha desembolso" type="date" value={estadoForm.fecha_desembolso} onChange={(value) => setEstadoForm((current) => ({ ...current, fecha_desembolso: value }))} />
-                  <Field label="Fecha fin estimada" type="date" value={estadoForm.fecha_fin_estimada} onChange={(value) => setEstadoForm((current) => ({ ...current, fecha_fin_estimada: value }))} />
+                  <Field
+                    label="Fecha desembolso"
+                    type="date"
+                    value={estadoForm.fecha_desembolso}
+                    onChange={(value) =>
+                      setEstadoForm((current) => ({
+                        ...current,
+                        fecha_desembolso: value,
+                        fecha_fin_estimada: value
+                          ? addMonthsToIsoDate(value, credito.plazo)
+                          : "",
+                      }))
+                    }
+                    required
+                  />
+                  <Field
+                    label="Fecha fin estimada"
+                    type="date"
+                    value={estadoForm.fecha_fin_estimada}
+                    onChange={(value) =>
+                      setEstadoForm((current) => ({ ...current, fecha_fin_estimada: value }))
+                    }
+                    required
+                  />
                 </div>
               ) : null}
 
               <TextareaField
-                label="Observacion"
+                label="Observación del cambio de estado"
                 value={estadoForm.observaciones}
                 onChange={(value) =>
                   setEstadoForm((current) => ({ ...current, observaciones: value }))
@@ -873,10 +955,17 @@ export default function CreditoDetailPage() {
                 </p>
                 <p className="text-xs text-stone-500">{formatDateTime(item.created_at)}</p>
               </div>
-              <p className="mt-2 text-stone-600">
-                {item.observacion ?? "Sin observacion"}{" "}
-                {item.usuario_nombre ? `por ${item.usuario_nombre}` : ""}
-              </p>
+              <div className="mt-3 rounded-xl border border-stone-800/10 bg-stone-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
+                  Observación del cambio de estado
+                </p>
+                <p className="mt-2 text-stone-700">
+                  {item.observacion?.trim() ? item.observacion : "Sin observación registrada"}
+                </p>
+                {item.usuario_nombre ? (
+                  <p className="mt-2 text-xs text-stone-500">Registrado por {item.usuario_nombre}</p>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
@@ -1039,7 +1128,7 @@ function EditCreditoModal({
         </div>
 
         <p className="mt-4 text-xs text-stone-500">
-          Solo se pueden editar creditos en Prospecto o Devuelto por correccion.
+          Puedes editar creditos mientras no esten aprobados, finalizados o rechazados.
         </p>
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -1216,6 +1305,28 @@ function getAvailableTransitions(estado: string) {
   return transitionsByStatus[normalizeStatus(estado)] ?? [];
 }
 
+function isCreditoEditable(credito: Credito) {
+  return !["aprobado", "finalizado", "rechazado"].includes(
+    normalizeStatus(credito.estado).toLowerCase(),
+  );
+}
+
+function isReadyToRefinance(opportunity: Opportunity | null) {
+  return (
+    opportunity?.estado_refinanciacion === "Listo" &&
+    !["rechazado", "convertido"].includes(opportunity.estado_comercial)
+  );
+}
+
+function addMonthsToIsoDate(value: string, months: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + months, day));
+  if (date.getUTCDate() !== day) {
+    date.setUTCDate(0);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 function toApiStatus(estado: string) {
   if (estado === "Devuelto por correccion") {
     return "Devuelto por corrección";
@@ -1242,5 +1353,21 @@ function StateMessage({
     >
       {text}
     </div>
+  );
+}
+
+function OfficeBadge({ oficina }: { oficina?: Oficina }) {
+  const color = oficina?.color ?? "stone";
+  const classes = {
+    blue: "border-blue-700/20 bg-blue-50 text-blue-800",
+    red: "border-red-500/20 bg-red-50 text-red-700",
+    teal: "border-teal-700/20 bg-teal-50 text-teal-800",
+    amber: "border-amber-700/20 bg-amber-50 text-amber-800",
+    stone: "border-stone-800/10 bg-stone-100 text-stone-700",
+  }[color] ?? "border-stone-800/10 bg-stone-100 text-stone-700";
+  return (
+    <span className={["inline-flex w-fit items-center justify-center rounded-full border px-2.5 py-1 text-xs font-semibold", classes].join(" ")}>
+      {oficina?.nombre ?? "Sin oficina"}
+    </span>
   );
 }

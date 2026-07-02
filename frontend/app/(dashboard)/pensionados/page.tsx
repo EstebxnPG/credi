@@ -94,7 +94,14 @@ type Usuario = {
 type Oficina = {
   id: number;
   nombre: string;
+  color: string;
   is_active: boolean;
+};
+
+type PensionadoLookup = {
+  exists: boolean;
+  linked_to_current_office: boolean;
+  pensionado: Pensionado | null;
 };
 
 type CreditoFormValues = {
@@ -161,6 +168,7 @@ export default function PensionadosPage() {
   const [pagadurias, setPagadurias] = useState<Pagaduria[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [oficinas, setOficinas] = useState<Oficina[]>([]);
+  const [lookup, setLookup] = useState<PensionadoLookup | null>(null);
 
   async function loadPensionados() {
     setLoading(true);
@@ -262,12 +270,14 @@ export default function PensionadosPage() {
 
     setSelected(null);
     setForm(emptyForm);
+    setLookup(null);
     setCreditoForm({
       ...emptyCreditoForm,
       asesor_id: defaultAsesor?.id ? String(defaultAsesor.id) : userId ? String(userId) : "",
       oficina_id: defaultOficinaId ? String(defaultOficinaId) : "",
     });
     setFormError(null);
+    setLookup(null);
     setModalMode("create");
   }
 
@@ -297,6 +307,7 @@ export default function PensionadosPage() {
     setModalMode(null);
     setSelected(null);
     setForm(emptyForm);
+    setLookup(null);
     setCreditoForm(emptyCreditoForm);
     setFormError(null);
   }
@@ -327,6 +338,27 @@ export default function PensionadosPage() {
           return;
         }
 
+        if (lookup?.exists && lookup.pensionado && !lookup.linked_to_current_office) {
+          const linked = await apiFetch<Pensionado>(
+            `/api/v1/pensionados/${lookup.pensionado.id}/vincular-mi-oficina`,
+            { method: "POST" },
+          );
+          setPensionados((current) => [linked, ...current]);
+
+          if (creditoForm.enabled) {
+            await createCredito(linked.id, creditoForm);
+          }
+
+          closeModal();
+          return;
+        }
+
+        if (lookup?.exists && lookup.pensionado && lookup.linked_to_current_office) {
+          setFormError("Este pensionado ya esta vinculado a tu oficina. Abre su ficha para trabajar con el.");
+          setSaving(false);
+          return;
+        }
+
         const payload: PensionadoCreatePayload = {
           nombre: form.nombre.trim(),
           segundo_nombre: nullableText(form.segundo_nombre),
@@ -348,29 +380,7 @@ export default function PensionadosPage() {
         setPensionados((current) => [created, ...current]);
 
         if (creditoForm.enabled) {
-          await apiFetch("/api/v1/creditos/", {
-            method: "POST",
-            body: JSON.stringify({
-              pensionado_id: created.id,
-              asesor_id: Number(creditoForm.asesor_id),
-              oficina_id: Number(creditoForm.oficina_id),
-              cooperativa_id: Number(creditoForm.cooperativa_id),
-              pagaduria_id: Number(creditoForm.pagaduria_id),
-              monto_solicitado: parseMoneyInput(creditoForm.monto_solicitado),
-              plazo: Number(creditoForm.plazo),
-              nro_libranza: nullableText(creditoForm.nro_libranza),
-              tipo_credito: creditoForm.tipo_credito,
-              entidad_financiera_origen:
-                creditoForm.tipo_credito === "Compra de cartera"
-                  ? nullableText(creditoForm.entidad_financiera_origen)
-                  : null,
-              observaciones: nullableText(creditoForm.observaciones),
-              tiene_documentos_pendientes: creditoForm.tiene_documentos_pendientes,
-              documentos_pendientes: creditoForm.tiene_documentos_pendientes
-                ? nullableText(creditoForm.documentos_pendientes)
-                : null,
-            }),
-          });
+          await createCredito(created.id, creditoForm);
         }
       } else if (selected) {
         const payload: Partial<PensionadoUpdatePayload> = {
@@ -563,6 +573,8 @@ export default function PensionadosPage() {
           onCreditoChange={setCreditoForm}
           onClose={closeModal}
           onSubmit={handleSubmit}
+          lookup={lookup}
+          onLookup={setLookup}
         />
       ) : null}
     </section>
@@ -584,6 +596,8 @@ function PensionadoModal({
   onCreditoChange,
   onClose,
   onSubmit,
+  lookup,
+  onLookup,
 }: {
   mode: FormMode;
   form: FormValues;
@@ -599,6 +613,8 @@ function PensionadoModal({
   onCreditoChange: (form: CreditoFormValues) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  lookup: PensionadoLookup | null;
+  onLookup: (lookup: PensionadoLookup | null) => void;
 }) {
   const isEdit = mode === "edit";
   const selectedAsesor = asesores.find((asesor) => String(asesor.id) === creditoForm.asesor_id);
@@ -606,6 +622,19 @@ function PensionadoModal({
 
   function updateField(field: keyof FormValues, value: string) {
     onChange({ ...form, [field]: value });
+    if (field === "documento") {
+      onLookup(null);
+    }
+  }
+
+  async function checkDocumento() {
+    const documento = form.documento.trim();
+    if (isEdit || documento.length < 6) return;
+    try {
+      onLookup(await apiFetch<PensionadoLookup>(`/api/v1/pensionados/buscar/documento/${documento}`));
+    } catch {
+      onLookup(null);
+    }
   }
 
   function updateCreditoField(field: keyof CreditoFormValues, value: string | boolean) {
@@ -684,6 +713,7 @@ function PensionadoModal({
             required
             disabled={isEdit}
             inputMode="numeric"
+            onBlur={checkDocumento}
           />
           <Field
             label="Fecha de nacimiento"
@@ -720,6 +750,20 @@ function PensionadoModal({
             />
           </div>
         </div>
+
+        {!isEdit && lookup?.exists && lookup.pensionado ? (
+          <div className="mt-4 rounded-xl border border-blue-700/20 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            <p className="font-semibold">Este pensionado ya existe en el sistema.</p>
+            <p className="mt-1">
+              {lookup.pensionado.nombre_completo} - CC {lookup.pensionado.documento}
+            </p>
+            <p className="mt-2 text-xs text-blue-800">
+              {lookup.linked_to_current_office
+                ? "Ya esta vinculado a tu oficina. No se debe crear duplicado."
+                : "Al guardar, se vinculara directamente a tu oficina y podras trabajar con sus creditos aqui."}
+            </p>
+          </div>
+        ) : null}
 
         {isEdit ? (
           <p className="mt-4 text-xs text-stone-500">
@@ -880,6 +924,10 @@ function PensionadoModal({
               ? "Guardando..."
               : isEdit
                 ? "Guardar cambios"
+                : lookup?.exists && !lookup.linked_to_current_office
+                  ? creditoForm.enabled
+                    ? "Vincular y crear credito"
+                    : "Vincular a mi oficina"
                 : creditoForm.enabled
                   ? "Crear pensionado y credito"
                   : "Crear pensionado"}
@@ -898,6 +946,7 @@ function Field({
   required = false,
   disabled = false,
   inputMode,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -906,6 +955,7 @@ function Field({
   required?: boolean;
   disabled?: boolean;
   inputMode?: "numeric" | "tel";
+  onBlur?: () => void;
 }) {
   return (
     <label className="block text-sm font-medium text-stone-700">
@@ -915,12 +965,39 @@ function Field({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         required={required}
         disabled={disabled}
         inputMode={inputMode}
       />
     </label>
   );
+}
+
+async function createCredito(pensionadoId: number, creditoForm: CreditoFormValues) {
+  await apiFetch("/api/v1/creditos/", {
+    method: "POST",
+    body: JSON.stringify({
+      pensionado_id: pensionadoId,
+      asesor_id: Number(creditoForm.asesor_id),
+      oficina_id: Number(creditoForm.oficina_id),
+      cooperativa_id: Number(creditoForm.cooperativa_id),
+      pagaduria_id: Number(creditoForm.pagaduria_id),
+      monto_solicitado: parseMoneyInput(creditoForm.monto_solicitado),
+      plazo: Number(creditoForm.plazo),
+      nro_libranza: nullableText(creditoForm.nro_libranza),
+      tipo_credito: creditoForm.tipo_credito,
+      entidad_financiera_origen:
+        creditoForm.tipo_credito === "Compra de cartera"
+          ? nullableText(creditoForm.entidad_financiera_origen)
+          : null,
+      observaciones: nullableText(creditoForm.observaciones),
+      tiene_documentos_pendientes: creditoForm.tiene_documentos_pendientes,
+      documentos_pendientes: creditoForm.tiene_documentos_pendientes
+        ? nullableText(creditoForm.documentos_pendientes)
+        : null,
+    }),
+  });
 }
 
 function MoneyField({

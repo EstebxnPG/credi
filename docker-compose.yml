@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -31,8 +31,8 @@ services:
     volumes:
       - minio_data:/data
     ports:
-      - "9000:9000"   # API S3
-      - "9001:9001"   # Consola web
+      - "127.0.0.1:9000:9000"   # API S3
+      - "127.0.0.1:9001:9001"   # Consola web
 
   backend:
     build: ./backend
@@ -42,7 +42,7 @@ services:
     volumes:
       - ./backend/data/uploads:/app/data/uploads
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -67,11 +67,97 @@ services:
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - backend
+
+  superset_db:
+    image: postgres:16-alpine
+    container_name: credi_superset_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SUPERSET_DB_USER:?SUPERSET_DB_USER is required}
+      POSTGRES_PASSWORD: ${SUPERSET_DB_PASSWORD:?SUPERSET_DB_PASSWORD is required}
+      POSTGRES_DB: ${SUPERSET_DB_NAME:?SUPERSET_DB_NAME is required}
+    volumes:
+      - superset_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SUPERSET_DB_USER:?SUPERSET_DB_USER is required} -d ${SUPERSET_DB_NAME:?SUPERSET_DB_NAME is required}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  superset_init:
+    build:
+      context: ./docker/superset
+      args:
+        SUPERSET_IMAGE: ${SUPERSET_IMAGE:?SUPERSET_IMAGE is required}
+    container_name: credi_superset_init
+    env_file: .env
+    environment:
+      PYTHONPATH: /app/pythonpath
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:?SUPERSET_SECRET_KEY is required}
+      SUPERSET_DB_USER: ${SUPERSET_DB_USER:?SUPERSET_DB_USER is required}
+      SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:?SUPERSET_DB_PASSWORD is required}
+      SUPERSET_DB_HOST: superset_db
+      SUPERSET_DB_PORT: 5432
+      SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:?SUPERSET_DB_NAME is required}
+      SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:?SUPERSET_ADMIN_USERNAME is required}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:?SUPERSET_ADMIN_PASSWORD is required}
+      SUPERSET_ADMIN_FIRSTNAME: ${SUPERSET_ADMIN_FIRSTNAME:?SUPERSET_ADMIN_FIRSTNAME is required}
+      SUPERSET_ADMIN_LASTNAME: ${SUPERSET_ADMIN_LASTNAME:?SUPERSET_ADMIN_LASTNAME is required}
+      SUPERSET_ADMIN_EMAIL: ${SUPERSET_ADMIN_EMAIL:?SUPERSET_ADMIN_EMAIL is required}
+    volumes:
+      - ./docker/superset:/app/pythonpath:ro
+      - superset_home:/app/superset_home
+    command:
+      - /bin/sh
+      - -c
+      - |
+        superset db upgrade &&
+        superset fab create-admin \
+          --username "$$SUPERSET_ADMIN_USERNAME" \
+          --firstname "$$SUPERSET_ADMIN_FIRSTNAME" \
+          --lastname "$$SUPERSET_ADMIN_LASTNAME" \
+          --email "$$SUPERSET_ADMIN_EMAIL" \
+          --password "$$SUPERSET_ADMIN_PASSWORD" || true &&
+        superset init
+    depends_on:
+      superset_db:
+        condition: service_healthy
+
+  superset:
+    build:
+      context: ./docker/superset
+      args:
+        SUPERSET_IMAGE: ${SUPERSET_IMAGE:?SUPERSET_IMAGE is required}
+    container_name: credi_superset
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PYTHONPATH: /app/pythonpath
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:?SUPERSET_SECRET_KEY is required}
+      SUPERSET_DB_USER: ${SUPERSET_DB_USER:?SUPERSET_DB_USER is required}
+      SUPERSET_DB_PASSWORD: ${SUPERSET_DB_PASSWORD:?SUPERSET_DB_PASSWORD is required}
+      SUPERSET_DB_HOST: superset_db
+      SUPERSET_DB_PORT: 5432
+      SUPERSET_DB_NAME: ${SUPERSET_DB_NAME:?SUPERSET_DB_NAME is required}
+    volumes:
+      - ./docker/superset:/app/pythonpath:ro
+      - superset_home:/app/superset_home
+    ports:
+      - "127.0.0.1:8088:8088"
+    depends_on:
+      superset_db:
+        condition: service_healthy
+      superset_init:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
   minio_data:
   frontend_next:
+  superset_postgres_data:
+  superset_home:

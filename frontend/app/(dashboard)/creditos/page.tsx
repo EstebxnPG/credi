@@ -83,7 +83,14 @@ type Usuario = {
 type Oficina = {
   id: number;
   nombre: string;
+  color: string;
   is_active: boolean;
+};
+
+type Opportunity = {
+  credito_id: number;
+  estado_refinanciacion: string;
+  estado_comercial: string;
 };
 
 type FormValues = {
@@ -122,6 +129,22 @@ const emptyForm: FormValues = {
 
 type FormMode = "create" | "edit";
 
+type FilterValues = {
+  estado: string;
+  plazoMin: string;
+  plazoMax: string;
+  pendientes: string;
+  refinanciacion: string;
+};
+
+const emptyFilters: FilterValues = {
+  estado: "",
+  plazoMin: "",
+  plazoMax: "",
+  pendientes: "",
+  refinanciacion: "",
+};
+
 export default function CreditosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -133,7 +156,9 @@ export default function CreditosPage() {
   const [pagadurias, setPagadurias] = useState<Pagaduria[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [oficinas, setOficinas] = useState<Oficina[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<FilterValues>(emptyFilters);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -142,6 +167,8 @@ export default function CreditosPage() {
   const [modalMode, setModalMode] = useState<FormMode | null>(null);
   const [selected, setSelected] = useState<Credito | null>(null);
   const [form, setForm] = useState<FormValues>(emptyForm);
+  const session = readSession();
+  const canDelete = session?.rol === "administrador";
 
   async function loadData() {
     setLoading(true);
@@ -157,6 +184,7 @@ export default function CreditosPage() {
         cooperativasData,
         pagaduriasData,
         oficinasData,
+        opportunitiesData,
       ] =
         await Promise.all([
         apiFetch<Credito[]>("/api/v1/creditos/"),
@@ -165,6 +193,7 @@ export default function CreditosPage() {
         apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
         apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
         apiFetch<Oficina[]>("/api/v1/oficinas/"),
+        apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/"),
       ]);
 
       let usuariosData: Usuario[] = [];
@@ -188,6 +217,7 @@ export default function CreditosPage() {
       setCooperativas(cooperativasData);
       setPagadurias(pagaduriasData);
       setOficinas(oficinasData);
+      setOpportunities(opportunitiesData);
       setUsuarios(usuariosData);
     } catch (loadError) {
       setError(
@@ -225,6 +255,10 @@ export default function CreditosPage() {
     return new Map(oficinas.map((oficina) => [oficina.id, oficina]));
   }, [oficinas]);
 
+  const opportunityByCreditoId = useMemo(() => {
+    return new Map(opportunities.map((opportunity) => [opportunity.credito_id, opportunity]));
+  }, [opportunities]);
+
   const asesores = useMemo(() => {
     return usuarios.filter(
       (usuario) =>
@@ -234,12 +268,48 @@ export default function CreditosPage() {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) {
-      return creditos;
-    }
+    const plazoMin = filters.plazoMin ? Number(filters.plazoMin) : null;
+    const plazoMax = filters.plazoMax ? Number(filters.plazoMax) : null;
 
     return creditos.filter((credito) => {
       const pensionado = pensionadoById.get(credito.pensionado_id);
+      const pendientesAbiertos = pendientesByCreditoId.get(credito.id) ?? [];
+      const oportunidad = opportunityByCreditoId.get(credito.id);
+
+      if (filters.estado && credito.estado !== filters.estado) {
+        return false;
+      }
+      if (plazoMin !== null && Number.isFinite(plazoMin) && credito.plazo < plazoMin) {
+        return false;
+      }
+      if (plazoMax !== null && Number.isFinite(plazoMax) && credito.plazo > plazoMax) {
+        return false;
+      }
+      if (filters.pendientes === "con" && pendientesAbiertos.length === 0) {
+        return false;
+      }
+      if (filters.pendientes === "sin" && pendientesAbiertos.length > 0) {
+        return false;
+      }
+      if (
+        filters.refinanciacion === "listos" &&
+        !(
+          oportunidad?.estado_refinanciacion === "Listo" &&
+          !["rechazado", "convertido"].includes(oportunidad.estado_comercial)
+        )
+      ) {
+        return false;
+      }
+      if (filters.refinanciacion === "programados" && oportunidad?.estado_refinanciacion !== "Programado") {
+        return false;
+      }
+      if (filters.refinanciacion === "sin" && oportunidad) {
+        return false;
+      }
+
+      if (!term) {
+        return true;
+      }
 
       return [
         credito.id,
@@ -255,7 +325,11 @@ export default function CreditosPage() {
         .filter((value) => value !== null && value !== undefined)
         .some((value) => String(value).toLowerCase().includes(term));
     });
-  }, [creditos, pensionadoById, query]);
+  }, [creditos, filters, opportunityByCreditoId, pendientesByCreditoId, pensionadoById, query]);
+
+  const estadosDisponibles = useMemo(() => {
+    return Array.from(new Set(creditos.map((credito) => credito.estado))).sort();
+  }, [creditos]);
 
   function openCreateModal() {
     const session = readSession();
@@ -278,7 +352,9 @@ export default function CreditosPage() {
   useEffect(() => {
     const sourceId = Number(searchParams.get("refinanciar"));
     if (loading || !sourceId || refinanceOpened.current) return;
-    const source = creditos.find((item) => item.id === sourceId && item.estado === "Aprobado");
+    const source = creditos.find(
+      (item) => item.id === sourceId && isCreditoRefinanciable(item),
+    );
     if (!source) return;
     refinanceOpened.current = true;
     setSelected(null);
@@ -485,14 +561,67 @@ export default function CreditosPage() {
         </div>
       </article>
 
+      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-4 shadow-lg shadow-stone-900/5">
+        <div className="grid gap-3 md:grid-cols-[1fr_0.8fr_0.8fr_1fr_1fr_auto] md:items-end">
+          <SelectField
+            label="Estado"
+            value={filters.estado}
+            onChange={(value) => setFilters((current) => ({ ...current, estado: value }))}
+            options={estadosDisponibles.map((estado) => ({ value: estado, label: estado }))}
+          />
+          <Field
+            label="Plazo min."
+            type="number"
+            value={filters.plazoMin}
+            onChange={(value) => setFilters((current) => ({ ...current, plazoMin: value }))}
+          />
+          <Field
+            label="Plazo max."
+            type="number"
+            value={filters.plazoMax}
+            onChange={(value) => setFilters((current) => ({ ...current, plazoMax: value }))}
+          />
+          <SelectField
+            label="Pendientes"
+            value={filters.pendientes}
+            onChange={(value) => setFilters((current) => ({ ...current, pendientes: value }))}
+            options={[
+              { value: "con", label: "Con pendientes" },
+              { value: "sin", label: "Sin pendientes" },
+            ]}
+          />
+          <SelectField
+            label="Refinanciacion"
+            value={filters.refinanciacion}
+            onChange={(value) => setFilters((current) => ({ ...current, refinanciacion: value }))}
+            options={[
+              { value: "listos", label: "Listos para refinanciar" },
+              { value: "programados", label: "Programados" },
+              { value: "sin", label: "Sin oportunidad" },
+            ]}
+          />
+          <button
+            type="button"
+            className="button-muted whitespace-nowrap px-4 py-3 text-sm"
+            onClick={() => setFilters(emptyFilters)}
+          >
+            Limpiar filtros
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-stone-500">
+          Mostrando {filtered.length} de {creditos.length} creditos.
+        </p>
+      </article>
+
       {loading ? <StateMessage text="Cargando creditos..." /> : null}
       {error ? <StateMessage tone="error" text={error} /> : null}
 
       {!loading && !error ? (
         <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[0.7fr_1.15fr_1fr_1fr_0.75fr_0.95fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+          <div className="hidden grid-cols-[0.6fr_1.1fr_0.9fr_0.9fr_1fr_0.65fr_0.9fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
             <span>Credito</span>
             <span>Pensionado</span>
+            <span>Oficina</span>
             <span>Estado</span>
             <span>Solicitado</span>
             <span>Plazo</span>
@@ -504,6 +633,7 @@ export default function CreditosPage() {
             {filtered.map((credito) => {
               const pensionado = pensionadoById.get(credito.pensionado_id);
               const pendientesAbiertos = pendientesByCreditoId.get(credito.id) ?? [];
+              const oficina = oficinaById.get(credito.oficina_id);
 
               return (
                 <div
@@ -512,7 +642,7 @@ export default function CreditosPage() {
                   tabIndex={0}
                   onClick={() => openDetail(credito.id)}
                   onKeyDown={(event) => handleRowKeyDown(event, credito.id)}
-                  className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.7fr_1.15fr_1fr_1fr_0.75fr_0.95fr_120px] md:items-center md:py-3"
+                  className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.6fr_1.1fr_0.9fr_0.9fr_1fr_0.65fr_0.9fr_120px] md:items-center md:py-3"
                 >
                   <div className="min-w-0">
                     <p className="font-semibold text-stone-950">#{credito.id}</p>
@@ -529,6 +659,9 @@ export default function CreditosPage() {
                     </p>
                   </div>
                   <span>
+                    <OfficeBadge oficina={oficina} />
+                  </span>
+                  <span>
                     <CreditoStatusBadge estado={credito.estado} />
                   </span>
                   <span className="font-medium text-stone-800">
@@ -540,6 +673,7 @@ export default function CreditosPage() {
                     <PendingSummary
                       pendientes={pendientesAbiertos}
                     />
+                    <RefinanceSummary opportunity={opportunityByCreditoId.get(credito.id)} />
                   </span>
                   <div className="flex items-center gap-2 md:justify-end">
                     <ActionLink href={`/creditos/${credito.id}`} label="Ver">
@@ -547,7 +681,7 @@ export default function CreditosPage() {
                     </ActionLink>
                     <ActionButton
                       label="Editar"
-                      disabled={!credito.is_active}
+                      disabled={!credito.is_active || !isCreditoEditable(credito)}
                       onClick={() => openEditModal(credito)}
                     >
                       <EditIcon />
@@ -555,7 +689,7 @@ export default function CreditosPage() {
                     <ActionButton
                       label="Eliminar"
                       tone="danger"
-                      disabled={deletingId === credito.id}
+                      disabled={deletingId === credito.id || !canDelete}
                       onClick={() => void handleDelete(credito)}
                     >
                       <TrashIcon />
@@ -635,7 +769,7 @@ function CreditoModal({
   const selectedCooperativa = cooperativaById.get(Number(form.cooperativa_id));
   const creditosRefinanciables = creditos.filter(
     (item) =>
-      item.estado === "Aprobado" &&
+      isCreditoRefinanciable(item) &&
       String(item.pensionado_id) === form.pensionado_id &&
       item.id !== credito?.id,
   );
@@ -844,8 +978,8 @@ function CreditoModal({
 
         {!isCreate ? (
           <p className="mt-4 text-xs text-stone-500">
-            Solo se pueden editar creditos en Prospecto o Devuelto por correccion. Los cambios de
-            estado se gestionan desde la ficha del credito.
+            Puedes editar creditos mientras no esten aprobados, finalizados o rechazados. Los
+            cambios de estado se gestionan desde la ficha del credito.
           </p>
         ) : null}
 
@@ -877,6 +1011,20 @@ function PendingSummary({
         {pendientes.length} pendiente{pendientes.length === 1 ? "" : "s"} operativo
         {pendientes.length === 1 ? "" : "s"}
       </span>
+    </span>
+  );
+}
+
+function RefinanceSummary({ opportunity }: { opportunity?: Opportunity }) {
+  if (!opportunity) {
+    return null;
+  }
+  const ready =
+    opportunity.estado_refinanciacion === "Listo" &&
+    !["rechazado", "convertido"].includes(opportunity.estado_comercial);
+  return (
+    <span className={["mt-1 block text-xs font-medium", ready ? "text-teal-700" : "text-stone-500"].join(" ")}>
+      {ready ? "Listo para refinanciar" : "Refinanciacion programada"}
     </span>
   );
 }
@@ -1163,8 +1311,28 @@ function CreditoStatusBadge({ estado }: { estado: string }) {
   );
 }
 
+function OfficeBadge({ oficina }: { oficina?: Oficina }) {
+  const color = oficina?.color ?? "stone";
+  const classes = {
+    blue: "border-blue-700/20 bg-blue-50 text-blue-800",
+    red: "border-red-500/20 bg-red-50 text-red-700",
+    teal: "border-teal-700/20 bg-teal-50 text-teal-800",
+    amber: "border-amber-700/20 bg-amber-50 text-amber-800",
+    stone: "border-stone-800/10 bg-stone-100 text-stone-700",
+  }[color] ?? "border-stone-800/10 bg-stone-100 text-stone-700";
+  return (
+    <span className={["inline-flex w-fit items-center justify-center rounded-full border px-2.5 py-1 text-xs font-semibold", classes].join(" ")}>
+      {oficina?.nombre ?? "Sin oficina"}
+    </span>
+  );
+}
+
 function getCreditoStatusTone(estado: string) {
-  const normalized = estado.toLowerCase();
+  const normalized = normalizeText(estado);
+
+  if (normalized.includes("finaliz")) {
+    return "warning";
+  }
 
   if (normalized.includes("aprob") || normalized.includes("desembols")) {
     return "success";
@@ -1184,6 +1352,18 @@ function getCreditoStatusTone(estado: string) {
   }
 
   return "neutral";
+}
+
+function isCreditoEditable(credito: Credito) {
+  return !["aprobado", "finalizado", "rechazado"].includes(normalizeText(credito.estado));
+}
+
+function isCreditoRefinanciable(credito: Credito) {
+  return ["aprobado", "finalizado"].includes(normalizeText(credito.estado));
+}
+
+function normalizeText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function EyeIcon() {

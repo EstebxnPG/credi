@@ -35,3 +35,24 @@ class Notificacion(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"), onupdate=text("now()"), nullable=False)
 
     responsable: Mapped["Usuario | None"] = relationship(foreign_keys=[responsable_id], back_populates="notificaciones")
+    lecturas: Mapped[list["NotificacionLectura"]] = relationship(
+        back_populates="notificacion",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def responsable_nombre(self) -> str | None:
+        return self.responsable.nombre if self.responsable else None
+
+
+class NotificacionLectura(Base):
+    __tablename__ = "notificacion_lecturas"
+    __table_args__ = (UniqueConstraint("notificacion_id", "usuario_id", name="uq_notificacion_lectura_usuario"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    notificacion_id: Mapped[int] = mapped_column(ForeignKey("notificaciones.id"), nullable=False, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False, index=True)
+    leida_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+
+    notificacion: Mapped["Notificacion"] = relationship(back_populates="lecturas")
+    usuario: Mapped["Usuario"] = relationship(back_populates="notificacion_lecturas")

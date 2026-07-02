@@ -230,8 +230,8 @@ export default function PensionadoDetailPage() {
 
   const resumen = useMemo(() => {
     const activos = creditos.filter((credito) =>
-      ["Prospecto", "Enviado a cooperativa", "Devuelto por correccion", "Reenviado"].includes(
-        credito.estado,
+      ["prospecto", "enviado a cooperativa", "devuelto por correccion", "reenviado", "aprobado"].includes(
+        normalizeText(credito.estado),
       ),
     );
     return {
@@ -538,6 +538,10 @@ export default function PensionadoDetailPage() {
 
 function normalizeView(value: string | null): ViewKey {
   return views.some((view) => view.key === value) ? (value as ViewKey) : "creditos";
+}
+
+function normalizeText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function CreditosList({
@@ -1024,6 +1028,10 @@ function CreditoStatusBadge({ estado }: { estado: string }) {
 
 function getCreditoStatusTone(estado: string) {
   const normalized = estado.toLowerCase();
+
+  if (normalized.includes("finaliz")) {
+    return "warning";
+  }
 
   if (normalized.includes("aprob") || normalized.includes("desembols")) {
     return "success";

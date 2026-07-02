@@ -23,6 +23,9 @@ node_modules/
 
 # Archivos cargados por usuarios / datos sensibles
 backend/data/uploads/
+*.csv
+*.xls
+*.xlsx
 
 # Artefactos temporales manuales
 tmp-test.*
@@ -37,3 +40,5 @@ Thumbs.db
 # IDE
 .vscode/settings.json
 .idea/
+
+/outputs

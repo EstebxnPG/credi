@@ -26,3 +26,4 @@ class Usuario(Base, TimestampMixin, SoftDeleteMixin):
     notificaciones: Mapped[list["Notificacion"]] = relationship(
         foreign_keys="Notificacion.responsable_id", back_populates="responsable"
     )
+    notificacion_lecturas: Mapped[list["NotificacionLectura"]] = relationship(back_populates="usuario")

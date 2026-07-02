@@ -71,6 +71,14 @@ export function AppShell({
     router.push(item.href);
   }
 
+  async function markAllRead() {
+    await apiFetch<void>("/api/v1/notificaciones/leer-todas", { method: "PATCH" });
+    setNotifications((current) => current.map((item) => ({ ...item, leida: true })));
+    setUnreadCount(0);
+    setToast(null);
+    window.dispatchEvent(new Event("notifications-updated"));
+  }
+
   useEffect(() => {
     void loadNotifications();
     const interval = window.setInterval(() => void loadNotifications(), 15_000);
@@ -151,9 +159,14 @@ export function AppShell({
                     <div className="absolute right-0 top-11 z-50 w-[min(360px,calc(100vw-2rem))] border border-stone-800/10 bg-white shadow-2xl">
                       <div className="flex items-center justify-between border-b border-stone-800/10 px-4 py-3">
                         <p className="text-sm font-semibold text-stone-950">Notificaciones</p>
-                        <span className="text-xs text-stone-500">
-                          Abiertas ahora
-                        </span>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-teal-800 disabled:text-stone-400"
+                          disabled={unreadCount === 0}
+                          onClick={() => void markAllRead()}
+                        >
+                          Marcar leídas
+                        </button>
                       </div>
                       <div className="max-h-80 divide-y divide-stone-800/10 overflow-y-auto">
                         {notifications.slice(0, 6).map((item) => (

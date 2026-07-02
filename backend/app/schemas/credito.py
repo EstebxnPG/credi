@@ -10,6 +10,7 @@ ESTADOS_VALIDOS = {
     "Reenviado",
     "Aprobado",
     "Rechazado",
+    "Finalizado",
 }
 
 TIPOS_CREDITO_VALIDOS = {
@@ -24,8 +25,9 @@ TRANSICIONES_VALIDAS: dict[str, set[str]] = {
     "Enviado a cooperativa":  {"Devuelto por corrección", "Aprobado", "Rechazado"},
     "Devuelto por corrección":{"Reenviado"},
     "Reenviado":              {"Devuelto por corrección", "Aprobado", "Rechazado"},
-    "Aprobado":               set(),   # estado final
+    "Aprobado":               {"Finalizado"},
     "Rechazado":              set(),   # estado final
+    "Finalizado":             set(),   # estado final
 }
 
 
@@ -154,8 +156,15 @@ class CreditoCambioEstado(BaseModel):
 
     @model_validator(mode="after")
     def monto_requerido_si_aprobado(self):
-        if self.estado_nuevo == "Aprobado" and not self.monto_aprobado:
-            raise ValueError("monto_aprobado es obligatorio cuando el estado es Aprobado")
+        if self.estado_nuevo == "Aprobado":
+            if not self.monto_aprobado:
+                raise ValueError("monto_aprobado es obligatorio cuando el estado es Aprobado")
+            if not self.fecha_desembolso:
+                raise ValueError("fecha_desembolso es obligatoria cuando el estado es Aprobado")
+            if not self.fecha_fin_estimada:
+                raise ValueError("fecha_fin_estimada es obligatoria cuando el estado es Aprobado")
+            if self.fecha_fin_estimada <= self.fecha_desembolso:
+                raise ValueError("fecha_fin_estimada debe ser posterior a fecha_desembolso")
         if self.monto_aprobado is not None and self.monto_aprobado <= 0:
             raise ValueError("monto_aprobado debe ser mayor a 0")
         return self
@@ -166,6 +175,7 @@ class CreditoRead(BaseModel):
     id: int
     pensionado_id: int
     asesor_id: int
+    asesor_nombre: Optional[str] = None
     oficina_id: int
     cooperativa_id: int
     credito_refinanciado_id: Optional[int]

@@ -1,10 +1,19 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from datetime import datetime, timedelta, timezone
 
-from app.services.notificacion_service import _alcance, _crear_si_falta, _reactivar
+from app.db.models.notificacion import Notificacion
+from app.db.models.usuario import Usuario
+from app.schemas.notificacion import NotificacionEstadoUpdate
+from app.services.notificacion_service import (
+    _alcance,
+    _aplicar_lectura_usuario,
+    _crear_si_falta,
+    _reactivar,
+    cambiar_estado,
+)
 
 
 class NotificacionesTests(unittest.TestCase):
@@ -24,7 +33,7 @@ class NotificacionesTests(unittest.TestCase):
         _alcance(query, SimpleNamespace(rol="asesora", oficina_id=7))
         query.filter.assert_called_once()
 
-    def test_reactivar_resuelta_limpia_campos_de_cierre(self):
+    def test_reactivar_resuelta_no_reabre_sin_forzar(self):
         item = SimpleNamespace(
             estado="resuelta",
             leida=True,
@@ -36,6 +45,23 @@ class NotificacionesTests(unittest.TestCase):
         )
 
         cambio = _reactivar(item, {"estado": "pendiente", "titulo": "Nueva"}, False)
+
+        self.assertFalse(cambio)
+        self.assertEqual(item.estado, "resuelta")
+        self.assertEqual(item.titulo, "Anterior")
+
+    def test_reactivar_resuelta_limpia_campos_de_cierre_si_se_fuerza(self):
+        item = SimpleNamespace(
+            estado="resuelta",
+            leida=True,
+            leida_en=datetime.now(timezone.utc),
+            resuelta_en=datetime.now(timezone.utc),
+            resuelta_por=1,
+            pospuesta_hasta=None,
+            titulo="Anterior",
+        )
+
+        cambio = _reactivar(item, {"estado": "pendiente", "titulo": "Nueva"}, True)
 
         self.assertTrue(cambio)
         self.assertEqual(item.estado, "pendiente")
@@ -64,6 +90,126 @@ class NotificacionesTests(unittest.TestCase):
         self.assertTrue(item.leida)
         self.assertEqual(item.pospuesta_hasta, futuro)
         self.assertEqual(item.titulo, "Nueva")
+
+    def test_reactivar_no_deja_fecha_lectura_si_queda_sin_leer(self):
+        item = SimpleNamespace(
+            estado="pendiente",
+            leida=False,
+            leida_en=datetime.now(timezone.utc),
+            resuelta_en=None,
+            resuelta_por=None,
+            pospuesta_hasta=None,
+            titulo="Anterior",
+        )
+
+        cambio = _reactivar(item, {"estado": "pendiente", "leida": False, "titulo": "Nueva"}, False)
+
+        self.assertTrue(cambio)
+        self.assertFalse(item.leida)
+        self.assertIsNone(item.leida_en)
+
+    def test_reactivar_preserva_lectura_en_alerta_existente(self):
+        leida_en = datetime.now(timezone.utc)
+        item = SimpleNamespace(
+            estado="pendiente",
+            leida=True,
+            leida_en=leida_en,
+            resuelta_en=None,
+            resuelta_por=None,
+            pospuesta_hasta=None,
+            responsable_id=None,
+            titulo="Anterior",
+        )
+
+        cambio = _reactivar(item, {"leida": False, "leida_en": None, "titulo": "Nueva"}, False)
+
+        self.assertTrue(cambio)
+        self.assertTrue(item.leida)
+        self.assertEqual(item.leida_en, leida_en)
+        self.assertEqual(item.titulo, "Nueva")
+
+    def test_reactivar_preserva_responsable_manual_si_regla_no_asigna(self):
+        item = SimpleNamespace(
+            estado="pendiente",
+            leida=False,
+            leida_en=None,
+            resuelta_en=None,
+            resuelta_por=None,
+            pospuesta_hasta=None,
+            responsable_id=3,
+            titulo="Anterior",
+        )
+
+        cambio = _reactivar(item, {"responsable_id": None, "titulo": "Nueva"}, False)
+
+        self.assertTrue(cambio)
+        self.assertEqual(item.responsable_id, 3)
+        self.assertEqual(item.titulo, "Nueva")
+
+    def test_responsable_nombre_sale_de_la_relacion(self):
+        item = Notificacion()
+        item.responsable = Usuario(nombre="LUIS")
+
+        self.assertEqual(item.responsable_nombre, "LUIS")
+
+    def test_en_progreso_asigna_usuario_si_no_hay_responsable(self):
+        db = MagicMock()
+        item = SimpleNamespace(
+            id=13,
+            clase="accion",
+            estado="pendiente",
+            responsable_id=None,
+            justificacion=None,
+            pospuesta_hasta=None,
+            resuelta_en=None,
+            resuelta_por=None,
+        )
+        usuario = SimpleNamespace(id=3, rol="asesora", oficina_id=1)
+
+        with patch("app.services.notificacion_service._get", return_value=item), patch(
+            "app.services.notificacion_service.registrar_log"
+        ):
+            cambiar_estado(db, usuario, 13, NotificacionEstadoUpdate(estado="en_progreso"))
+
+        self.assertEqual(item.estado, "en_progreso")
+        self.assertEqual(item.responsable_id, 3)
+        db.commit.assert_called_once()
+
+    def test_en_progreso_no_reasigna_si_ya_tiene_responsable(self):
+        db = MagicMock()
+        item = SimpleNamespace(
+            id=13,
+            clase="accion",
+            estado="pendiente",
+            responsable_id=2,
+            justificacion=None,
+            pospuesta_hasta=None,
+            resuelta_en=None,
+            resuelta_por=None,
+        )
+        usuario = SimpleNamespace(id=3, rol="asesora", oficina_id=1)
+
+        with patch("app.services.notificacion_service._get", return_value=item), patch(
+            "app.services.notificacion_service.registrar_log"
+        ):
+            cambiar_estado(db, usuario, 13, NotificacionEstadoUpdate(estado="en_progreso"))
+
+        self.assertEqual(item.estado, "en_progreso")
+        self.assertEqual(item.responsable_id, 2)
+
+    def test_lectura_calculada_no_depende_del_estado_global(self):
+        leida_en = datetime.now(timezone.utc)
+        item = SimpleNamespace(id=100, leida=True, leida_en=leida_en)
+
+        _aplicar_lectura_usuario([item], {})
+
+        self.assertFalse(item.leida)
+        self.assertIsNone(item.leida_en)
+
+        _aplicar_lectura_usuario([item], {100: leida_en})
+
+        self.assertTrue(item.leida)
+        self.assertEqual(item.leida_en, leida_en)
 
 
 if __name__ == "__main__":
