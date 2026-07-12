@@ -272,17 +272,17 @@ export default function SeguimientosPage() {
   }
 
   return (
-    <section className="space-y-4">
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="space-y-3">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">
               Seguimientos
             </p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">
+            <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">
               Contactos y proximas gestiones
             </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">
               Consulta la historia comercial, registra contactos y agenda nuevas gestiones.
             </p>
           </div>
@@ -300,7 +300,7 @@ export default function SeguimientosPage() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 border-t border-stone-800/10 pt-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
+        <div className="mt-3 grid gap-3 border-t border-stone-800/10 pt-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
           <SelectField
             label="Tipo"
             value={tipoFilter}
@@ -359,8 +359,8 @@ export default function SeguimientosPage() {
       {error ? <StateMessage tone="error" text={error} /> : null}
 
       {!loading && !error ? (
-        <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[0.55fr_1.15fr_0.8fr_0.8fr_1fr_1fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+        <div className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
+          <div className="hidden grid-cols-[0.55fr_1.15fr_0.8fr_0.8fr_1fr_1fr_120px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
             <span>ID</span>
             <span>Pensionado</span>
             <span>Tipo</span>
@@ -371,7 +371,7 @@ export default function SeguimientosPage() {
           </div>
 
           <div className="divide-y divide-stone-800/10">
-            <div className="px-4 py-3 text-xs font-medium text-stone-500">
+            <div className="px-3 py-2 text-xs font-medium text-stone-500">
               Mostrando {filtered.length} de {seguimientos.length} seguimientos
             </div>
             {filtered.map((seguimiento) => (
@@ -381,7 +381,7 @@ export default function SeguimientosPage() {
                 tabIndex={0}
                 onClick={() => openDetail(seguimiento.id)}
                 onKeyDown={(event) => handleRowKeyDown(event, seguimiento.id)}
-                className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.55fr_1.15fr_0.8fr_0.8fr_1fr_1fr_120px] md:items-center md:py-3"
+                className="grid cursor-pointer gap-3 px-3 py-2.5 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.55fr_1.15fr_0.8fr_0.8fr_1fr_1fr_120px] md:items-center md:py-2"
               >
                 <div className="min-w-0">
                   <p className="font-semibold text-stone-950">#{seguimiento.id}</p>
@@ -477,9 +477,9 @@ function SeguimientoModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+        className="max-h-[calc(100vh-32px)] w-full max-w-3xl overflow-auto rounded-lg border border-stone-800/10 bg-white p-4 shadow-xl shadow-stone-950/10"
       >
-        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
               Nuevo seguimiento
@@ -495,7 +495,7 @@ function SeguimientoModal({
 
         {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <SearchSelectField
               label="Pensionado"
@@ -638,7 +638,7 @@ function SearchSelectField({
         required={required}
       />
       {isOpen ? (
-        <div className="mt-2 max-h-48 overflow-auto rounded-xl border border-stone-800/10 bg-white shadow-lg shadow-stone-900/5">
+        <div className="mt-2 max-h-48 overflow-auto rounded-md border border-stone-800/10 bg-white shadow-sm shadow-stone-900/5">
           {filteredOptions.map((option) => (
             <button
               key={option.value}
@@ -658,7 +658,7 @@ function SearchSelectField({
             </button>
           ))}
           {filteredOptions.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-stone-500">No hay resultados.</p>
+            <p className="px-3 py-2 text-sm text-stone-500">No hay resultados.</p>
           ) : null}
         </div>
       ) : null}
@@ -791,7 +791,7 @@ function ActionLink({
       aria-label={label}
       title={label}
       onClick={(event) => event.stopPropagation()}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800"
     >
       {children}
     </Link>
@@ -854,7 +854,7 @@ function StateMessage({
   return (
     <div
       className={[
-        "rounded-2xl border px-5 py-4 text-sm",
+        "rounded-lg border px-5 py-4 text-sm",
         tone === "error"
           ? "border-red-500/20 bg-red-50 text-red-700"
           : "border-stone-800/10 bg-white/65 text-stone-500",

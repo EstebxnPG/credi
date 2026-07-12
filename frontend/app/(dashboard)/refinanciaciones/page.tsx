@@ -153,12 +153,12 @@ export default function RefinanciacionesPage() {
   }
 
   return (
-    <section className="space-y-4">
-      <header className="rounded-2xl border bg-white/85 p-5">
+    <section className="space-y-3">
+      <header className="rounded-lg border bg-white/85 p-5">
         <p className="text-xs font-semibold uppercase tracking-[.22em] text-stone-500">
           Operacion comercial
         </p>
-        <h1 className="mt-2 text-2xl font-semibold">Refinanciaciones</h1>
+        <h1 className="mt-2 text-xl font-semibold">Refinanciaciones</h1>
         <p className="mt-2 text-sm text-stone-600">
           Oportunidades liberadas segun las reglas de cada cooperativa.
         </p>
@@ -373,7 +373,7 @@ function RejectModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
         <h2 className="text-lg font-semibold">Rechazar oportunidad #{item.credito_id}</h2>
         <p className="mt-2 text-sm text-stone-600">
           La oportunidad seguira visible y la alerta reaparecera dentro de 20 dias.
@@ -388,7 +388,7 @@ function RejectModal({
             placeholder="Explica por que no continuara ahora"
           />
         </label>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-3 flex justify-end gap-2">
           <button type="button" className="button-muted" disabled={saving} onClick={onClose}>
             Cancelar
           </button>

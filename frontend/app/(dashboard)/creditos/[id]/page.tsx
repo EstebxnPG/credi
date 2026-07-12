@@ -558,8 +558,8 @@ export default function CreditoDetailPage() {
   const canRefinance = isReadyToRefinance(refinanceOpportunity);
 
   return (
-    <section className="space-y-4">
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+    <section className="space-y-3">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <Link
           href={`/pensionados/${credito.pensionado_id}?vista=creditos`}
           className="text-xs font-semibold text-teal-700"
@@ -568,7 +568,7 @@ export default function CreditoDetailPage() {
         </Link>
         <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-stone-950">
+            <h1 className="text-xl font-semibold tracking-tight text-stone-950">
               Credito #{credito.id}
             </h1>
             <p className="mt-2 text-sm text-stone-600">
@@ -601,7 +601,7 @@ export default function CreditoDetailPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm text-stone-700">
+            <div className="rounded-md border border-stone-800/10 bg-white/70 px-3 py-2 text-sm text-stone-700">
               Registrado {formatDate(credito.fecha_registro)}
             </div>
             {canRefinance ? (
@@ -612,7 +612,7 @@ export default function CreditoDetailPage() {
                 Refinanciar
               </Link>
             ) : refinanceOpportunity ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
                 Refinanciacion {refinanceOpportunity.estado_refinanciacion.toLowerCase()}
               </div>
             ) : null}
@@ -633,8 +633,8 @@ export default function CreditoDetailPage() {
         </div>
       </article>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-        <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+      <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
+        <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
           <h2 className="text-lg font-semibold text-stone-950">Pensionado</h2>
           {pensionado ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -650,7 +650,7 @@ export default function CreditoDetailPage() {
           )}
         </article>
 
-        <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+        <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-stone-950">Estado del credito</h2>
@@ -745,15 +745,15 @@ export default function CreditoDetailPage() {
               </div>
             </form>
           ) : (
-            <p className="mt-4 rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3 text-sm text-stone-600">
+            <p className="mt-4 rounded-md border border-stone-800/10 bg-white/65 px-3 py-2 text-sm text-stone-600">
               Este credito esta en estado final y no tiene mas transiciones.
             </p>
           )}
         </article>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
           <h2 className="text-lg font-semibold text-stone-950">Datos del credito</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Detail label="Solicitado" value={formatCurrency(credito.monto_solicitado)} />
@@ -781,7 +781,7 @@ export default function CreditoDetailPage() {
             ) : null}
             <Detail label="Libranza" value={credito.nro_libranza ?? "Sin libranza"} />
           </div>
-          <div className="mt-4 rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+          <div className="mt-4 rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
             <p className="text-xs uppercase tracking-[0.18em] text-stone-500">
               Descripcion / observaciones
             </p>
@@ -791,7 +791,7 @@ export default function CreditoDetailPage() {
           </div>
         </article>
 
-        <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+        <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
           <h2 className="text-lg font-semibold text-stone-950">Documentos</h2>
           <form onSubmit={handleUploadDocument} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <input
@@ -805,7 +805,7 @@ export default function CreditoDetailPage() {
             />
             <label
               htmlFor="document-upload"
-              className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-teal-700/35 bg-teal-50/50 px-4 py-2 text-sm text-stone-700 transition hover:border-teal-700/60 hover:bg-teal-50"
+              className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-md border border-dashed border-teal-700/35 bg-teal-50/50 px-4 py-2 text-sm text-stone-700 transition hover:border-teal-700/60 hover:bg-teal-50"
             >
               <span className="min-w-0 truncate">
                 {documentFile ? documentFile.name : "Seleccionar documento"}
@@ -847,7 +847,7 @@ export default function CreditoDetailPage() {
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center rounded-xl border border-red-500/15 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center justify-center rounded-md border border-red-500/15 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={deletingDocumentId === documento.id}
                     onClick={() => void handleDeleteDocument(documento)}
                   >
@@ -863,7 +863,7 @@ export default function CreditoDetailPage() {
         </article>
       </div>
 
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-stone-950">Pendientes operativos</h2>
@@ -944,7 +944,7 @@ export default function CreditoDetailPage() {
         </div>
       </article>
 
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <h2 className="text-lg font-semibold text-stone-950">Historial de estado</h2>
         <div className="mt-4 divide-y divide-stone-800/10">
           {historial.map((item) => (
@@ -955,7 +955,7 @@ export default function CreditoDetailPage() {
                 </p>
                 <p className="text-xs text-stone-500">{formatDateTime(item.created_at)}</p>
               </div>
-              <div className="mt-3 rounded-xl border border-stone-800/10 bg-stone-50 px-4 py-3">
+              <div className="mt-3 rounded-md border border-stone-800/10 bg-stone-50 px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
                   Observación del cambio de estado
                 </p>
@@ -1033,9 +1033,9 @@ function EditCreditoModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+        className="max-h-[calc(100vh-32px)] w-full max-w-3xl overflow-auto rounded-lg border border-stone-800/10 bg-white p-4 shadow-xl shadow-stone-950/10"
       >
-        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
               Editar credito
@@ -1049,7 +1049,7 @@ function EditCreditoModal({
 
         {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <SelectField
             label="Cooperativa"
             value={form.cooperativa_id}
@@ -1106,7 +1106,7 @@ function EditCreditoModal({
               required
             />
           ) : null}
-          <label className="flex items-center gap-3 rounded-2xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm font-medium text-stone-700">
+          <label className="flex items-center gap-3 rounded-lg border border-stone-800/10 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700">
             <input
               type="checkbox"
               checked={form.tiene_documentos_pendientes}
@@ -1257,7 +1257,7 @@ function TextareaField({
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+    <div className="rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
       <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
       <p className="mt-2 text-sm font-semibold text-stone-900">{value}</p>
     </div>
@@ -1345,7 +1345,7 @@ function StateMessage({
   return (
     <div
       className={[
-        "rounded-2xl border px-5 py-4 text-sm",
+        "rounded-lg border px-5 py-4 text-sm",
         tone === "error"
           ? "border-red-500/20 bg-red-50 text-red-700"
           : "border-stone-800/10 bg-white/65 text-stone-500",

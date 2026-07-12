@@ -111,10 +111,10 @@ export default function NotificationsPage() {
   }
 
   return (
-    <section className="space-y-4">
-      <header className="border-b pb-4">
+    <section className="space-y-3">
+      <header className="border-b pb-3">
         <p className="text-xs font-semibold uppercase tracking-[.22em] text-stone-500">Centro de trabajo</p>
-        <h1 className="mt-2 text-2xl font-semibold">Alertas y notificaciones</h1>
+        <h1 className="mt-2 text-xl font-semibold">Alertas y notificaciones</h1>
       </header>
 
       {error ? <p className="border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
@@ -187,7 +187,7 @@ export default function NotificationsPage() {
       <div className="divide-y border-y bg-white/80">
         {data.items.map((item) => (
           <article key={item.id} className={item.leida ? "p-4 text-stone-500" : "p-4 text-stone-950"}>
-            <div className="flex flex-wrap justify-between gap-4">
+            <div className="flex flex-wrap justify-between gap-3">
               <Link href={item.href} onClick={() => void read(item)} className="min-w-64 flex-1">
                 <p className={item.leida ? "font-medium" : "font-bold"}>{item.titulo}</p>
                 <p className="mt-1 text-sm">{item.mensaje}</p>

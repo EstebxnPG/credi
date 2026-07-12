@@ -152,15 +152,15 @@ export default function SeguimientoDetailPage() {
   }
 
   return (
-    <section className="space-y-4">
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+    <section className="space-y-3">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <Link
           href={`/pensionados/${seguimiento.pensionado_id}?vista=seguimientos`}
           className="text-xs font-semibold text-teal-700"
         >
           Volver al pensionado
         </Link>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-stone-950">
           Seguimiento #{seguimiento.id}
         </h1>
         <p className="mt-2 text-sm text-stone-600">
@@ -169,7 +169,7 @@ export default function SeguimientoDetailPage() {
         </p>
       </article>
 
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Detail label="Tipo" value={seguimiento.tipo} />
           <Detail label="Estado" value={estadoLabel(seguimiento.estado)} />
@@ -177,20 +177,20 @@ export default function SeguimientoDetailPage() {
           <Detail label="Oficina" value={seguimiento.oficina_nombre ?? "Sin oficina"} />
         </div>
 
-        <div className="mt-4 rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+        <div className="mt-4 rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
           <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Comentario</p>
           <p className="mt-2 text-sm text-stone-800">{seguimiento.comentario}</p>
         </div>
 
         {seguimiento.resultado ? (
-          <div className="mt-3 rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+          <div className="mt-3 rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
             <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Resultado</p>
             <p className="mt-2 text-sm text-stone-800">{seguimiento.resultado}</p>
           </div>
         ) : null}
 
         {seguimiento.fecha_proximo_contacto ? (
-          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-50 px-4 py-3">
+          <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-50 px-4 py-3">
             <p className="text-xs uppercase tracking-[0.18em] text-amber-700">
               Proximo contacto
             </p>
@@ -201,7 +201,7 @@ export default function SeguimientoDetailPage() {
         ) : null}
       </article>
 
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-stone-950">Soluciones</h2>
@@ -209,7 +209,7 @@ export default function SeguimientoDetailPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 grid gap-4 rounded-xl border border-stone-800/10 bg-white/65 p-4 sm:grid-cols-2">
+        <form onSubmit={handleSubmit} className="mt-4 grid gap-3 rounded-md border border-stone-800/10 bg-white/65 p-4 sm:grid-cols-2">
           {formError ? <div className="sm:col-span-2"><StateMessage tone="error" text={formError} /></div> : null}
           <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
             <span>Solucion</span>
@@ -287,7 +287,7 @@ export default function SeguimientoDetailPage() {
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+    <div className="rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
       <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
       <p className="mt-2 text-sm font-semibold text-stone-900">{value}</p>
     </div>
@@ -319,7 +319,7 @@ function StateMessage({
   return (
     <div
       className={[
-        "rounded-2xl border px-5 py-4 text-sm",
+        "rounded-lg border px-5 py-4 text-sm",
         tone === "error"
           ? "border-red-500/20 bg-red-50 text-red-700"
           : "border-stone-800/10 bg-white/65 text-stone-500",

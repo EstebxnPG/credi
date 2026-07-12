@@ -647,17 +647,17 @@ export default function CreditosPage() {
   }
 
   return (
-    <section className="space-y-4">
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <section className="space-y-3">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">
               Creditos
             </p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">
+            <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">
               Solicitudes y estados
             </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">
               Gestiona creditos, consulta su ficha y revisa documentos pendientes.
             </p>
           </div>
@@ -679,7 +679,7 @@ export default function CreditosPage() {
         </div>
       </article>
 
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-4 shadow-lg shadow-stone-900/5">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_0.8fr_0.8fr_1fr_1fr_auto] md:items-end">
           <SelectField
             label="Estado"
@@ -730,7 +730,7 @@ export default function CreditosPage() {
           />
           <button
             type="button"
-            className="button-muted whitespace-nowrap px-4 py-3 text-sm"
+            className="button-muted whitespace-nowrap px-3 py-2 text-sm"
             onClick={() => updateFilters(emptyFilters)}
           >
             Limpiar filtros
@@ -743,8 +743,8 @@ export default function CreditosPage() {
       {error ? <StateMessage tone="error" text={error} /> : null}
 
       {!loading && !error ? (
-        <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[0.5fr_1.35fr_0.9fr_1fr_0.9fr_0.85fr_0.9fr_0.85fr_112px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+        <div className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
+          <div className="hidden grid-cols-[0.5fr_1.35fr_0.9fr_1fr_0.9fr_0.85fr_0.9fr_0.85fr_112px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
             <span>Credito</span>
             <span>Pensionado</span>
             <span>Libranza</span>
@@ -777,7 +777,7 @@ export default function CreditosPage() {
                   tabIndex={0}
                   onClick={() => openDetail(credito.id)}
                   onKeyDown={(event) => handleRowKeyDown(event, credito.id)}
-                  className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.5fr_1.35fr_0.9fr_1fr_0.9fr_0.85fr_0.9fr_0.85fr_112px] md:items-center md:py-3"
+                  className="grid cursor-pointer gap-3 px-3 py-2.5 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.5fr_1.35fr_0.9fr_1fr_0.9fr_0.85fr_0.9fr_0.85fr_112px] md:items-center md:py-2"
                 >
                   <div className="min-w-0">
                     <p className="font-semibold text-stone-950">#{credito.id}</p>
@@ -954,9 +954,9 @@ function CreditoModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+        className="max-h-[calc(100vh-32px)] w-full max-w-3xl overflow-auto rounded-lg border border-stone-800/10 bg-white p-4 shadow-xl shadow-stone-950/10"
       >
-        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
               {isCreate ? "Nuevo credito" : "Editar credito"}
@@ -972,7 +972,7 @@ function CreditoModal({
 
         {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {isCreate ? (
             <div className="sm:col-span-2">
               <SearchSelectField
@@ -1037,7 +1037,7 @@ function CreditoModal({
             />
           ) : null}
           {isCreate ? (
-            <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3 text-sm text-stone-700">
+            <div className="rounded-md border border-stone-800/10 bg-white/65 px-3 py-2 text-sm text-stone-700">
               <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Oficina</p>
               <p className="mt-2 font-semibold text-stone-900">
                 {oficinaById.get(Number(form.oficina_id))?.nombre ?? "Pendiente por asignar"}
@@ -1096,7 +1096,7 @@ function CreditoModal({
               required
             />
           ) : null}
-          <label className="flex items-center gap-3 rounded-2xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm font-medium text-stone-700">
+          <label className="flex items-center gap-3 rounded-lg border border-stone-800/10 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700">
             <input
               type="checkbox"
               checked={form.tiene_documentos_pendientes}
@@ -1250,7 +1250,7 @@ function SearchSelectField({
         required={required}
       />
       {isOpen ? (
-        <div className="mt-2 max-h-48 overflow-auto rounded-xl border border-stone-800/10 bg-white shadow-lg shadow-stone-900/5">
+        <div className="mt-2 max-h-48 overflow-auto rounded-md border border-stone-800/10 bg-white shadow-sm shadow-stone-900/5">
           {filteredOptions.map((option) => (
             <button
               key={option.value}
@@ -1270,7 +1270,7 @@ function SearchSelectField({
             </button>
           ))}
           {filteredOptions.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-stone-500">No hay resultados.</p>
+            <p className="px-3 py-2 text-sm text-stone-500">No hay resultados.</p>
           ) : null}
         </div>
       ) : null}
@@ -1407,7 +1407,7 @@ function ActionLink({
       aria-label={label}
       title={label}
       onClick={(event) => event.stopPropagation()}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800"
     >
       {children}
     </Link>
@@ -1438,7 +1438,7 @@ function ActionButton({
       }}
       disabled={disabled}
       className={[
-        "inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-white transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex h-9 w-9 items-center justify-center rounded-md border bg-white transition disabled:cursor-not-allowed disabled:opacity-50",
         tone === "danger"
           ? "border-red-500/15 text-red-700 hover:bg-red-50"
           : "border-stone-800/10 text-stone-700 hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800",
@@ -1585,7 +1585,7 @@ function StateMessage({
   return (
     <div
       className={[
-        "rounded-2xl border px-5 py-4 text-sm",
+        "rounded-lg border px-5 py-4 text-sm",
         tone === "error"
           ? "border-red-500/20 bg-red-50 text-red-700"
           : "border-stone-800/10 bg-white/65 text-stone-500",

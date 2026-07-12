@@ -109,20 +109,20 @@ export function AppShell({
   });
 
   return (
-    <div className="min-h-screen px-4 py-4 sm:px-6 sm:py-6">
+    <div className="min-h-screen px-3 py-3 sm:px-4">
       <div className="mx-auto max-w-[1600px]">
-        <header className="sticky top-4 z-30 rounded-2xl border border-stone-800/10 bg-white/90 shadow-lg shadow-stone-900/5 backdrop-blur-xl">
-          <div className="border-b border-stone-800/10 px-3 py-2.5 md:px-4">
+        <header className="sticky top-3 z-30 rounded-lg border border-stone-800/10 bg-white shadow-sm">
+          <div className="border-b border-stone-800/10 px-3 py-2">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#facc15] text-xs font-black text-stone-900 shadow-lg shadow-amber-500/20">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#facc15] text-xs font-black text-stone-900">
                   CC
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-stone-500">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500">
                     Crediconfiemos
                   </p>
-                  <h1 className="text-base font-semibold text-stone-950 sm:text-lg">
+                  <h1 className="text-sm font-semibold text-stone-950 sm:text-base">
                     Centro operativo
                   </h1>
                 </div>
@@ -135,14 +135,14 @@ export function AppShell({
                     title="Notificaciones"
                     aria-label="Abrir notificaciones"
                     onClick={() => setBellOpen((open) => !open)}
-                    className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-stone-800/10 bg-white text-stone-700 transition hover:bg-stone-50"
+                    className="relative flex h-8 w-8 items-center justify-center rounded-md border border-stone-800/10 bg-white text-stone-700 transition hover:bg-stone-50"
                   >
                     <svg
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="1.8"
-                      className="h-5 w-5"
+                      className="h-4 w-4"
                       aria-hidden="true"
                     >
                       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
@@ -156,8 +156,8 @@ export function AppShell({
                   </button>
 
                   {bellOpen ? (
-                    <div className="absolute right-0 top-11 z-50 w-[min(360px,calc(100vw-2rem))] border border-stone-800/10 bg-white shadow-2xl">
-                      <div className="flex items-center justify-between border-b border-stone-800/10 px-4 py-3">
+                    <div className="absolute right-0 top-10 z-50 w-[min(340px,calc(100vw-2rem))] rounded-lg border border-stone-800/10 bg-white shadow-lg">
+                      <div className="flex items-center justify-between border-b border-stone-800/10 px-3 py-2">
                         <p className="text-sm font-semibold text-stone-950">Notificaciones</p>
                         <button
                           type="button"
@@ -175,13 +175,13 @@ export function AppShell({
                             type="button"
                             onClick={() => void markRead(item)}
                             className={[
-                              "block w-full px-4 py-3 text-left transition hover:bg-teal-50",
+                              "block w-full px-3 py-2.5 text-left transition hover:bg-teal-50",
                               item.leida
                                 ? "bg-stone-50 text-stone-500"
                                 : "bg-white text-stone-950",
                             ].join(" ")}
                           >
-                            <p className={item.leida ? "text-sm font-medium text-stone-500" : "text-sm font-bold text-stone-950"}>{item.titulo}</p>
+                            <p className={item.leida ? "text-xs font-medium text-stone-500" : "text-xs font-bold text-stone-950"}>{item.titulo}</p>
                             <p className={item.leida ? "mt-1 line-clamp-2 text-xs text-stone-400" : "mt-1 line-clamp-2 text-xs font-medium text-stone-700"}>
                               {item.mensaje}
                             </p>
@@ -196,14 +196,14 @@ export function AppShell({
                       <Link
                         href="/notificaciones"
                         onClick={() => setBellOpen(false)}
-                        className="block border-t border-stone-800/10 px-4 py-3 text-center text-sm font-semibold text-teal-800 hover:bg-stone-50"
+                        className="block border-t border-stone-800/10 px-3 py-2 text-center text-xs font-semibold text-teal-800 hover:bg-stone-50"
                       >
                         Ver todas
                       </Link>
                     </div>
                   ) : null}
                 </div>
-                <div className="rounded-lg border border-stone-800/10 bg-white/70 px-3 py-1.5">
+                <div className="rounded-md border border-stone-800/10 bg-white px-2.5 py-1">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-stone-500">
                     Sesión
                   </p>
@@ -211,7 +211,7 @@ export function AppShell({
                     {session?.nombre ?? "Sin usuario"}
                   </p>
                 </div>
-                <div className="hidden rounded-lg border border-stone-800/10 bg-white/70 px-3 py-1.5 text-xs text-stone-600 sm:block">
+                <div className="hidden rounded-md border border-stone-800/10 bg-white px-2.5 py-1 text-xs text-stone-600 sm:block">
                   {session?.rol ?? "sin rol"}
                   {session?.oficinaId ? ` - Oficina ${session.oficinaId}` : ""}
                 </div>
@@ -221,7 +221,7 @@ export function AppShell({
                     clearSession();
                     router.replace("/login");
                   }}
-                  className="button-muted rounded-lg px-3 py-1.5 text-xs"
+                  className="button-muted px-2.5 py-1.5 text-xs"
                 >
                   Salir
                 </button>
@@ -229,8 +229,8 @@ export function AppShell({
             </div>
           </div>
 
-          <div className="px-3 py-2 md:px-4">
-            <nav className="flex flex-wrap gap-x-5 gap-y-2">
+          <div className="px-3 py-1.5">
+            <nav className="flex flex-wrap gap-x-4 gap-y-1.5">
               {navSections.map((section) => {
                 const items = visibleItems.filter((item) => item.section === section.key);
                 if (items.length === 0) {
@@ -238,8 +238,8 @@ export function AppShell({
                 }
 
                 return (
-                  <div key={section.key} className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">
+                  <div key={section.key} className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-400">
                       {section.label}
                     </span>
                     {items.map((item) => {
@@ -252,9 +252,9 @@ export function AppShell({
                           href={item.href}
                           title={item.description}
                           className={[
-                            "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition",
+                            "rounded-md border px-2 py-1 text-xs font-medium transition",
                             active
-                              ? "border-teal-700/20 bg-teal-950 text-white shadow-lg shadow-teal-950/10"
+                              ? "border-teal-700/20 bg-teal-950 text-white"
                               : "border-stone-800/10 bg-white/60 text-stone-700 hover:bg-white",
                           ].join(" ")}
                         >
@@ -269,14 +269,14 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="space-y-4 pt-4">{children}</main>
+        <main className="space-y-3 pt-3">{children}</main>
       </div>
 
       {toast ? (
         <button
           type="button"
           onClick={() => void markRead(toast)}
-          className="fixed right-4 top-24 z-[60] w-[min(380px,calc(100vw-2rem))] border border-amber-600/20 bg-white p-4 text-left shadow-2xl"
+          className="fixed right-4 top-20 z-[60] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-amber-600/20 bg-white p-3 text-left shadow-lg"
         >
           <div className="flex gap-3">
             <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" />

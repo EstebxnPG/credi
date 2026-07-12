@@ -537,17 +537,17 @@ export default function PensionadosPage() {
   }
 
   return (
-    <section className="space-y-4">
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <section className="space-y-3">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">
               Pensionados
             </p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">
+            <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">
               Contactos y base comercial
             </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">
               Gestiona pensionados, consulta su ficha y manten actualizada la informacion de
               contacto.
             </p>
@@ -561,7 +561,7 @@ export default function PensionadosPage() {
         </div>
       </article>
 
-      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-4 shadow-lg shadow-stone-900/5">
+      <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <div className="grid gap-3 md:grid-cols-[1.4fr_0.7fr_auto] md:items-end">
           <label className="block text-sm font-medium text-stone-700">
             <span>Buscar</span>
@@ -592,7 +592,7 @@ export default function PensionadosPage() {
           </label>
           <button
             type="button"
-            className="button-muted whitespace-nowrap px-4 py-3 text-sm"
+            className="button-muted whitespace-nowrap px-3 py-2 text-sm"
             onClick={() => {
               resetToFirstPage();
               setQuery("");
@@ -609,8 +609,8 @@ export default function PensionadosPage() {
       {error ? <StateMessage tone="error" text={error} /> : null}
 
       {!loading && !error ? (
-        <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[1.2fr_0.75fr_0.95fr_0.7fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+        <div className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
+          <div className="hidden grid-cols-[1.2fr_0.75fr_0.95fr_0.7fr_120px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
             <span>Nombre</span>
             <span>Documento</span>
             <span>Contacto</span>
@@ -626,7 +626,7 @@ export default function PensionadosPage() {
                 tabIndex={0}
                 onClick={() => openDetail(pensionado.id)}
                 onKeyDown={(event) => handleRowKeyDown(event, pensionado.id)}
-                className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[1.2fr_0.75fr_0.95fr_0.7fr_120px] md:items-center md:py-3"
+                className="grid cursor-pointer gap-3 px-3 py-2.5 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[1.2fr_0.75fr_0.95fr_0.7fr_120px] md:items-center md:py-2"
               >
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-stone-950">
@@ -781,9 +781,9 @@ function PensionadoModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+        className="max-h-[calc(100vh-32px)] w-full max-w-3xl overflow-auto rounded-lg border border-stone-800/10 bg-white p-4 shadow-xl shadow-stone-950/10"
       >
-        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
               {isEdit ? "Editar pensionado" : "Nuevo pensionado"}
@@ -799,7 +799,7 @@ function PensionadoModal({
 
         {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field
             label="Nombre"
             value={form.nombre}
@@ -869,7 +869,7 @@ function PensionadoModal({
         </div>
 
         {!isEdit && lookup?.exists && lookup.pensionado ? (
-          <div className="mt-4 rounded-xl border border-blue-700/20 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <div className="mt-4 rounded-md border border-blue-700/20 bg-blue-50 px-3 py-2 text-sm text-blue-900">
             <p className="font-semibold">Este pensionado ya existe en el sistema.</p>
             <p className="mt-1">
               {lookup.pensionado.nombre_completo} - CC {lookup.pensionado.documento}
@@ -909,7 +909,7 @@ function PensionadoModal({
             </label>
 
             {creditoForm.enabled ? (
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <OptionSelectField
                   label="Cooperativa"
                   value={creditoForm.cooperativa_id}
@@ -944,7 +944,7 @@ function PensionadoModal({
                     required
                   />
                 ) : null}
-                <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3 text-sm text-stone-700">
+                <div className="rounded-md border border-stone-800/10 bg-white/65 px-3 py-2 text-sm text-stone-700">
                   <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Oficina</p>
                   <p className="mt-2 font-semibold text-stone-900">
                     {oficinaById.get(Number(creditoForm.oficina_id))?.nombre ??
@@ -994,7 +994,7 @@ function PensionadoModal({
                     required
                   />
                 ) : null}
-                <label className="flex items-center gap-3 rounded-xl border border-stone-800/10 bg-white/70 px-4 py-3 text-sm font-medium text-stone-700">
+                <label className="flex items-center gap-3 rounded-md border border-stone-800/10 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700">
                   <input
                     type="checkbox"
                     checked={creditoForm.tiene_documentos_pendientes}
@@ -1245,7 +1245,7 @@ function ActionLink({
       aria-label={label}
       title={label}
       onClick={(event) => event.stopPropagation()}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800"
     >
       {children}
     </Link>
@@ -1291,7 +1291,7 @@ function ActionButton({
       }}
       disabled={disabled}
       className={[
-        "inline-flex h-9 w-9 items-center justify-center rounded-xl border bg-white transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex h-9 w-9 items-center justify-center rounded-md border bg-white transition disabled:cursor-not-allowed disabled:opacity-50",
         tone === "danger"
           ? "border-red-500/15 text-red-700 hover:bg-red-50"
           : "border-stone-800/10 text-stone-700 hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800",
@@ -1377,7 +1377,7 @@ function StateMessage({
   return (
     <div
       className={[
-        "rounded-2xl border px-5 py-4 text-sm",
+        "rounded-lg border px-5 py-4 text-sm",
         tone === "error"
           ? "border-red-500/20 bg-red-50 text-red-700"
           : "border-stone-800/10 bg-white/65 text-stone-500",

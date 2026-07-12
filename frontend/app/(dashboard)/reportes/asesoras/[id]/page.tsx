@@ -197,8 +197,8 @@ export default function AsesoraReportPage() {
   }
 
   return (
-    <section className="space-y-4">
-      <header className="border-b border-stone-800/10 pb-4">
+    <section className="space-y-3">
+      <header className="border-b border-stone-800/10 pb-3">
         <Link href="/reportes" className="text-sm font-semibold text-teal-800">
           Volver a reportes
         </Link>
@@ -207,7 +207,7 @@ export default function AsesoraReportPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
               Ejecutiva operativa
             </p>
-            <h1 className="mt-2 text-2xl font-semibold text-stone-950">{asesora.nombre}</h1>
+            <h1 className="mt-2 text-xl font-semibold text-stone-950">{asesora.nombre}</h1>
             <p className="mt-1 text-sm text-stone-600">
               {asesora.correo} · {officeName} · {asesora.rol}
             </p>
@@ -264,7 +264,7 @@ export default function AsesoraReportPage() {
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <ReportTable title="Creditos asignados" headers={["Credito", "Estado", "Solicitado", "Aprobado", "Registro"]}>
           {assignedCredits.map((item) => (
             <tr key={item.id}>

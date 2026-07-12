@@ -417,15 +417,15 @@ export default function PensionadoDetailPage() {
   }
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-      <div className="space-y-4">
-        <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="space-y-3">
+        <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <Link href="/pensionados" className="text-xs font-semibold text-teal-700">
                 Volver a pensionados
               </Link>
-              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-950">
+              <h1 className="mt-1 text-xl font-semibold tracking-tight text-stone-950">
                 {pensionado.nombre_completo}
               </h1>
               <p className="mt-2 text-sm text-stone-600">
@@ -439,7 +439,7 @@ export default function PensionadoDetailPage() {
               </button>
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-2xl border border-red-500/15 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center rounded-lg border border-red-500/15 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={deleting || !pensionado.is_active}
                 onClick={() => void handleDelete()}
               >
@@ -448,14 +448,14 @@ export default function PensionadoDetailPage() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label="Creditos" value={String(resumen.creditos)} />
             <Metric label="Activos" value={String(resumen.activos)} />
             <Metric label="Seguimientos" value={String(resumen.seguimientos)} />
             <Metric label="Solicitado" value={formatCurrency(resumen.montoSolicitado)} />
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Detail label="Nombre" value={pensionado.nombre} />
             <Detail label="Segundo nombre" value={pensionado.segundo_nombre ?? "Sin registrar"} />
             <Detail label="Apellidos" value={pensionado.apellidos ?? "Sin registrar"} />
@@ -486,7 +486,7 @@ export default function PensionadoDetailPage() {
         ) : null}
       </div>
 
-      <aside className="rounded-2xl border border-stone-800/10 bg-white/85 p-4 shadow-lg shadow-stone-900/5 xl:sticky xl:top-28 xl:self-start">
+      <aside className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm xl:sticky xl:top-28 xl:self-start">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
           Ficha
         </p>
@@ -496,7 +496,7 @@ export default function PensionadoDetailPage() {
               key={view.key}
               href={`/pensionados/${pensionado.id}?vista=${view.key}`}
               className={[
-                "block rounded-xl border px-4 py-3 text-sm font-medium transition",
+                "block rounded-md border px-3 py-2 text-sm font-medium transition",
                 selectedView === view.key
                   ? "border-teal-700/20 bg-teal-950 text-white"
                   : "border-stone-800/10 bg-white/65 text-stone-700 hover:bg-white",
@@ -506,7 +506,7 @@ export default function PensionadoDetailPage() {
             </Link>
           ))}
         </nav>
-        <div className="mt-4 rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3 text-sm text-stone-700">
+        <div className="mt-4 rounded-md border border-stone-800/10 bg-white/65 px-3 py-2 text-sm text-stone-700">
           Estado: <StatusBadge active={pensionado.is_active} />
         </div>
       </aside>
@@ -561,12 +561,12 @@ function CreditosList({
   }, [pendientes]);
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
+    <article className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
       <div className="border-b border-stone-800/10 px-5 py-4">
         <h2 className="text-lg font-semibold text-stone-950">Creditos del pensionado</h2>
       </div>
 
-      <div className="hidden grid-cols-[0.8fr_1fr_1fr_0.8fr_1fr_88px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+      <div className="hidden grid-cols-[0.8fr_1fr_1fr_0.8fr_1fr_88px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
         <span>Credito</span>
         <span>Estado</span>
         <span>Solicitado</span>
@@ -584,7 +584,7 @@ function CreditosList({
             <Link
               key={credito.id}
               href={href}
-              className="group grid gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.8fr_1fr_1fr_0.8fr_1fr_88px] md:items-center md:py-3"
+              className="group grid gap-3 px-3 py-2.5 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.8fr_1fr_1fr_0.8fr_1fr_88px] md:items-center md:py-2"
             >
               <div className="min-w-0">
                 <p className="font-semibold text-stone-950">#{credito.id}</p>
@@ -609,7 +609,7 @@ function CreditosList({
                 <span
                   aria-label={`Ver credito ${credito.id}`}
                   title="Ver credito"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-stone-800/10 bg-white text-stone-700 transition group-hover:border-teal-700/30 group-hover:bg-teal-50 group-hover:text-teal-800"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-800/10 bg-white text-stone-700 transition group-hover:border-teal-700/30 group-hover:bg-teal-50 group-hover:text-teal-800"
                 >
                   <EyeIcon />
                 </span>
@@ -634,7 +634,7 @@ function SeguimientosList({
   onCreate: () => void;
 }) {
   return (
-    <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+    <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-stone-950">Seguimientos</h2>
         <button type="button" className="button-primary" onClick={onCreate}>
@@ -696,9 +696,9 @@ function SeguimientoCreateModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[calc(100vh-48px)] w-full max-w-2xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+        className="max-h-[calc(100vh-48px)] w-full max-w-2xl overflow-auto rounded-lg border border-stone-800/10 bg-white p-5 shadow-xl shadow-stone-950/20"
       >
-        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
               Nuevo seguimiento
@@ -714,7 +714,7 @@ function SeguimientoCreateModal({
 
         {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <SelectField
             label="Tipo"
             value={form.tipo}
@@ -804,7 +804,7 @@ function ActualizacionesList({
   }
 
   return (
-    <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-5 shadow-lg shadow-stone-900/5">
+    <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
       <h2 className="text-lg font-semibold text-stone-950">Actualizaciones</h2>
       <div className="mt-4 divide-y divide-stone-800/10">
         {logs.map((log) => (
@@ -813,7 +813,7 @@ function ActualizacionesList({
               <p className="text-sm font-semibold text-stone-950">{log.tipo_accion}</p>
               <p className="text-xs text-stone-500">{formatDateTime(log.created_at)}</p>
             </div>
-            <pre className="mt-3 overflow-auto rounded-xl bg-stone-950 p-3 text-xs text-stone-100">
+            <pre className="mt-3 overflow-auto rounded-md bg-stone-950 p-3 text-xs text-stone-100">
               {JSON.stringify(log.valores_despues ?? log.valores_antes ?? {}, null, 2)}
             </pre>
           </div>
@@ -850,9 +850,9 @@ function PensionadoEditModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-auto rounded-2xl border border-stone-800/10 bg-white p-5 shadow-2xl shadow-stone-950/20"
+        className="max-h-[calc(100vh-32px)] w-full max-w-3xl overflow-auto rounded-lg border border-stone-800/10 bg-white p-4 shadow-xl shadow-stone-950/10"
       >
-        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
               Editar pensionado
@@ -871,7 +871,7 @@ function PensionadoEditModal({
 
         {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Nombre" value={form.nombre} onChange={(value) => updateField("nombre", value)} required />
           <Field label="Segundo nombre" value={form.segundo_nombre} onChange={(value) => updateField("segundo_nombre", value)} />
           <Field label="Apellidos" value={form.apellidos} onChange={(value) => updateField("apellidos", value)} />
@@ -1000,7 +1000,7 @@ function TextareaField({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+    <div className="rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
       <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
       <p className="mt-2 text-lg font-semibold text-stone-950">{value}</p>
     </div>
@@ -1053,7 +1053,7 @@ function getCreditoStatusTone(estado: string) {
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-stone-800/10 bg-white/65 px-4 py-3">
+    <div className="rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
       <p className="text-xs uppercase tracking-[0.18em] text-stone-500">{label}</p>
       <p className="mt-2 text-sm font-semibold text-stone-900">{value}</p>
     </div>
@@ -1109,7 +1109,7 @@ function StateMessage({
   return (
     <div
       className={[
-        "rounded-2xl border px-5 py-4 text-sm",
+        "rounded-lg border px-5 py-4 text-sm",
         tone === "error"
           ? "border-red-500/20 bg-red-50 text-red-700"
           : "border-stone-800/10 bg-white/65 text-stone-500",

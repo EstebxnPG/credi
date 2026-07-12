@@ -3,17 +3,17 @@
 @tailwind utilities;
 
 :root {
-  --background: #f6efe4;
-  --surface: rgba(255, 251, 245, 0.82);
-  --surface-strong: #fffdf8;
-  --line: rgba(74, 57, 36, 0.14);
-  --foreground: #1c1915;
-  --muted: #6d6254;
+  --background: #f4f5f7;
+  --surface: rgba(255, 255, 255, 0.94);
+  --surface-strong: #ffffff;
+  --line: rgba(15, 23, 42, 0.12);
+  --foreground: #111827;
+  --muted: #64748b;
   --primary: #0f766e;
   --primary-strong: #115e59;
-  --accent: #d97706;
+  --accent: #b45309;
   --danger: #b91c1c;
-  --shadow: 0 24px 60px rgba(47, 35, 19, 0.12);
+  --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 * {
@@ -22,10 +22,7 @@
 
 html {
   min-height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 28%),
-    radial-gradient(circle at top right, rgba(217, 119, 6, 0.14), transparent 24%),
-    linear-gradient(180deg, #f9f3ea 0%, #f1e7d8 52%, #eadcc8 100%);
+  background: var(--background);
 }
 
 body {
@@ -54,43 +51,42 @@ textarea {
 
 @layer components {
   .glass-panel {
-    @apply rounded-[28px] border backdrop-blur-xl;
+    @apply rounded-xl border;
     background: var(--surface);
     border-color: var(--line);
     box-shadow: var(--shadow);
   }
 
   .card-panel {
-    @apply rounded-[18px] border bg-white/70;
+    @apply rounded-lg border bg-white;
     border-color: var(--line);
-    box-shadow: 0 10px 30px rgba(67, 49, 24, 0.08);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   }
 
   .input-base {
-    @apply w-full rounded-2xl border px-4 py-3 outline-none transition;
-    border-color: rgba(74, 57, 36, 0.16);
-    background: rgba(255, 253, 248, 0.88);
+    @apply w-full rounded-md border px-3 py-2 text-sm outline-none transition;
+    border-color: rgba(15, 23, 42, 0.14);
+    background: #ffffff;
   }
 
   .input-base:focus {
     border-color: rgba(15, 118, 110, 0.55);
-    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
   }
 
   .button-primary {
-    @apply inline-flex items-center justify-center rounded-2xl px-4 py-3 font-semibold text-white transition;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
-    box-shadow: 0 14px 30px rgba(15, 118, 110, 0.24);
+    @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-semibold text-white transition;
+    background: var(--primary);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   }
 
   .button-primary:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.02);
+    background: var(--primary-strong);
   }
 
   .button-muted {
-    @apply inline-flex items-center justify-center rounded-2xl border px-4 py-3 font-medium transition;
+    @apply inline-flex items-center justify-center rounded-md border px-3 py-2 text-sm font-medium transition;
     border-color: var(--line);
-    background: rgba(255, 251, 245, 0.78);
+    background: #ffffff;
   }
 }
