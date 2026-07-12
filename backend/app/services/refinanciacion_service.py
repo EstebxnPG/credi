@@ -343,6 +343,90 @@ def listar_creditos_elegibles(
     return elegibles[skip : skip + limit] if limit is not None else elegibles[skip:]
 
 
+def _parse_date_filter(value: str | None, field_name: str) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{field_name} debe tener formato YYYY-MM-DD") from exc
+
+
+def _matches_vista(item: dict, vista: str) -> bool:
+    if vista == "todos":
+        return True
+    if vista == "hoy":
+        return item["estado_refinanciacion"] == "Listo" and item["estado_comercial"] not in {"convertido", "rechazado"}
+    if vista == "proximos":
+        return item["estado_comercial"] == "programado"
+    if vista == "gestionados":
+        return item["estado_comercial"] in {"contactado", "aceptado", "rechazado"}
+    if vista == "convertidos":
+        return item["estado_comercial"] == "convertido"
+    raise HTTPException(status_code=422, detail="Vista de refinanciacion no valida")
+
+
+def _conteos_por_vista(items: list[dict]) -> dict:
+    return {
+        "hoy": sum(1 for item in items if _matches_vista(item, "hoy")),
+        "proximos": sum(1 for item in items if _matches_vista(item, "proximos")),
+        "gestionados": sum(1 for item in items if _matches_vista(item, "gestionados")),
+        "convertidos": sum(1 for item in items if _matches_vista(item, "convertidos")),
+    }
+
+
+def listar_creditos_elegibles_paginados(
+    db: Session,
+    usuario_actual: Usuario | None = None,
+    skip: int = 0,
+    limit: int = 15,
+    vista: str = "todos",
+    texto: str | None = None,
+    monto_min: float | None = None,
+    monto_max: float | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    cooperativa_id: int | None = None,
+) -> dict:
+    fecha_min = _parse_date_filter(fecha_desde, "fecha_desde")
+    fecha_max = _parse_date_filter(fecha_hasta, "fecha_hasta")
+    term = (texto or "").strip().lower()
+
+    items = listar_creditos_elegibles(
+        db,
+        usuario_actual=usuario_actual,
+        commit=True,
+        skip=0,
+        limit=None,
+    )
+    base_items = [
+        item
+        for item in items
+        if (not term or any(
+            term in str(value or "").lower()
+            for value in (
+                item["credito_id"],
+                item["pensionado_nombre"],
+                item["documento"],
+                item["cooperativa_nombre"],
+            )
+        ))
+        and (cooperativa_id is None or item["cooperativa_id"] == cooperativa_id)
+        and (monto_min is None or (item["monto_aprobado"] or 0) >= monto_min)
+        and (monto_max is None or (item["monto_aprobado"] or 0) <= monto_max)
+        and (fecha_min is None or item["disponible_desde"] >= fecha_min)
+        and (fecha_max is None or item["disponible_desde"] <= fecha_max)
+    ]
+    counts = _conteos_por_vista(base_items)
+    filtered = [item for item in base_items if _matches_vista(item, vista)]
+
+    return {
+        "items": filtered[skip : skip + limit],
+        "total": len(filtered),
+        "counts": counts,
+    }
+
+
 def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: OportunidadEstadoUpdate, usuario: Usuario):
     q = db.query(OportunidadRefinanciacion).filter(OportunidadRefinanciacion.id == oportunidad_id)
     if usuario.rol != "administrador":

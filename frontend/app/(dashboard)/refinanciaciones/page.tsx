@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
 type Estado = "programado" | "disponible" | "contactado" | "aceptado" | "rechazado" | "convertido";
@@ -11,8 +11,10 @@ type Vista = "hoy" | "proximos" | "gestionados" | "convertidos" | "todos";
 
 type Item = {
   credito_id: number;
+  pensionado_id: number;
   pensionado_nombre: string | null;
   documento: string | null;
+  cooperativa_id: number;
   cooperativa_nombre: string | null;
   simulador_url: string | null;
   monto_aprobado: number | null;
@@ -31,6 +33,12 @@ type Item = {
   credito_nuevo_id: number | null;
 };
 
+type Cooperativa = {
+  id: number;
+  nombre: string;
+  is_active: boolean;
+};
+
 const tabs: Array<{ key: Vista; label: string }> = [
   { key: "hoy", label: "Disponibles ahora" },
   { key: "proximos", label: "Proximos" },
@@ -39,76 +47,105 @@ const tabs: Array<{ key: Vista; label: string }> = [
   { key: "todos", label: "Todos" },
 ];
 
+const PAGE_SIZE = 15;
+
 export default function RefinanciacionesPage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
   const [query, setQuery] = useState("");
   const [vista, setVista] = useState<Vista>("hoy");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [filters, setFilters] = useState({
+    montoMin: "",
+    montoMax: "",
+    fechaDesde: "",
+    fechaHasta: "",
+    cooperativaId: "",
+  });
+  const [counts, setCounts] = useState({
+    hoy: 0,
+    proximos: 0,
+    gestionados: 0,
+    convertidos: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<Item | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        setItems(await apiFetch<Item[]>("/api/v1/refinanciaciones/elegibles/?limit=15"));
-      } catch (loadError) {
-        setError(
-          loadError instanceof ApiError
-            ? loadError.message
-            : "No se pudieron cargar las oportunidades",
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-    void load();
-  }, []);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-  const counts = useMemo(
-    () => ({
-      hoy: items.filter(
-        (item) =>
-          item.estado_refinanciacion === "Listo" &&
-          !["convertido", "rechazado"].includes(item.estado_comercial),
-      ).length,
-      proximos: items.filter((item) => item.estado_comercial === "programado").length,
-      gestionados: items.filter((item) =>
-        ["contactado", "aceptado", "rechazado"].includes(item.estado_comercial),
-      ).length,
-      convertidos: items.filter((item) => item.estado_comercial === "convertido").length,
-    }),
-    [items],
-  );
+    try {
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        skip: String((page - 1) * PAGE_SIZE),
+        vista,
+      });
 
-  const filtered = useMemo(() => {
-    const term = query.toLowerCase().trim();
+      if (query.trim()) params.set("texto", query.trim());
+      if (filters.montoMin) params.set("monto_min", filters.montoMin);
+      if (filters.montoMax) params.set("monto_max", filters.montoMax);
+      if (filters.fechaDesde) params.set("fecha_desde", filters.fechaDesde);
+      if (filters.fechaHasta) params.set("fecha_hasta", filters.fechaHasta);
+      if (filters.cooperativaId) params.set("cooperativa_id", filters.cooperativaId);
 
-    return items.filter((item) => {
-      const matchesView =
-        vista === "todos" ||
-        (vista === "hoy" &&
-          item.estado_refinanciacion === "Listo" &&
-          !["convertido", "rechazado"].includes(item.estado_comercial)) ||
-        (vista === "proximos" && item.estado_comercial === "programado") ||
-        (vista === "gestionados" &&
-          ["contactado", "aceptado", "rechazado"].includes(item.estado_comercial)) ||
-        (vista === "convertidos" && item.estado_comercial === "convertido");
+      const [response, cooperativasData] = await Promise.all([
+        apiFetchWithMeta<Item[]>(`/api/v1/refinanciaciones/elegibles/?${params.toString()}`),
+        cooperativas.length
+          ? Promise.resolve(null)
+          : apiFetch<Cooperativa[]>("/api/v1/cooperativas/?solo_activas=true"),
+      ]);
 
-      if (!matchesView) {
-        return false;
-      }
-
-      return (
-        !term ||
-        [item.credito_id, item.pensionado_nombre, item.documento, item.cooperativa_nombre].some(
-          (value) => String(value ?? "").toLowerCase().includes(term),
-        )
+      setItems(response.data);
+      setTotal(Number(response.headers.get("X-Total-Count") ?? response.data.length));
+      setCounts({
+        hoy: Number(response.headers.get("X-Count-Hoy") ?? 0),
+        proximos: Number(response.headers.get("X-Count-Proximos") ?? 0),
+        gestionados: Number(response.headers.get("X-Count-Gestionados") ?? 0),
+        convertidos: Number(response.headers.get("X-Count-Convertidos") ?? 0),
+      });
+      if (cooperativasData) setCooperativas(cooperativasData);
+    } catch (loadError) {
+      setError(
+        loadError instanceof ApiError
+          ? loadError.message
+          : "No se pudieron cargar las oportunidades",
       );
+    } finally {
+      setLoading(false);
+    }
+  }, [cooperativas.length, filters, page, query, vista]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function resetPage() {
+    setPage(1);
+  }
+
+  function updateFilter(field: keyof typeof filters, value: string) {
+    resetPage();
+    setFilters((current) => ({ ...current, [field]: value }));
+  }
+
+  function clearFilters() {
+    resetPage();
+    setQuery("");
+    setFilters({
+      montoMin: "",
+      montoMax: "",
+      fechaDesde: "",
+      fechaHasta: "",
+      cooperativaId: "",
     });
-  }, [items, query, vista]);
+  }
 
   async function change(item: Item, estado: Estado, justificacion?: string) {
     setSavingId(item.oportunidad_id);
@@ -135,6 +172,7 @@ export default function RefinanciacionesPage() {
             : currentItem,
         ),
       );
+      void load();
       setSuccess(`Credito #${item.credito_id}: estado actualizado a ${response.estado}.`);
       window.dispatchEvent(new Event("notifications-updated"));
     } catch (changeError) {
@@ -179,7 +217,10 @@ export default function RefinanciacionesPage() {
           <button
             key={tab.key}
             type="button"
-            onClick={() => setVista(tab.key)}
+            onClick={() => {
+              setVista(tab.key);
+              setPage(1);
+            }}
             className={
               vista === tab.key
                 ? "rounded-lg bg-teal-950 px-3 py-2 text-sm text-white"
@@ -191,12 +232,87 @@ export default function RefinanciacionesPage() {
         ))}
       </div>
 
-      <input
-        className="input-base max-w-lg"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Buscar credito, pensionado, documento o cooperativa"
-      />
+      <div className="rounded-lg border bg-white p-3 shadow-sm">
+        <div className="grid gap-2 lg:grid-cols-[1.4fr_.75fr_.75fr_.8fr_.8fr_1fr_auto] lg:items-end">
+          <label className="block text-sm font-medium text-stone-700">
+            <span>Buscar</span>
+            <input
+              className="input-base mt-1"
+              value={query}
+              onChange={(event) => {
+                resetPage();
+                setQuery(event.target.value);
+              }}
+              placeholder="Credito, pensionado, documento o cooperativa"
+            />
+          </label>
+          <Field
+            label="Monto min"
+            value={filters.montoMin}
+            onChange={(value) => updateFilter("montoMin", value)}
+            type="number"
+          />
+          <Field
+            label="Monto max"
+            value={filters.montoMax}
+            onChange={(value) => updateFilter("montoMax", value)}
+            type="number"
+          />
+          <Field
+            label="Desde"
+            value={filters.fechaDesde}
+            onChange={(value) => updateFilter("fechaDesde", value)}
+            type="date"
+          />
+          <Field
+            label="Hasta"
+            value={filters.fechaHasta}
+            onChange={(value) => updateFilter("fechaHasta", value)}
+            type="date"
+          />
+          <label className="block text-sm font-medium text-stone-700">
+            <span>Cooperativa</span>
+            <select
+              className="input-base mt-1"
+              value={filters.cooperativaId}
+              onChange={(event) => updateFilter("cooperativaId", event.target.value)}
+            >
+              <option value="">Todas</option>
+              {cooperativas.map((cooperativa) => (
+                <option key={cooperativa.id} value={cooperativa.id}>
+                  {cooperativa.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="button-muted whitespace-nowrap" onClick={clearFilters}>
+            Limpiar
+          </button>
+        </div>
+        <div className="mt-3 flex flex-col gap-2 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Mostrando {items.length} de {total} oportunidades. Pagina {page} de {totalPages}.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="button-muted px-2.5 py-1.5 text-xs"
+              disabled={page === 1 || loading}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              className="button-muted px-2.5 py-1.5 text-xs"
+              disabled={page >= totalPages || loading}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="overflow-x-auto border-y bg-white/80">
         <table className="min-w-full text-left text-sm">
@@ -212,11 +328,16 @@ export default function RefinanciacionesPage() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {filtered.map((item) => (
+            {items.map((item) => (
               <tr key={item.credito_id}>
                 <td className="px-4 py-3 font-semibold">#{item.credito_id}</td>
                 <td className="px-4 py-3">
-                  <p>{item.pensionado_nombre}</p>
+                  <Link
+                    className="font-semibold text-teal-800 hover:underline"
+                    href={`/pensionados/${item.pensionado_id}`}
+                  >
+                    {item.pensionado_nombre ?? `Pensionado #${item.pensionado_id}`}
+                  </Link>
                   <p className="text-xs text-stone-500">{item.documento}</p>
                 </td>
                 <td className="px-4 py-3">
@@ -294,7 +415,7 @@ export default function RefinanciacionesPage() {
               </tr>
             ))}
 
-            {filtered.length === 0 ? (
+            {items.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-stone-500">
                   No hay oportunidades en esta vista.
@@ -355,6 +476,31 @@ function Action({
     >
       {disabled ? "Guardando..." : text}
     </button>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <input
+        className="input-base mt-1"
+        type={type}
+        value={value}
+        min={type === "number" ? "0" : undefined}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
   );
 }
 

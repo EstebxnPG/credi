@@ -32,7 +32,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Total-Count"],
+    expose_headers=[
+        "X-Total-Count",
+        "X-Count-Hoy",
+        "X-Count-Proximos",
+        "X-Count-Gestionados",
+        "X-Count-Convertidos",
+    ],
 )
 
 
