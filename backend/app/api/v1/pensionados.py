@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.pensionado import PensionadoCreate, PensionadoLookup, PensionadoRead, PensionadoUpdate
@@ -19,16 +19,26 @@ def crear_pensionado(
 
 @router.get("/", response_model=List[PensionadoRead])
 def listar_pensionados(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
     solo_activos: bool = False,
+    texto: str | None = None,
+    activo: bool | None = None,
+    response: Response = None,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    return PensionadoService(db).listar(
+    service = PensionadoService(db)
+    total = service.contar(usuario=usuario, solo_activos=solo_activos, texto=texto, activo=activo)
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
+    return service.listar(
         usuario=usuario, skip=skip,
         limit=limit,
         solo_activos=solo_activos,
+        texto=texto,
+        activo=activo,
     )
 
 @router.get("/buscar/documento/{documento}", response_model=PensionadoLookup)

@@ -174,10 +174,13 @@ class CreditoCambioEstado(BaseModel):
 class CreditoRead(BaseModel):
     id: int
     pensionado_id: int
+    pensionado_nombre: Optional[str] = None
+    pensionado_documento: Optional[str] = None
     asesor_id: int
     asesor_nombre: Optional[str] = None
     oficina_id: int
     cooperativa_id: int
+    cooperativa_nombre: Optional[str] = None
     credito_refinanciado_id: Optional[int]
     pagaduria_id: int
     nro_libranza: Optional[str]

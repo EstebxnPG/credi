@@ -33,18 +33,22 @@ def crear_refinanciacion(
 @router.get("/", response_model=list[RefinanciacionRead])
 def listar_refinanciaciones(
     credito_id: Optional[int] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    return refinanciacion_service.listar_refinanciaciones(db, credito_id, usuario)
+    return refinanciacion_service.listar_refinanciaciones(db, credito_id, usuario, skip, limit)
 
 
 @router.get("/elegibles/", response_model=list[RefinanciacionElegibleRead])
 def listar_creditos_elegibles(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    return refinanciacion_service.listar_creditos_elegibles(db, usuario)
+    return refinanciacion_service.listar_creditos_elegibles(db, usuario, skip=skip, limit=limit)
 
 
 @router.patch("/oportunidades/{oportunidad_id}/estado")

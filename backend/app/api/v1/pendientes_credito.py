@@ -30,10 +30,19 @@ def crear_pendiente(
 def listar_pendientes(
     credito_id: Optional[int] = Query(None),
     estado: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: Usuario = Depends(get_current_user),
+    usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return pendiente_credito_service.listar_pendientes(db, credito_id, estado)
+    return pendiente_credito_service.listar_pendientes(
+        db,
+        usuario_actual,
+        credito_id,
+        estado,
+        skip,
+        limit,
+    )
 
 
 @router.patch("/{pendiente_id}", response_model=PendienteCreditoRead)

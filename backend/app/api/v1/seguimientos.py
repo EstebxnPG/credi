@@ -29,6 +29,8 @@ def listar_seguimientos(
     oficina_id: int | None = Query(None),
     usuario_id: int | None = Query(None),
     solo_pendientes: bool = Query(False),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),
 ):
@@ -39,6 +41,8 @@ def listar_seguimientos(
         oficina_id=oficina_id,
         usuario_id=usuario_id,
         solo_pendientes=solo_pendientes,
+        skip=skip,
+        limit=limit,
     )
 
 

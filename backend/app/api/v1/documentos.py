@@ -40,10 +40,19 @@ async def subir_documento(
 def listar_documentos(
     credito_id: Optional[int] = Query(None),
     solo_activos: bool = Query(True),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(15, ge=1, le=100),
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return documento_service.listar_documentos(db, usuario_actual, credito_id, solo_activos)
+    return documento_service.listar_documentos(
+        db,
+        usuario_actual,
+        credito_id,
+        solo_activos,
+        skip,
+        limit,
+    )
 
 
 @router.get("/{documento_id}", response_model=DocumentoRead)

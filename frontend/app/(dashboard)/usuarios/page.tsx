@@ -56,7 +56,7 @@ export default function UsuariosPage() {
     setError(null);
     try {
       const [usuariosData, oficinasData] = await Promise.all([
-        apiFetch<Usuario[]>("/api/v1/usuarios/?limit=500"),
+        apiFetch<Usuario[]>("/api/v1/usuarios/?limit=15"),
         apiFetch<Oficina[]>("/api/v1/oficinas/?solo_activas=false"),
       ]);
       setUsuarios(usuariosData);

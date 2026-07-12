@@ -14,14 +14,14 @@ class Pensionado(Base, TimestampMixin, SoftDeleteMixin):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), index=True)
     nombre: Mapped[str] = mapped_column(String(150), nullable=False)
     segundo_nombre: Mapped[str | None] = mapped_column(String(150))
-    apellidos: Mapped[str] = mapped_column(String(150), nullable=False)
-    genero: Mapped[str] = mapped_column(String(30), nullable=False)
+    apellidos: Mapped[str | None] = mapped_column(String(150))
+    genero: Mapped[str | None] = mapped_column(String(30))
     documento: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    fecha_nacimiento: Mapped[date] = mapped_column(Date, nullable=False)
+    fecha_nacimiento: Mapped[date | None] = mapped_column(Date)
     correo: Mapped[str | None] = mapped_column(String(150))
     telefono: Mapped[str | None] = mapped_column(String(20))
     celular: Mapped[str | None] = mapped_column(String(20))
-    direccion: Mapped[str] = mapped_column(String(200), nullable=False)
+    direccion: Mapped[str | None] = mapped_column(String(200))
     creditos: Mapped[list["Credito"]] = relationship(back_populates="pensionado")
     seguimientos: Mapped[list["Seguimiento"]] = relationship(back_populates="pensionado")
     oficinas_vinculadas: Mapped[list["PensionadoOficina"]] = relationship(back_populates="pensionado")
@@ -31,7 +31,7 @@ class Pensionado(Base, TimestampMixin, SoftDeleteMixin):
     def nombre_completo(self) -> str:
         apellidos = None if self.apellidos == "Sin registrar" else self.apellidos
         partes = [self.nombre, self.segundo_nombre, apellidos]
-        return " ".join(parte.strip() for parte in partes if parte and parte.strip())
+        return " ".join(parte.strip() for parte in partes if parte and parte.strip()).upper()
 
     @property
     def creador_nombre(self) -> str | None:

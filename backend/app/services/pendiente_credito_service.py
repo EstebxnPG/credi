@@ -75,14 +75,26 @@ def credito_tiene_pendientes_abiertos(db: Session, credito_id: int) -> bool:
 
 
 def listar_pendientes(
-    db: Session, credito_id: int | None = None, estado: str | None = None
+    db: Session,
+    usuario_actual: Usuario,
+    credito_id: int | None = None,
+    estado: str | None = None,
+    skip: int = 0,
+    limit: int = 15,
 ) -> list[PendienteCredito]:
-    query = db.query(PendienteCredito)
+    query = db.query(PendienteCredito).join(Credito)
+    if usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
     if credito_id is not None:
         query = query.filter(PendienteCredito.credito_id == credito_id)
     if estado is not None:
         query = query.filter(PendienteCredito.estado == estado)
-    return query.order_by(PendienteCredito.created_at.desc(), PendienteCredito.id.desc()).all()
+    return (
+        query.order_by(PendienteCredito.created_at.desc(), PendienteCredito.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
 
 def crear_pendiente(

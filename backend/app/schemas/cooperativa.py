@@ -7,20 +7,50 @@ from pydantic import BaseModel, field_validator, model_validator
 class CooperativaRefinanciacionReglaBase(BaseModel):
     plazo_minimo: int
     plazo_maximo: int
-    meses_para_refinanciar: int
+    tipo_liberacion: str = "meses"
+    meses_para_refinanciar: Optional[int] = None
+    porcentaje_credito: Optional[float] = None
 
-    @field_validator("plazo_minimo", "plazo_maximo", "meses_para_refinanciar")
+    @field_validator("plazo_minimo", "plazo_maximo")
     @classmethod
     def valores_positivos(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("El valor debe ser mayor a 0")
         return value
 
+    @field_validator("tipo_liberacion")
+    @classmethod
+    def tipo_liberacion_valido(cls, value: str | None) -> str:
+        if value is None:
+            return "meses"
+        value = value.strip().lower()
+        if value not in {"meses", "porcentaje"}:
+            raise ValueError("tipo_liberacion debe ser meses o porcentaje")
+        return value
+
+    @field_validator("meses_para_refinanciar")
+    @classmethod
+    def meses_positivos(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value <= 0:
+            raise ValueError("meses_para_refinanciar debe ser mayor a 0")
+        return value
+
+    @field_validator("porcentaje_credito")
+    @classmethod
+    def porcentaje_valido(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None and (value <= 0 or value > 100):
+            raise ValueError("porcentaje_credito debe estar entre 0 y 100")
+        return value
+
     @model_validator(mode="after")
     def rango_coherente(self):
         if self.plazo_minimo > self.plazo_maximo:
             raise ValueError("plazo_minimo debe ser menor o igual que plazo_maximo")
-        if self.meses_para_refinanciar > self.plazo_maximo:
+        if self.tipo_liberacion == "meses" and self.meses_para_refinanciar is None:
+            raise ValueError("meses_para_refinanciar es requerido para reglas por meses")
+        if self.tipo_liberacion == "porcentaje" and self.porcentaje_credito is None:
+            raise ValueError("porcentaje_credito es requerido para reglas por porcentaje")
+        if self.meses_para_refinanciar is not None and self.meses_para_refinanciar > self.plazo_maximo:
             raise ValueError("meses_para_refinanciar no debe superar el plazo maximo")
         return self
 

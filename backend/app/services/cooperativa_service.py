@@ -5,6 +5,15 @@ from app.db.models.cooperativa import Cooperativa, CooperativaRefinanciacionRegl
 from app.schemas.cooperativa import CooperativaCreate, CooperativaUpdate
 
 
+def _regla_model_payload(regla) -> dict:
+    payload = regla if isinstance(regla, dict) else regla.model_dump()
+    return {
+        "plazo_minimo": payload["plazo_minimo"],
+        "plazo_maximo": payload["plazo_maximo"],
+        "meses_para_refinanciar": payload.get("meses_para_refinanciar") or 1,
+    }
+
+
 def _get_or_404(db: Session, cooperativa_id: int) -> Cooperativa:
     cooperativa = db.query(Cooperativa).filter(Cooperativa.id == cooperativa_id).first()
     if not cooperativa:
@@ -33,7 +42,7 @@ def crear_cooperativa(db: Session, data: CooperativaCreate) -> Cooperativa:
     reglas = payload.pop("reglas_refinanciacion", [])
     cooperativa = Cooperativa(**payload)
     cooperativa.reglas_refinanciacion = [
-        CooperativaRefinanciacionRegla(**regla) for regla in reglas
+        CooperativaRefinanciacionRegla(**_regla_model_payload(regla)) for regla in reglas
     ]
     db.add(cooperativa)
     db.commit()
@@ -95,7 +104,7 @@ def actualizar_cooperativa(
 
     if reglas is not None:
         cooperativa.reglas_refinanciacion = [
-            CooperativaRefinanciacionRegla(**regla) for regla in reglas
+            CooperativaRefinanciacionRegla(**_regla_model_payload(regla)) for regla in reglas
         ]
 
     db.commit()

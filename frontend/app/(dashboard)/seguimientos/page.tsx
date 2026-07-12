@@ -108,8 +108,8 @@ export default function SeguimientosPage() {
 
     try {
       const [seguimientosData, pensionadosData, oficinasData] = await Promise.all([
-        apiFetch<Seguimiento[]>("/api/v1/seguimientos/"),
-        apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=500"),
+        apiFetch<Seguimiento[]>("/api/v1/seguimientos/?limit=15"),
+        apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=15"),
         apiFetch<Oficina[]>("/api/v1/oficinas/"),
       ]);
 

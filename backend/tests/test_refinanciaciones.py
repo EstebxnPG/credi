@@ -47,6 +47,57 @@ class RefinanciacionesTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             validar_credito_refinanciable(db, credito)
 
+    def test_credito_no_refinanciable_antes_de_porcentaje_requerido(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        credito = SimpleNamespace(
+            id=1,
+            estado="Aprobado",
+            is_active=True,
+            plazo=100,
+            fecha_desembolso=date.today() - timedelta(days=30 * 20),
+            cooperativa=SimpleNamespace(
+                is_active=True,
+                reglas_refinanciacion=[
+                    SimpleNamespace(
+                        plazo_minimo=1,
+                        plazo_maximo=120,
+                        tipo_liberacion="porcentaje",
+                        meses_para_refinanciar=None,
+                        porcentaje_credito=40,
+                    )
+                ],
+            ),
+        )
+
+        with self.assertRaises(HTTPException):
+            validar_credito_refinanciable(db, credito)
+
+    def test_credito_refinanciable_por_porcentaje_requerido(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        credito = SimpleNamespace(
+            id=1,
+            estado="Aprobado",
+            is_active=True,
+            plazo=100,
+            fecha_desembolso=date.today() - timedelta(days=30 * 45),
+            cooperativa=SimpleNamespace(
+                is_active=True,
+                reglas_refinanciacion=[
+                    SimpleNamespace(
+                        plazo_minimo=1,
+                        plazo_maximo=120,
+                        tipo_liberacion="porcentaje",
+                        meses_para_refinanciar=None,
+                        porcentaje_credito=40,
+                    )
+                ],
+            ),
+        )
+
+        validar_credito_refinanciable(db, credito)
+
     def test_oportunidad_rechazada_no_cambia_antes_de_reactivacion(self):
         credito = SimpleNamespace(
             id=1,

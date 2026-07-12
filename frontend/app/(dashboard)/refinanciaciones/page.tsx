@@ -16,8 +16,14 @@ type Item = {
   cooperativa_nombre: string | null;
   simulador_url: string | null;
   monto_aprobado: number | null;
+  plazo: number;
   fecha_base: string;
   disponible_desde: string;
+  meses_transcurridos: number;
+  meses_requeridos: number | null;
+  tipo_liberacion: "meses" | "porcentaje";
+  porcentaje_avance: number | null;
+  porcentaje_requerido: number | null;
   estado_refinanciacion: string;
   oportunidad_id: number;
   estado_comercial: Estado;
@@ -46,7 +52,7 @@ export default function RefinanciacionesPage() {
   useEffect(() => {
     async function load() {
       try {
-        setItems(await apiFetch<Item[]>("/api/v1/refinanciaciones/elegibles/"));
+        setItems(await apiFetch<Item[]>("/api/v1/refinanciaciones/elegibles/?limit=15"));
       } catch (loadError) {
         setError(
           loadError instanceof ApiError
@@ -232,6 +238,11 @@ export default function RefinanciacionesPage() {
                   <p>{formatDate(item.disponible_desde)}</p>
                   <p className="text-xs text-stone-500">
                     Base {formatDate(item.fecha_base)} - {formatCurrency(item.monto_aprobado)}
+                  </p>
+                  <p className="text-xs text-stone-500">
+                    {item.tipo_liberacion === "porcentaje"
+                      ? `${item.porcentaje_avance ?? 0}% / ${item.porcentaje_requerido ?? 0}%`
+                      : `${item.meses_transcurridos} / ${item.meses_requeridos ?? 0} meses`}
                   </p>
                 </td>
                 <td className="px-4 py-3">

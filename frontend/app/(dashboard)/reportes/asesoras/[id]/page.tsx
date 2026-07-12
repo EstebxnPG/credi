@@ -92,9 +92,9 @@ export default function AsesoraReportPage() {
           await Promise.all([
             apiFetch<Usuario>(`/api/v1/usuarios/${asesoraId}`),
             apiFetch<Oficina[]>("/api/v1/oficinas/?solo_activas=false"),
-            apiFetch<Credito[]>("/api/v1/creditos/"),
-            apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?usuario_id=${asesoraId}`),
-            apiFetch<Pendiente[]>("/api/v1/pendientes-credito/"),
+            apiFetch<Credito[]>("/api/v1/creditos/?limit=15"),
+            apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?usuario_id=${asesoraId}&limit=15`),
+            apiFetch<Pendiente[]>("/api/v1/pendientes-credito/?limit=15"),
             apiFetch<LogItem[]>(`/api/v1/logs/?usuario_id=${asesoraId}`),
           ]);
         if (!ignore) {

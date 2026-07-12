@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import {
   formatCurrency,
   formatDate,
@@ -17,9 +17,12 @@ import { readSession, readSessionUserId } from "@/lib/session";
 type Credito = {
   id: number;
   pensionado_id: number;
+  pensionado_nombre: string | null;
+  pensionado_documento: string | null;
   asesor_id: number;
   oficina_id: number;
   cooperativa_id: number;
+  cooperativa_nombre: string | null;
   credito_refinanciado_id: number | null;
   pagaduria_id: number;
   nro_libranza: string | null;
@@ -131,6 +134,7 @@ type FormMode = "create" | "edit";
 
 type FilterValues = {
   estado: string;
+  tipoCredito: string;
   plazoMin: string;
   plazoMax: string;
   pendientes: string;
@@ -139,11 +143,24 @@ type FilterValues = {
 
 const emptyFilters: FilterValues = {
   estado: "",
+  tipoCredito: "",
   plazoMin: "",
   plazoMax: "",
   pendientes: "",
   refinanciacion: "",
 };
+
+const estadosCredito = [
+  "Prospecto",
+  "Enviado a cooperativa",
+  "Devuelto por correccion",
+  "Reenviado",
+  "Aprobado",
+  "Rechazado",
+  "Finalizado",
+];
+
+const PAGE_SIZE = 15;
 
 export default function CreditosPage() {
   const router = useRouter();
@@ -158,6 +175,9 @@ export default function CreditosPage() {
   const [oficinas, setOficinas] = useState<Oficina[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [totalCreditos, setTotalCreditos] = useState(0);
   const [filters, setFilters] = useState<FilterValues>(emptyFilters);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -170,15 +190,25 @@ export default function CreditosPage() {
   const session = readSession();
   const canDelete = session?.rol === "administrador";
 
-  async function loadData() {
+  const loadData = useCallback(async function loadData() {
     setLoading(true);
     setError(null);
 
     try {
       const session = readSession();
       const userId = readSessionUserId();
+      const creditosParams = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        skip: String((page - 1) * PAGE_SIZE),
+      });
+      if (filters.estado) {
+        creditosParams.set("estado", filters.estado);
+      }
+      if (filters.tipoCredito) {
+        creditosParams.set("tipo_credito", filters.tipoCredito);
+      }
+
       const [
-        creditosData,
         pensionadosData,
         pendientesData,
         cooperativasData,
@@ -187,18 +217,21 @@ export default function CreditosPage() {
         opportunitiesData,
       ] =
         await Promise.all([
-        apiFetch<Credito[]>("/api/v1/creditos/"),
-        apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=500"),
-        apiFetch<PendienteCredito[]>("/api/v1/pendientes-credito/?estado=pendiente"),
+        apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=15"),
+        apiFetch<PendienteCredito[]>("/api/v1/pendientes-credito/?estado=pendiente&limit=15"),
         apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
         apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
         apiFetch<Oficina[]>("/api/v1/oficinas/"),
-        apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/"),
+        apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/?limit=15"),
       ]);
+      const creditosResponse = await apiFetchWithMeta<Credito[]>(
+        `/api/v1/creditos/?${creditosParams.toString()}`,
+      );
+      const total = Number(creditosResponse.headers.get("X-Total-Count") ?? creditosResponse.data.length);
 
       let usuariosData: Usuario[] = [];
       if (session?.rol === "administrador") {
-        usuariosData = await apiFetch<Usuario[]>("/api/v1/usuarios/?limit=500");
+        usuariosData = await apiFetch<Usuario[]>("/api/v1/usuarios/?limit=15");
       } else if (userId && session) {
         usuariosData = [
           {
@@ -211,7 +244,8 @@ export default function CreditosPage() {
         ];
       }
 
-      setCreditos(creditosData);
+      setCreditos(creditosResponse.data);
+      setTotalCreditos(Number.isFinite(total) ? total : creditosResponse.data.length);
       setPensionados(pensionadosData);
       setPendientes(pendientesData);
       setCooperativas(cooperativasData);
@@ -228,11 +262,15 @@ export default function CreditosPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [filters.estado, filters.tipoCredito, page]);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [loadData]);
+
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
 
   const pensionadoById = useMemo(() => {
     return new Map(pensionados.map((pensionado) => [pensionado.id, pensionado]));
@@ -279,6 +317,12 @@ export default function CreditosPage() {
       if (filters.estado && credito.estado !== filters.estado) {
         return false;
       }
+      if (
+        filters.tipoCredito &&
+        credito.tipo_credito?.toLowerCase() !== filters.tipoCredito.toLowerCase()
+      ) {
+        return false;
+      }
       if (plazoMin !== null && Number.isFinite(plazoMin) && credito.plazo < plazoMin) {
         return false;
       }
@@ -318,6 +362,9 @@ export default function CreditosPage() {
         credito.plazo,
         credito.nro_libranza,
         credito.tipo_credito,
+        credito.pensionado_nombre,
+        credito.pensionado_documento,
+        credito.cooperativa_nombre,
         credito.documentos_pendientes,
         pensionado?.nombre_completo,
         pensionado?.documento,
@@ -328,8 +375,76 @@ export default function CreditosPage() {
   }, [creditos, filters, opportunityByCreditoId, pendientesByCreditoId, pensionadoById, query]);
 
   const estadosDisponibles = useMemo(() => {
-    return Array.from(new Set(creditos.map((credito) => credito.estado))).sort();
-  }, [creditos]);
+    return estadosCredito;
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(totalCreditos / PAGE_SIZE));
+  const canGoNext = page < totalPages;
+
+  function updateFilters(nextFilters: FilterValues) {
+    setPage(1);
+    setFilters(nextFilters);
+  }
+
+  function goToPage(value: string) {
+    const nextPage = Number(value);
+    if (!Number.isFinite(nextPage) || nextPage < 1) {
+      setPageInput(String(page));
+      return;
+    }
+
+    const normalizedPage = Math.min(totalPages, Math.floor(nextPage));
+    setPage(normalizedPage);
+    setPageInput(String(normalizedPage));
+  }
+
+  const paginationControls = (
+    <div className="flex flex-col gap-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        Pagina {page} de {totalPages}. Mostrando {filtered.length} de {totalCreditos} creditos.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="button-muted px-3 py-2 text-xs"
+          disabled={page === 1 || loading}
+          onClick={() => setPage((current) => Math.max(1, current - 1))}
+        >
+          Anterior
+        </button>
+        <label className="flex items-center gap-2">
+          Ir a
+          <input
+            className="input-base h-9 w-20 px-2 py-1 text-sm"
+            max={totalPages}
+            min="1"
+            type="number"
+            value={pageInput}
+            onBlur={() => goToPage(pageInput)}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (/^\d*$/.test(value)) {
+                setPageInput(value);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="button-muted px-3 py-2 text-xs"
+          disabled={!canGoNext || loading}
+          onClick={() => setPage((current) => current + 1)}
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
 
   function openCreateModal() {
     const session = readSession();
@@ -551,8 +666,11 @@ export default function CreditosPage() {
             <input
               className="input-base min-w-0 sm:w-96"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por credito, pensionado, documento o estado"
+              onChange={(event) => {
+                setPage(1);
+                setQuery(event.target.value);
+              }}
+              placeholder="Buscar por credito, pensionado, documento, libranza, cooperativa o tipo"
             />
             <button type="button" className="button-primary whitespace-nowrap" onClick={openCreateModal}>
               Crear credito
@@ -562,29 +680,39 @@ export default function CreditosPage() {
       </article>
 
       <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-4 shadow-lg shadow-stone-900/5">
-        <div className="grid gap-3 md:grid-cols-[1fr_0.8fr_0.8fr_1fr_1fr_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_0.8fr_0.8fr_1fr_1fr_auto] md:items-end">
           <SelectField
             label="Estado"
             value={filters.estado}
-            onChange={(value) => setFilters((current) => ({ ...current, estado: value }))}
+            onChange={(value) => updateFilters({ ...filters, estado: value })}
             options={estadosDisponibles.map((estado) => ({ value: estado, label: estado }))}
+          />
+          <SelectField
+            label="Tipo de credito"
+            value={filters.tipoCredito}
+            onChange={(value) => updateFilters({ ...filters, tipoCredito: value })}
+            options={[
+              { value: "Nuevo", label: "Nuevo" },
+              { value: "Refinanciacion", label: "Refinanciacion" },
+              { value: "Compra de cartera", label: "Compra de cartera" },
+            ]}
           />
           <Field
             label="Plazo min."
             type="number"
             value={filters.plazoMin}
-            onChange={(value) => setFilters((current) => ({ ...current, plazoMin: value }))}
+            onChange={(value) => updateFilters({ ...filters, plazoMin: value })}
           />
           <Field
             label="Plazo max."
             type="number"
             value={filters.plazoMax}
-            onChange={(value) => setFilters((current) => ({ ...current, plazoMax: value }))}
+            onChange={(value) => updateFilters({ ...filters, plazoMax: value })}
           />
           <SelectField
             label="Pendientes"
             value={filters.pendientes}
-            onChange={(value) => setFilters((current) => ({ ...current, pendientes: value }))}
+            onChange={(value) => updateFilters({ ...filters, pendientes: value })}
             options={[
               { value: "con", label: "Con pendientes" },
               { value: "sin", label: "Sin pendientes" },
@@ -593,7 +721,7 @@ export default function CreditosPage() {
           <SelectField
             label="Refinanciacion"
             value={filters.refinanciacion}
-            onChange={(value) => setFilters((current) => ({ ...current, refinanciacion: value }))}
+            onChange={(value) => updateFilters({ ...filters, refinanciacion: value })}
             options={[
               { value: "listos", label: "Listos para refinanciar" },
               { value: "programados", label: "Programados" },
@@ -603,14 +731,12 @@ export default function CreditosPage() {
           <button
             type="button"
             className="button-muted whitespace-nowrap px-4 py-3 text-sm"
-            onClick={() => setFilters(emptyFilters)}
+            onClick={() => updateFilters(emptyFilters)}
           >
             Limpiar filtros
           </button>
         </div>
-        <p className="mt-3 text-xs text-stone-500">
-          Mostrando {filtered.length} de {creditos.length} creditos.
-        </p>
+        <div className="mt-3">{paginationControls}</div>
       </article>
 
       {loading ? <StateMessage text="Cargando creditos..." /> : null}
@@ -618,13 +744,14 @@ export default function CreditosPage() {
 
       {!loading && !error ? (
         <div className="overflow-hidden rounded-2xl border border-stone-800/10 bg-white/85 shadow-lg shadow-stone-900/5">
-          <div className="hidden grid-cols-[0.6fr_1.1fr_0.9fr_0.9fr_1fr_0.65fr_0.9fr_120px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+          <div className="hidden grid-cols-[0.5fr_1.35fr_0.9fr_1fr_0.9fr_0.85fr_0.9fr_0.85fr_112px] gap-3 border-b border-stone-800/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
             <span>Credito</span>
             <span>Pensionado</span>
-            <span>Oficina</span>
+            <span>Libranza</span>
+            <span>Cooperativa</span>
+            <span>Tipo</span>
             <span>Estado</span>
             <span>Solicitado</span>
-            <span>Plazo</span>
             <span>Registro</span>
             <span className="text-right">Acciones</span>
           </div>
@@ -634,6 +761,14 @@ export default function CreditosPage() {
               const pensionado = pensionadoById.get(credito.pensionado_id);
               const pendientesAbiertos = pendientesByCreditoId.get(credito.id) ?? [];
               const oficina = oficinaById.get(credito.oficina_id);
+              const pensionadoNombre =
+                credito.pensionado_nombre ?? pensionado?.nombre_completo ?? `Pensionado #${credito.pensionado_id}`;
+              const pensionadoDocumento =
+                credito.pensionado_documento ?? pensionado?.documento ?? "Documento sin cargar";
+              const cooperativaNombre =
+                credito.cooperativa_nombre ??
+                cooperativaById.get(credito.cooperativa_id)?.nombre ??
+                "Sin cooperativa";
 
               return (
                 <div
@@ -642,7 +777,7 @@ export default function CreditosPage() {
                   tabIndex={0}
                   onClick={() => openDetail(credito.id)}
                   onKeyDown={(event) => handleRowKeyDown(event, credito.id)}
-                  className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.6fr_1.1fr_0.9fr_0.9fr_1fr_0.65fr_0.9fr_120px] md:items-center md:py-3"
+                  className="grid cursor-pointer gap-3 px-4 py-4 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.5fr_1.35fr_0.9fr_1fr_0.9fr_0.85fr_0.9fr_0.85fr_112px] md:items-center md:py-3"
                 >
                   <div className="min-w-0">
                     <p className="font-semibold text-stone-950">#{credito.id}</p>
@@ -652,22 +787,40 @@ export default function CreditosPage() {
                   </div>
                   <div className="min-w-0 text-stone-700">
                     <p className="truncate font-medium text-stone-900">
-                      {pensionado?.nombre_completo ?? `Pensionado #${credito.pensionado_id}`}
+                      {pensionadoNombre}
                     </p>
                     <p className="mt-1 text-xs text-stone-500">
-                      {pensionado?.documento ?? "Documento sin cargar"}
+                      {pensionadoDocumento}
                     </p>
+                    <span className="mt-2 inline-flex md:hidden">
+                      <OfficeBadge oficina={oficina} />
+                    </span>
+                    <span className="mt-2 hidden md:inline-flex">
+                      <OfficeBadge oficina={oficina} />
+                    </span>
                   </div>
-                  <span>
-                    <OfficeBadge oficina={oficina} />
-                  </span>
+                  <div className="min-w-0 text-stone-700">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500 md:hidden">
+                      Libranza
+                    </p>
+                    <p className="truncate">{credito.nro_libranza ?? "Sin libranza"}</p>
+                  </div>
+                  <div className="min-w-0 text-stone-700">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500 md:hidden">
+                      Cooperativa
+                    </p>
+                    <p className="truncate">{cooperativaNombre}</p>
+                  </div>
+                  <span className="text-stone-700">{credito.tipo_credito ?? "Sin tipo"}</span>
                   <span>
                     <CreditoStatusBadge estado={credito.estado} />
                   </span>
                   <span className="font-medium text-stone-800">
                     {formatCurrency(credito.monto_solicitado)}
+                    <span className="mt-1 block text-xs font-normal text-stone-500">
+                      {credito.plazo} meses
+                    </span>
                   </span>
-                  <span className="text-stone-700">{credito.plazo} meses</span>
                   <span className="text-stone-700">
                     {formatDate(credito.fecha_registro)}
                     <PendingSummary
@@ -704,6 +857,9 @@ export default function CreditosPage() {
                 No hay creditos para la busqueda actual.
               </div>
             ) : null}
+          </div>
+          <div className="border-t border-stone-800/10 px-4 py-3">
+            {paginationControls}
           </div>
         </div>
       ) : null}

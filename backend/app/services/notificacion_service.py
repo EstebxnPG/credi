@@ -221,7 +221,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
         else:
             _resolver_por_clave(db, clave)
 
-    for elegible in listar_creditos_elegibles(db, commit=False):
+    for elegible in listar_creditos_elegibles(db, commit=False, limit=None):
         if elegible["disponible_desde"] > hoy:
             continue
 

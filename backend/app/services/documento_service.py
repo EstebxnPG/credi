@@ -173,6 +173,8 @@ def listar_documentos(
     usuario_actual: Usuario,
     credito_id: int | None = None,
     solo_activos: bool = True,
+    skip: int = 0,
+    limit: int = 15,
 ) -> list[Documento]:
     query = db.query(Documento).join(Documento.credito)
     if usuario_actual.rol != "administrador":
@@ -181,7 +183,7 @@ def listar_documentos(
         query = query.filter(Documento.credito_id == credito_id)
     if solo_activos:
         query = query.filter(Documento.is_active == True)  # noqa: E712
-    return query.order_by(Documento.created_at.desc()).all()
+    return query.order_by(Documento.created_at.desc()).offset(skip).limit(limit).all()
 
 
 def obtener_documento(db: Session, documento_id: int, usuario_actual: Usuario) -> Documento:

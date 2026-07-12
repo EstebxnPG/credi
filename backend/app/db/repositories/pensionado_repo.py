@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func, or_
 from app.db.models.pensionado import Pensionado, PensionadoOficina
 from app.schemas.pensionado import PensionadoCreate, PensionadoUpdate
 from typing import Optional
@@ -30,22 +30,71 @@ class PensionadoRepository:
         return self.db.execute(stmt).scalar_one_or_none()
 
     def get_all(
-        self, skip: int = 0, limit: int = 100, solo_activos: bool = False, oficina_id: int | None = None
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        solo_activos: bool = False,
+        oficina_id: int | None = None,
+        texto: str | None = None,
+        activo: bool | None = None,
     ) -> list[Pensionado]:
-        stmt = (
-            select(Pensionado)
-            .order_by(desc(Pensionado.is_active), Pensionado.id.desc())
-            .offset(skip)
-            .limit(limit)
+        stmt = self._apply_filters(
+            select(Pensionado),
+            solo_activos=solo_activos,
+            oficina_id=oficina_id,
+            texto=texto,
+            activo=activo,
+        ).order_by(desc(Pensionado.is_active), Pensionado.id.desc()).offset(skip).limit(limit)
+        return list(self.db.execute(stmt).scalars().all())
+
+    def count_all(
+        self,
+        solo_activos: bool = False,
+        oficina_id: int | None = None,
+        texto: str | None = None,
+        activo: bool | None = None,
+    ) -> int:
+        stmt = self._apply_filters(
+            select(func.count(Pensionado.id)),
+            solo_activos=solo_activos,
+            oficina_id=oficina_id,
+            texto=texto,
+            activo=activo,
         )
+        return int(self.db.execute(stmt).scalar_one())
+
+    def _apply_filters(
+        self,
+        stmt,
+        solo_activos: bool,
+        oficina_id: int | None,
+        texto: str | None,
+        activo: bool | None,
+    ):
         if solo_activos:
             stmt = stmt.where(Pensionado.is_active == True)
+        if activo is not None:
+            stmt = stmt.where(Pensionado.is_active == activo)
         if oficina_id is not None:
             stmt = stmt.join(PensionadoOficina).where(
                 PensionadoOficina.oficina_id == oficina_id,
                 PensionadoOficina.is_active == True,
             )
-        return list(self.db.execute(stmt).scalars().all())
+        if texto:
+            term = f"%{texto.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Pensionado.nombre.ilike(term),
+                    Pensionado.segundo_nombre.ilike(term),
+                    Pensionado.apellidos.ilike(term),
+                    Pensionado.documento.ilike(term),
+                    Pensionado.correo.ilike(term),
+                    Pensionado.telefono.ilike(term),
+                    Pensionado.celular.ilike(term),
+                    Pensionado.direccion.ilike(term),
+                )
+            )
+        return stmt
 
     def create(self, data: PensionadoCreate, oficina_id: int, usuario_id: int) -> Pensionado:
         pensionado = Pensionado(**data.model_dump(), oficina_id=oficina_id, created_by=usuario_id)

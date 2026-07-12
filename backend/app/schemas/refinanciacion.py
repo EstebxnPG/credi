@@ -99,7 +99,10 @@ class RefinanciacionElegibleRead(BaseModel):
     fecha_base: date
     disponible_desde: date
     meses_transcurridos: int
-    meses_requeridos: int
+    meses_requeridos: int | None = None
+    tipo_liberacion: str = "meses"
+    porcentaje_avance: float | None = None
+    porcentaje_requerido: float | None = None
     estado_refinanciacion: str
     oportunidad_id: int | None = None
     estado_comercial: str = "programado"

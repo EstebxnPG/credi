@@ -24,7 +24,9 @@ type ReglaRefinanciacion = {
   id?: number;
   plazo_minimo: number;
   plazo_maximo: number;
-  meses_para_refinanciar: number;
+  tipo_liberacion: "meses" | "porcentaje";
+  meses_para_refinanciar: number | null;
+  porcentaje_credito: number | null;
 };
 
 type FormValues = Omit<Cooperativa, "id" | "is_active">;
@@ -97,7 +99,12 @@ export default function CooperativasPage() {
       plazo_minimo: item.plazo_minimo,
       plazo_maximo: item.plazo_maximo,
       simulador_url: item.simulador_url,
-      reglas_refinanciacion: item.reglas_refinanciacion ?? [],
+      reglas_refinanciacion: (item.reglas_refinanciacion ?? []).map((regla) => ({
+        ...regla,
+        tipo_liberacion: regla.tipo_liberacion ?? "meses",
+        meses_para_refinanciar: regla.meses_para_refinanciar ?? null,
+        porcentaje_credito: regla.porcentaje_credito ?? null,
+      })),
     });
     setFormError(null);
     setModalMode("edit");
@@ -111,11 +118,15 @@ export default function CooperativasPage() {
     setFormError(null);
   }
 
-  function updateRule(index: number, field: keyof ReglaRefinanciacion, value: number) {
+  function updateRule(
+    index: number,
+    field: keyof ReglaRefinanciacion,
+    value: ReglaRefinanciacion[keyof ReglaRefinanciacion],
+  ) {
     setForm((current) => ({
       ...current,
       reglas_refinanciacion: current.reglas_refinanciacion.map((regla, itemIndex) =>
-        itemIndex === index ? { ...regla, [field]: value } : regla,
+        itemIndex === index ? ({ ...regla, [field]: value } as ReglaRefinanciacion) : regla,
       ),
     }));
   }
@@ -194,7 +205,11 @@ export default function CooperativasPage() {
                   <span className="mt-1 block text-xs text-stone-500">
                     Refi: {item.reglas_refinanciacion?.length ?? 0} regla(s)
                   </span>
-                  {item.reglas_refinanciacion?.map((rule) => <span key={rule.id} className="block text-xs text-stone-500">{rule.plazo_minimo}-{rule.plazo_maximo} meses: libera al mes {rule.meses_para_refinanciar}</span>)}
+                  {item.reglas_refinanciacion?.map((rule) => (
+                    <span key={rule.id} className="block text-xs text-stone-500">
+                      {rule.plazo_minimo}-{rule.plazo_maximo} meses: {rule.tipo_liberacion === "porcentaje" ? `libera al ${rule.porcentaje_credito}%` : `libera al mes ${rule.meses_para_refinanciar}`}
+                    </span>
+                  ))}
                 </p>
                 <StatusBadge active={item.is_active} />
                 {isAdmin ? <Actions onEdit={() => openEdit(item)} onDelete={() => void handleDelete(item)} deleteDisabled={!item.is_active} /> : <span className="text-right text-xs text-stone-400">Solo lectura</span>}
@@ -228,7 +243,7 @@ export default function CooperativasPage() {
                     ...form,
                     reglas_refinanciacion: [
                       ...form.reglas_refinanciacion,
-                      { plazo_minimo: 12, plazo_maximo: 14, meses_para_refinanciar: 6 },
+                      { plazo_minimo: 12, plazo_maximo: 14, tipo_liberacion: "meses", meses_para_refinanciar: 6, porcentaje_credito: null },
                     ],
                   })
                 }
@@ -238,10 +253,30 @@ export default function CooperativasPage() {
             </div>
             <div className="mt-4 grid gap-3">
               {form.reglas_refinanciacion.map((regla, index) => (
-                <div key={index} className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                <div key={index} className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
                   <NumberField label="Plazo desde" value={regla.plazo_minimo} onChange={(value) => updateRule(index, "plazo_minimo", value)} />
                   <NumberField label="Plazo hasta" value={regla.plazo_maximo} onChange={(value) => updateRule(index, "plazo_maximo", value)} />
-                  <NumberField label="Refi al mes" value={regla.meses_para_refinanciar} onChange={(value) => updateRule(index, "meses_para_refinanciar", value)} />
+                  <label className="block text-sm font-medium text-stone-700">
+                    <span>Tipo</span>
+                    <select
+                      className="input-base mt-2"
+                      value={regla.tipo_liberacion ?? "meses"}
+                      onChange={(event) => {
+                        const tipo = event.target.value as ReglaRefinanciacion["tipo_liberacion"];
+                        updateRule(index, "tipo_liberacion", tipo);
+                        updateRule(index, "meses_para_refinanciar", tipo === "meses" ? regla.meses_para_refinanciar ?? 6 : null);
+                        updateRule(index, "porcentaje_credito", tipo === "porcentaje" ? regla.porcentaje_credito ?? 40 : null);
+                      }}
+                    >
+                      <option value="meses">Meses</option>
+                      <option value="porcentaje">Porcentaje</option>
+                    </select>
+                  </label>
+                  {regla.tipo_liberacion === "porcentaje" ? (
+                    <NumberField label="% credito" value={regla.porcentaje_credito ?? 40} onChange={(value) => updateRule(index, "porcentaje_credito", value)} step="0.01" />
+                  ) : (
+                    <NumberField label="Refi al mes" value={regla.meses_para_refinanciar ?? 6} onChange={(value) => updateRule(index, "meses_para_refinanciar", value)} />
+                  )}
                   <button
                     type="button"
                     className="button-muted self-end px-3 py-2 text-sm"
@@ -276,7 +311,30 @@ function Field({ label, value, onChange, required = false }: { label: string; va
 }
 
 function NumberField({ label, value, onChange, step = "1" }: { label: string; value: number; onChange: (value: number) => void; step?: string }) {
-  return <label className="block text-sm font-medium text-stone-700"><span>{label}</span><input className="input-base mt-2" type="number" step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} required /></label>;
+  const [displayValue, setDisplayValue] = useState(String(value));
+
+  useEffect(() => {
+    setDisplayValue(String(value));
+  }, [value]);
+
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <input
+        className="input-base mt-2"
+        type="number"
+        step={step}
+        value={displayValue}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setDisplayValue(nextValue);
+          if (nextValue !== "") onChange(Number(nextValue));
+        }}
+        onWheel={(event) => event.currentTarget.blur()}
+        required
+      />
+    </label>
+  );
 }
 
 function Actions({ onEdit, onDelete, deleteDisabled }: { onEdit: () => void; onDelete: () => void; deleteDisabled?: boolean }) {

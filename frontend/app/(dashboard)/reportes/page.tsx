@@ -165,14 +165,14 @@ export default function ReportesPage() {
           usuariosData,
         ] =
           await Promise.all([
-            apiFetch<Credito[]>("/api/v1/creditos/"),
-            apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=500"),
-            apiFetch<Seguimiento[]>("/api/v1/seguimientos/"),
-            apiFetch<Documento[]>("/api/v1/documentos/"),
-            apiFetch<Pendiente[]>("/api/v1/pendientes-credito/"),
+            apiFetch<Credito[]>("/api/v1/creditos/?limit=15"),
+            apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=15"),
+            apiFetch<Seguimiento[]>("/api/v1/seguimientos/?limit=15"),
+            apiFetch<Documento[]>("/api/v1/documentos/?limit=15"),
+            apiFetch<Pendiente[]>("/api/v1/pendientes-credito/?limit=15"),
             apiFetch<Oficina[]>("/api/v1/oficinas/?solo_activas=false"),
-            apiFetch<Refinanciacion[]>("/api/v1/refinanciaciones/elegibles/"),
-            apiFetch<Asesora[]>("/api/v1/usuarios/?limit=500"),
+            apiFetch<Refinanciacion[]>("/api/v1/refinanciaciones/elegibles/?limit=15"),
+            apiFetch<Asesora[]>("/api/v1/usuarios/?limit=15"),
           ]);
 
         if (!ignore) {

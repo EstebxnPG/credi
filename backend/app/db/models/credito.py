@@ -46,3 +46,15 @@ class Credito(Base, TimestampMixin, SoftDeleteMixin):
     @property
     def asesor_nombre(self) -> str | None:
         return self.asesor.nombre if self.asesor else None
+
+    @property
+    def pensionado_nombre(self) -> str | None:
+        return self.pensionado.nombre_completo if self.pensionado else None
+
+    @property
+    def pensionado_documento(self) -> str | None:
+        return self.pensionado.documento if self.pensionado else None
+
+    @property
+    def cooperativa_nombre(self) -> str | None:
+        return self.cooperativa.nombre if self.cooperativa else None

@@ -120,6 +120,14 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const { data } = await apiFetchWithMeta<T>(path, init);
+  return data;
+}
+
+export async function apiFetchWithMeta<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data: T; headers: Headers }> {
   const session = readSession();
   const headers = new Headers(init?.headers);
   const isFormData = init?.body instanceof FormData;
@@ -156,15 +164,15 @@ export async function apiFetch<T>(
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    return { data: undefined as T, headers: response.headers };
   }
 
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
-    return undefined as T;
+    return { data: undefined as T, headers: response.headers };
   }
 
-  return (await response.json()) as T;
+  return { data: (await response.json()) as T, headers: response.headers };
 }
 
 export async function apiDownload(path: string, init?: RequestInit): Promise<Blob> {

@@ -223,17 +223,17 @@ export default function CreditoDetailPage() {
         ] = await Promise.all([
           apiFetch<Credito>(`/api/v1/creditos/${creditoId}`),
           apiFetch<HistorialCredito[]>(`/api/v1/creditos/${creditoId}/historial`),
-          apiFetch<Documento[]>(`/api/v1/documentos/?credito_id=${creditoId}`),
-          apiFetch<PendienteCredito[]>(`/api/v1/pendientes-credito/?credito_id=${creditoId}`),
+          apiFetch<Documento[]>(`/api/v1/documentos/?credito_id=${creditoId}&limit=15`),
+          apiFetch<PendienteCredito[]>(`/api/v1/pendientes-credito/?credito_id=${creditoId}&limit=15`),
           apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
           apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
           apiFetch<Oficina[]>("/api/v1/oficinas/"),
-          apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/"),
+          apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/?limit=15"),
         ]);
         const [pensionadoData, creditosPensionadoData] = await Promise.all([
           apiFetch<Pensionado>(`/api/v1/pensionados/${creditoData.pensionado_id}`),
           apiFetch<Credito[]>(
-            `/api/v1/creditos/?pensionado_id=${creditoData.pensionado_id}`,
+            `/api/v1/creditos/?pensionado_id=${creditoData.pensionado_id}&limit=15`,
           ),
         ]);
 

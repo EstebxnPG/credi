@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import {
   formatCurrency,
   formatMoneyInput,
@@ -121,6 +121,9 @@ type CreditoFormValues = {
 };
 
 type FormMode = "create" | "edit";
+type EstadoFilter = "" | "activos" | "inactivos";
+
+const PAGE_SIZE = 15;
 
 const emptyForm: FormValues = {
   nombre: "",
@@ -155,6 +158,10 @@ export default function PensionadosPage() {
   const router = useRouter();
   const [pensionados, setPensionados] = useState<Pensionado[]>([]);
   const [query, setQuery] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("");
+  const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [totalPensionados, setTotalPensionados] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -170,24 +177,41 @@ export default function PensionadosPage() {
   const [oficinas, setOficinas] = useState<Oficina[]>([]);
   const [lookup, setLookup] = useState<PensionadoLookup | null>(null);
 
-  async function loadPensionados() {
+  const loadPensionados = useCallback(async function loadPensionados() {
     setLoading(true);
     setError(null);
 
     try {
       const session = readSession();
       const userId = readSessionUserId();
-      const [pensionadosData, cooperativasData, pagaduriasData, oficinasData] =
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        skip: String((page - 1) * PAGE_SIZE),
+      });
+      if (query.trim()) {
+        params.set("texto", query.trim());
+      }
+      if (estadoFilter === "activos") {
+        params.set("activo", "true");
+      }
+      if (estadoFilter === "inactivos") {
+        params.set("activo", "false");
+      }
+
+      const [pensionadosResponse, cooperativasData, pagaduriasData, oficinasData] =
         await Promise.all([
-          apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=200"),
+          apiFetchWithMeta<Pensionado[]>(`/api/v1/pensionados/?${params.toString()}`),
           apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
           apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
           apiFetch<Oficina[]>("/api/v1/oficinas/"),
         ]);
+      const total = Number(
+        pensionadosResponse.headers.get("X-Total-Count") ?? pensionadosResponse.data.length,
+      );
 
       let usuariosData: Usuario[] = [];
       if (session?.rol === "administrador") {
-        usuariosData = await apiFetch<Usuario[]>("/api/v1/usuarios/?limit=500");
+        usuariosData = await apiFetch<Usuario[]>("/api/v1/usuarios/?limit=15");
       } else if (session && userId) {
         usuariosData = [
           {
@@ -200,7 +224,8 @@ export default function PensionadosPage() {
         ];
       }
 
-      setPensionados(pensionadosData);
+      setPensionados(pensionadosResponse.data);
+      setTotalPensionados(Number.isFinite(total) ? total : pensionadosResponse.data.length);
       setCooperativas(cooperativasData);
       setPagadurias(pagaduriasData);
       setOficinas(oficinasData);
@@ -214,35 +239,19 @@ export default function PensionadosPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [estadoFilter, page, query]);
 
   useEffect(() => {
     void loadPensionados();
-  }, []);
+  }, [loadPensionados]);
+
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
 
   const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    if (!term) {
-      return pensionados;
-    }
-
-    return pensionados.filter((pensionado) =>
-      [
-        pensionado.nombre,
-        pensionado.segundo_nombre,
-        pensionado.apellidos,
-        pensionado.nombre_completo,
-        pensionado.genero,
-        pensionado.documento,
-        pensionado.correo,
-        pensionado.celular,
-        pensionado.telefono,
-        pensionado.direccion,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term)),
-    );
-  }, [pensionados, query]);
+    return pensionados;
+  }, [pensionados]);
 
   const oficinaById = useMemo(() => {
     return new Map(oficinas.map((oficina) => [oficina.id, oficina]));
@@ -258,6 +267,73 @@ export default function PensionadosPage() {
         usuario.is_active && (usuario.rol === "asesora" || usuario.rol === "administrador"),
     );
   }, [usuarios]);
+
+  const totalPages = Math.max(1, Math.ceil(totalPensionados / PAGE_SIZE));
+  const canGoNext = page < totalPages;
+
+  function resetToFirstPage() {
+    setPage(1);
+  }
+
+  function goToPage(value: string) {
+    const nextPage = Number(value);
+    if (!Number.isFinite(nextPage) || nextPage < 1) {
+      setPageInput(String(page));
+      return;
+    }
+
+    const normalizedPage = Math.min(totalPages, Math.floor(nextPage));
+    setPage(normalizedPage);
+    setPageInput(String(normalizedPage));
+  }
+
+  const paginationControls = (
+    <div className="flex flex-col gap-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        Pagina {page} de {totalPages}. Mostrando {filtered.length} de {totalPensionados} pensionados.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="button-muted px-3 py-2 text-xs"
+          disabled={page === 1 || loading}
+          onClick={() => setPage((current) => Math.max(1, current - 1))}
+        >
+          Anterior
+        </button>
+        <label className="flex items-center gap-2">
+          Ir a
+          <input
+            className="input-base h-9 w-20 px-2 py-1 text-sm"
+            max={totalPages}
+            min="1"
+            type="number"
+            value={pageInput}
+            onBlur={() => goToPage(pageInput)}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (/^\d*$/.test(value)) {
+                setPageInput(value);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="button-muted px-3 py-2 text-xs"
+          disabled={!canGoNext || loading}
+          onClick={() => setPage((current) => current + 1)}
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
 
   function openCreateModal() {
     const session = readSession();
@@ -478,17 +554,55 @@ export default function PensionadosPage() {
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:items-center">
-            <input
-              className="input-base min-w-0 sm:w-80"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar por nombre, documento, correo o telefono"
-            />
             <button type="button" className="button-primary whitespace-nowrap" onClick={openCreateModal}>
               Crear pensionado
             </button>
           </div>
         </div>
+      </article>
+
+      <article className="rounded-2xl border border-stone-800/10 bg-white/85 p-4 shadow-lg shadow-stone-900/5">
+        <div className="grid gap-3 md:grid-cols-[1.4fr_0.7fr_auto] md:items-end">
+          <label className="block text-sm font-medium text-stone-700">
+            <span>Buscar</span>
+            <input
+              className="input-base mt-2"
+              value={query}
+              onChange={(event) => {
+                resetToFirstPage();
+                setQuery(event.target.value);
+              }}
+              placeholder="Nombre, documento, correo, telefono o direccion"
+            />
+          </label>
+          <label className="block text-sm font-medium text-stone-700">
+            <span>Estado</span>
+            <select
+              className="input-base mt-2"
+              value={estadoFilter}
+              onChange={(event) => {
+                resetToFirstPage();
+                setEstadoFilter(event.target.value as EstadoFilter);
+              }}
+            >
+              <option value="">Todos</option>
+              <option value="activos">Activos</option>
+              <option value="inactivos">Inactivos</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="button-muted whitespace-nowrap px-4 py-3 text-sm"
+            onClick={() => {
+              resetToFirstPage();
+              setQuery("");
+              setEstadoFilter("");
+            }}
+          >
+            Limpiar filtros
+          </button>
+        </div>
+        <div className="mt-3">{paginationControls}</div>
       </article>
 
       {loading ? <StateMessage text="Cargando pensionados..." /> : null}
@@ -553,6 +667,9 @@ export default function PensionadosPage() {
                 No hay pensionados para la busqueda actual.
               </div>
             ) : null}
+          </div>
+          <div className="border-t border-stone-800/10 px-4 py-3">
+            {paginationControls}
           </div>
         </div>
       ) : null}

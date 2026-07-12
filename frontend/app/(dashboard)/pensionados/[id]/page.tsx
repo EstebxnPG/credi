@@ -12,15 +12,15 @@ type Pensionado = {
   id: number;
   nombre: string;
   segundo_nombre: string | null;
-  apellidos: string;
-  genero: string;
+  apellidos: string | null;
+  genero: string | null;
   nombre_completo: string;
   documento: string;
-  fecha_nacimiento: string;
+  fecha_nacimiento: string | null;
   correo?: string | null;
   telefono: string | null;
   celular: string | null;
-  direccion: string;
+  direccion: string | null;
   is_active: boolean;
 };
 
@@ -171,9 +171,9 @@ export default function PensionadoDetailPage() {
           oficinasData,
         ] = await Promise.all([
           apiFetch<Pensionado>(`/api/v1/pensionados/${pensionadoId}`),
-          apiFetch<Credito[]>(`/api/v1/creditos/?pensionado_id=${pensionadoId}`),
-          apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?pensionado_id=${pensionadoId}`),
-          apiFetch<PendienteCredito[]>("/api/v1/pendientes-credito/?estado=pendiente"),
+          apiFetch<Credito[]>(`/api/v1/creditos/?pensionado_id=${pensionadoId}&limit=15`),
+          apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?pensionado_id=${pensionadoId}&limit=15`),
+          apiFetch<PendienteCredito[]>("/api/v1/pendientes-credito/?estado=pendiente&limit=15"),
           apiFetch<Oficina[]>("/api/v1/oficinas/"),
         ]);
 
@@ -251,15 +251,15 @@ export default function PensionadoDetailPage() {
     }
 
     setForm({
-      nombre: pensionado.nombre,
+      nombre: pensionado.nombre ?? "",
       segundo_nombre: pensionado.segundo_nombre ?? "",
-      apellidos: pensionado.apellidos,
-      genero: pensionado.genero,
-      fecha_nacimiento: pensionado.fecha_nacimiento,
+      apellidos: pensionado.apellidos ?? "",
+      genero: pensionado.genero ?? "No especificado",
+      fecha_nacimiento: pensionado.fecha_nacimiento ?? "",
       correo: pensionado.correo ?? "",
       telefono: pensionado.telefono ?? "",
       celular: pensionado.celular ?? "",
-      direccion: pensionado.direccion,
+      direccion: pensionado.direccion ?? "",
     });
     setFormError(null);
   }
@@ -348,15 +348,15 @@ export default function PensionadoDetailPage() {
       const payload: Record<string, string | null> = {
         nombre: form.nombre.trim(),
         segundo_nombre: nullableText(form.segundo_nombre),
-        apellidos: form.apellidos.trim(),
+        apellidos: nullableText(form.apellidos),
         genero: form.genero,
         correo: nullableText(form.correo),
         telefono: nullableText(form.telefono),
         celular: nullableText(form.celular),
-        direccion: form.direccion.trim(),
+        direccion: nullableText(form.direccion),
       };
 
-      if (form.fecha_nacimiento !== pensionado.fecha_nacimiento) {
+      if (form.fecha_nacimiento && form.fecha_nacimiento !== pensionado.fecha_nacimiento) {
         payload.fecha_nacimiento = form.fecha_nacimiento;
       }
 
@@ -429,7 +429,7 @@ export default function PensionadoDetailPage() {
                 {pensionado.nombre_completo}
               </h1>
               <p className="mt-2 text-sm text-stone-600">
-                Documento {pensionado.documento} - {pensionado.direccion}
+                Documento {pensionado.documento} - {pensionado.direccion ?? "Sin direccion"}
               </p>
             </div>
 
@@ -458,15 +458,15 @@ export default function PensionadoDetailPage() {
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <Detail label="Nombre" value={pensionado.nombre} />
             <Detail label="Segundo nombre" value={pensionado.segundo_nombre ?? "Sin registrar"} />
-            <Detail label="Apellidos" value={pensionado.apellidos} />
-            <Detail label="Genero" value={pensionado.genero} />
+            <Detail label="Apellidos" value={pensionado.apellidos ?? "Sin registrar"} />
+            <Detail label="Genero" value={pensionado.genero ?? "Sin registrar"} />
             <Detail label="Correo" value={pensionado.correo ?? "Sin correo registrado"} />
             <Detail
               label="Telefono"
               value={pensionado.telefono ?? "Sin telefono fijo"}
             />
             <Detail label="Celular" value={pensionado.celular ?? "Sin celular"} />
-            <Detail label="Direccion" value={pensionado.direccion} />
+            <Detail label="Direccion" value={pensionado.direccion ?? "Sin direccion"} />
             <Detail label="Nacimiento" value={formatDate(pensionado.fecha_nacimiento)} />
           </div>
         </article>
@@ -859,7 +859,7 @@ function PensionadoEditModal({
             </p>
             <h2 className="mt-2 text-xl font-semibold text-stone-950">
               {[form.nombre, form.segundo_nombre, form.apellidos]
-                .map((value) => value.trim())
+                .map((value) => value?.trim() ?? "")
                 .filter(Boolean)
                 .join(" ")}
             </h2>
@@ -874,7 +874,7 @@ function PensionadoEditModal({
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="Nombre" value={form.nombre} onChange={(value) => updateField("nombre", value)} required />
           <Field label="Segundo nombre" value={form.segundo_nombre} onChange={(value) => updateField("segundo_nombre", value)} />
-          <Field label="Apellidos" value={form.apellidos} onChange={(value) => updateField("apellidos", value)} required />
+          <Field label="Apellidos" value={form.apellidos} onChange={(value) => updateField("apellidos", value)} />
           <SelectField
             label="Genero"
             value={form.genero}
@@ -886,13 +886,12 @@ function PensionadoEditModal({
             type="date"
             value={form.fecha_nacimiento}
             onChange={(value) => updateField("fecha_nacimiento", value)}
-            required
           />
           <Field label="Correo" type="email" value={form.correo} onChange={(value) => updateField("correo", value)} />
           <Field label="Telefono" value={form.telefono} onChange={(value) => updateField("telefono", value)} inputMode="tel" />
           <Field label="Celular" value={form.celular} onChange={(value) => updateField("celular", value)} inputMode="tel" />
           <div className="sm:col-span-2">
-            <Field label="Direccion" value={form.direccion} onChange={(value) => updateField("direccion", value)} required />
+            <Field label="Direccion" value={form.direccion} onChange={(value) => updateField("direccion", value)} />
           </div>
         </div>
 

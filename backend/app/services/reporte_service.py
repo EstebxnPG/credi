@@ -24,7 +24,10 @@ def _base_creditos_query(db: Session, usuario_actual: Usuario):
     return query
 
 
-def _esta_en_proximos_30_dias(fecha_nacimiento: date, hoy: date) -> bool:
+def _esta_en_proximos_30_dias(fecha_nacimiento: date | None, hoy: date) -> bool:
+    if fecha_nacimiento is None:
+        return False
+
     fin = hoy + timedelta(days=30)
     cumple_este_anio = fecha_nacimiento.replace(year=hoy.year)
 
@@ -94,7 +97,8 @@ def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
             "fecha_nacimiento": pensionado.fecha_nacimiento.isoformat(),
         }
         for pensionado in pensionados
-        if _esta_en_proximos_30_dias(pensionado.fecha_nacimiento, hoy)
+        if pensionado.fecha_nacimiento
+        and _esta_en_proximos_30_dias(pensionado.fecha_nacimiento, hoy)
     ]
 
     refinanciaciones_query = db.query(Refinanciacion)

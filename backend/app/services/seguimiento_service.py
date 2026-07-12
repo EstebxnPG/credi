@@ -163,6 +163,8 @@ def listar_seguimientos(
     oficina_id: int | None = None,
     usuario_id: int | None = None,
     solo_pendientes: bool = False,
+    skip: int = 0,
+    limit: int = 15,
 ) -> list[SeguimientoRead]:
     query = (
         db.query(Seguimiento)
@@ -187,7 +189,7 @@ def listar_seguimientos(
     if solo_pendientes:
         query = query.filter(Seguimiento.estado.in_(["abierto", "pendiente", "esperando"]))
 
-    seguimientos = query.order_by(Seguimiento.created_at.desc()).all()
+    seguimientos = query.order_by(Seguimiento.created_at.desc()).offset(skip).limit(limit).all()
     return [_to_read(item) for item in seguimientos]
 
 

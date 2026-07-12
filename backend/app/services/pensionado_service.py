@@ -84,9 +84,39 @@ class PensionadoService:
             )
         return pensionado
 
-    def listar(self, usuario: Usuario, skip: int = 0, limit: int = 100, solo_activos: bool = False):
+    def listar(
+        self,
+        usuario: Usuario,
+        skip: int = 0,
+        limit: int = 100,
+        solo_activos: bool = False,
+        texto: str | None = None,
+        activo: bool | None = None,
+    ):
         oficina_id = None if usuario.rol == "administrador" else usuario.oficina_id
-        return self.repo.get_all(skip=skip, limit=limit, solo_activos=solo_activos, oficina_id=oficina_id)
+        return self.repo.get_all(
+            skip=skip,
+            limit=limit,
+            solo_activos=solo_activos,
+            oficina_id=oficina_id,
+            texto=texto,
+            activo=activo,
+        )
+
+    def contar(
+        self,
+        usuario: Usuario,
+        solo_activos: bool = False,
+        texto: str | None = None,
+        activo: bool | None = None,
+    ) -> int:
+        oficina_id = None if usuario.rol == "administrador" else usuario.oficina_id
+        return self.repo.count_all(
+            solo_activos=solo_activos,
+            oficina_id=oficina_id,
+            texto=texto,
+            activo=activo,
+        )
 
     def actualizar(self, pensionado_id: int, data: PensionadoUpdate, usuario: Usuario):
         pensionado = self.obtener_o_404(pensionado_id, usuario)

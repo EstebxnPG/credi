@@ -2,7 +2,7 @@
 api/v1/creditos.py
 Router de Créditos — sin lógica, solo delega al servicio.
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -30,10 +30,36 @@ def listar_creditos(
     asesor_id: Optional[int] = Query(None),
     oficina_id: Optional[int] = Query(None),
     estado: Optional[str] = Query(None),
+    tipo_credito: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(15, ge=1, le=100),
+    response: Response = None,
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),
 ):
-    return credito_service.listar_creditos(db, pensionado_id, asesor_id, oficina_id, estado, usuario_actual)
+    total = credito_service.contar_creditos(
+        db,
+        pensionado_id,
+        asesor_id,
+        oficina_id,
+        estado,
+        tipo_credito,
+        usuario_actual,
+    )
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
+    return credito_service.listar_creditos(
+        db,
+        pensionado_id,
+        asesor_id,
+        oficina_id,
+        estado,
+        tipo_credito,
+        usuario_actual,
+        skip,
+        limit,
+    )
 
 
 @router.get("/{credito_id}/historial", response_model=list[HistorialCreditoRead])

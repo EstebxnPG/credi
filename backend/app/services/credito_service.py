@@ -45,7 +45,11 @@ def _calcular_edad(fecha_nacimiento: date, fecha_referencia: date | None = None)
 def _get_credito_or_404(db: Session, credito_id: int) -> Credito:
     credito = (
         db.query(Credito)
-        .options(joinedload(Credito.asesor))
+        .options(
+            joinedload(Credito.asesor),
+            joinedload(Credito.pensionado),
+            joinedload(Credito.cooperativa),
+        )
         .filter(Credito.id == credito_id)
         .first()
     )
@@ -479,7 +483,10 @@ def listar_creditos(
     asesor_id: int | None = None,
     oficina_id: int | None = None,
     estado: str | None = None,
+    tipo_credito: str | None = None,
     usuario_actual: Usuario | None = None,
+    skip: int = 0,
+    limit: int = 15,
 ) -> list[Credito]:
     scope_oficina = (
         usuario_actual.oficina_id
@@ -492,7 +499,11 @@ def listar_creditos(
 
     query = (
         db.query(Credito)
-        .options(joinedload(Credito.asesor))
+        .options(
+            joinedload(Credito.asesor),
+            joinedload(Credito.pensionado),
+            joinedload(Credito.cooperativa),
+        )
         .filter(Credito.is_active == True)  # noqa: E712
     )
 
@@ -506,9 +517,49 @@ def listar_creditos(
     if oficina_id is not None:
         query = query.filter(Credito.oficina_id == oficina_id)
     if estado is not None:
+        if estado == "Devuelto por correccion":
+            estado = "Devuelto por corrección"
         query = query.filter(Credito.estado == estado)
 
-    return query.order_by(Credito.created_at.desc()).all()
+    if tipo_credito is not None:
+        query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
+
+    return (
+        query.order_by(Credito.fecha_registro.desc(), Credito.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+def contar_creditos(
+    db: Session,
+    pensionado_id: int | None = None,
+    asesor_id: int | None = None,
+    oficina_id: int | None = None,
+    estado: str | None = None,
+    tipo_credito: str | None = None,
+    usuario_actual: Usuario | None = None,
+) -> int:
+    query = db.query(Credito).filter(Credito.is_active == True)  # noqa: E712
+
+    if usuario_actual and usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+
+    if pensionado_id is not None:
+        query = query.filter(Credito.pensionado_id == pensionado_id)
+    if asesor_id is not None:
+        query = query.filter(Credito.asesor_id == asesor_id)
+    if oficina_id is not None:
+        query = query.filter(Credito.oficina_id == oficina_id)
+    if estado is not None:
+        if estado == "Devuelto por correccion":
+            estado = "Devuelto por correcciÃ³n"
+        query = query.filter(Credito.estado == estado)
+    if tipo_credito is not None:
+        query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
+
+    return query.count()
 
 
 def obtener_credito(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:
@@ -767,7 +818,7 @@ def cambiar_estado(
     if estado_nuevo == "Aprobado":
         from app.services.refinanciacion_service import listar_creditos_elegibles
 
-        listar_creditos_elegibles(db, usuario_actual, commit=False)
+        listar_creditos_elegibles(db, usuario_actual, commit=False, limit=None)
 
     db.commit()
     db.refresh(credito)

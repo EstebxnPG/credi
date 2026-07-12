@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_serializer, field_validator
 from datetime import date, datetime
 from typing import Optional
 import re
@@ -7,14 +7,14 @@ import re
 class PensionadoBase(BaseModel):
     nombre: str
     segundo_nombre: Optional[str] = None
-    apellidos: str
-    genero: str
+    apellidos: Optional[str] = None
+    genero: Optional[str] = None
     documento: str
-    fecha_nacimiento: date
+    fecha_nacimiento: Optional[date] = None
     correo: Optional[str] = None
-    telefono: str
+    telefono: Optional[str] = None
     celular: Optional[str] = None
-    direccion: str
+    direccion: Optional[str] = None
 
     @field_validator("documento")
     @classmethod
@@ -24,10 +24,22 @@ class PensionadoBase(BaseModel):
             raise ValueError("Documento debe tener entre 6 y 12 dígitos numéricos")
         return v
 
-    @field_validator("nombre", "apellidos")
+    @field_validator("nombre")
     @classmethod
     def texto_requerido(cls, v: str) -> str:
         v = v.strip()
+        if len(v) < 3:
+            raise ValueError("Debe tener al menos 3 caracteres")
+        return v
+
+    @field_validator("apellidos")
+    @classmethod
+    def apellidos_opcional(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
         if len(v) < 3:
             raise ValueError("Debe tener al menos 3 caracteres")
         return v
@@ -42,8 +54,12 @@ class PensionadoBase(BaseModel):
 
     @field_validator("genero")
     @classmethod
-    def genero_valido(cls, v: str) -> str:
+    def genero_valido(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         v = v.strip()
+        if not v:
+            return None
         opciones = {"Masculino", "Femenino", "Otro", "No especificado"}
         if v not in opciones:
             raise ValueError("Genero debe ser Masculino, Femenino, Otro o No especificado")
@@ -65,8 +81,8 @@ class PensionadoBase(BaseModel):
 class PensionadoCreate(PensionadoBase):
     @field_validator("fecha_nacimiento")
     @classmethod
-    def fecha_no_futura(cls, v: date) -> date:
-        if v > date.today():
+    def fecha_no_futura(cls, v: Optional[date]) -> Optional[date]:
+        if v is not None and v > date.today():
             raise ValueError("La fecha no puede estar en el futuro")
         return v
 
@@ -139,6 +155,10 @@ class PensionadoRead(PensionadoBase):
     created_at: datetime
     nombre_completo: str
     is_active: bool
+
+    @field_serializer("nombre", "segundo_nombre", "apellidos", "nombre_completo")
+    def serializar_nombres_en_mayuscula(self, value: Optional[str]) -> Optional[str]:
+        return value.upper() if value else value
 
     model_config = {"from_attributes": True}  # permite leer desde modelo SQLAlchemy
 
