@@ -5,8 +5,10 @@ Logica de negocio para refinanciaciones asociadas a creditos.
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, selectinload
 
+from app.db.models.cooperativa import Cooperativa
 from app.db.models.credito import Credito
 from app.db.models.historial_credito import HistorialCredito
 from app.db.models.refinanciacion import Refinanciacion, OportunidadRefinanciacion, HistorialOportunidadRefinanciacion
@@ -104,10 +106,14 @@ def _fecha_aprobacion(db: Session, credito_id: int) -> date | None:
     return historial.created_at.date() if historial else None
 
 
-def _fecha_base_refinanciacion(db: Session, credito: Credito) -> date | None:
+def _fecha_base_refinanciacion(
+    db: Session,
+    credito: Credito,
+    fecha_aprobacion: date | None = None,
+) -> date | None:
     if credito.fecha_desembolso:
         return credito.fecha_desembolso
-    fecha_aprobacion = _fecha_aprobacion(db, credito.id)
+    fecha_aprobacion = fecha_aprobacion or _fecha_aprobacion(db, credito.id)
     if fecha_aprobacion:
         return fecha_aprobacion
     for campo in ("fecha_registro", "created_at"):
@@ -139,9 +145,13 @@ def _regla_refinanciacion_para_credito(credito: Credito):
     )
 
 
-def _criterio_refinanciacion(db: Session, credito: Credito) -> dict | None:
+def _criterio_refinanciacion(
+    db: Session,
+    credito: Credito,
+    fecha_aprobacion: date | None = None,
+) -> dict | None:
     regla = _regla_refinanciacion_para_credito(credito)
-    fecha_base = _fecha_base_refinanciacion(db, credito)
+    fecha_base = _fecha_base_refinanciacion(db, credito, fecha_aprobacion)
     if not regla or not fecha_base:
         return None
 
@@ -218,8 +228,13 @@ def listar_creditos_elegibles(
     skip: int = 0,
     limit: int | None = 15,
 ) -> list[dict]:
-    creditos = (
+    creditos_query = (
         db.query(Credito)
+        .options(
+            selectinload(Credito.pensionado),
+            selectinload(Credito.cooperativa),
+            selectinload(Credito.cooperativa).selectinload(Cooperativa.reglas_refinanciacion),
+        )
         .filter(
             Credito.estado.in_(["Aprobado", "Finalizado"]),
             Credito.is_active == True,  # noqa: E712
@@ -227,57 +242,102 @@ def listar_creditos_elegibles(
         .order_by(Credito.fecha_desembolso.asc())
     )
     if usuario_actual and usuario_actual.rol != "administrador":
-        creditos = creditos.filter(Credito.oficina_id == usuario_actual.oficina_id)
-    creditos = creditos.all()
+        creditos_query = creditos_query.filter(Credito.oficina_id == usuario_actual.oficina_id)
 
     elegibles = []
     ahora = datetime.now(timezone.utc)
-    for credito in creditos:
-        if not credito.cooperativa or not credito.cooperativa.is_active:
-            continue
+    objetivo = None if limit is None else skip + limit
+    batch_size = 250
+    query_offset = 0
 
-        criterio = _criterio_refinanciacion(db, credito)
-        if criterio is None:
-            continue
-
-        oportunidad = db.query(OportunidadRefinanciacion).filter(OportunidadRefinanciacion.credito_id == credito.id).first()
-        if oportunidad and oportunidad.estado == "rechazado" and oportunidad.reactivar_en and oportunidad.reactivar_en <= ahora:
-            anterior = oportunidad.estado
-            oportunidad.estado = "disponible"
-            oportunidad.reactivar_en = None
-            db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, estado_anterior=anterior, estado_nuevo="disponible", justificacion="Reactivacion automatica a los 20 dias"))
-        if not oportunidad:
-            oportunidad = OportunidadRefinanciacion(credito_id=credito.id, oficina_id=credito.oficina_id, responsable_id=credito.asesor_id, estado="disponible")
-            db.add(oportunidad)
-            db.flush()
-            db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, estado_nuevo="disponible", justificacion="Credito habilitado por regla de refinanciacion"))
-
-        esta_disponible = criterio["esta_disponible"]
-        elegibles.append(
-            {
-                "credito_id": credito.id,
-                "pensionado_id": credito.pensionado_id,
-                "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
-                "documento": credito.pensionado.documento if credito.pensionado else None,
-                "cooperativa_id": credito.cooperativa_id,
-                "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
-                "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,
-                "monto_aprobado": credito.monto_aprobado,
-                "plazo": credito.plazo,
-                "fecha_base": criterio["fecha_base"],
-                "disponible_desde": criterio["disponible_desde"] or date.today(),
-                "meses_transcurridos": criterio["meses_transcurridos"],
-                "meses_requeridos": criterio["meses_requeridos"],
-                "tipo_liberacion": criterio["tipo_liberacion"],
-                "porcentaje_avance": criterio["porcentaje_avance"],
-                "porcentaje_requerido": criterio["porcentaje_requerido"],
-                "estado_refinanciacion": "Listo" if esta_disponible else "Programado",
-                "oportunidad_id": oportunidad.id,
-                "estado_comercial": oportunidad.estado if esta_disponible else "programado",
-                "reactivar_en": oportunidad.reactivar_en,
-                "credito_nuevo_id": oportunidad.credito_nuevo_id,
-            }
+    while objetivo is None or len(elegibles) < objetivo:
+        creditos = (
+            creditos_query.offset(query_offset).limit(batch_size).all()
+            if limit is not None
+            else creditos_query.all()
         )
+        if not creditos:
+            break
+
+        credito_ids = [credito.id for credito in creditos]
+        aprobaciones = dict(
+            db.query(
+                HistorialCredito.credito_id,
+                func.max(HistorialCredito.created_at),
+            )
+            .filter(
+                HistorialCredito.credito_id.in_(credito_ids),
+                HistorialCredito.estado_nuevo == "Aprobado",
+            )
+            .group_by(HistorialCredito.credito_id)
+            .all()
+        )
+        oportunidades = {
+            oportunidad.credito_id: oportunidad
+            for oportunidad in db.query(OportunidadRefinanciacion)
+            .filter(OportunidadRefinanciacion.credito_id.in_(credito_ids))
+            .all()
+        }
+
+        for credito in creditos:
+            if objetivo is not None and len(elegibles) >= objetivo:
+                break
+            if not credito.cooperativa or not credito.cooperativa.is_active:
+                continue
+
+            aprobacion = aprobaciones.get(credito.id)
+            criterio = _criterio_refinanciacion(
+                db,
+                credito,
+                aprobacion.date() if aprobacion else None,
+            )
+            if criterio is None:
+                continue
+
+            oportunidad = oportunidades.get(credito.id)
+            if oportunidad and oportunidad.estado == "rechazado" and oportunidad.reactivar_en and oportunidad.reactivar_en <= ahora:
+                anterior = oportunidad.estado
+                oportunidad.estado = "disponible"
+                oportunidad.reactivar_en = None
+                db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, estado_anterior=anterior, estado_nuevo="disponible", justificacion="Reactivacion automatica a los 20 dias"))
+            if not oportunidad:
+                oportunidad = OportunidadRefinanciacion(credito_id=credito.id, oficina_id=credito.oficina_id, responsable_id=credito.asesor_id, estado="disponible")
+                db.add(oportunidad)
+                db.flush()
+                oportunidades[credito.id] = oportunidad
+                db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, estado_nuevo="disponible", justificacion="Credito habilitado por regla de refinanciacion"))
+
+            esta_disponible = criterio["esta_disponible"]
+            elegibles.append(
+                {
+                    "credito_id": credito.id,
+                    "pensionado_id": credito.pensionado_id,
+                    "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
+                    "documento": credito.pensionado.documento if credito.pensionado else None,
+                    "cooperativa_id": credito.cooperativa_id,
+                    "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
+                    "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,
+                    "monto_aprobado": credito.monto_aprobado,
+                    "plazo": credito.plazo,
+                    "fecha_base": criterio["fecha_base"],
+                    "disponible_desde": criterio["disponible_desde"] or date.today(),
+                    "meses_transcurridos": criterio["meses_transcurridos"],
+                    "meses_requeridos": criterio["meses_requeridos"],
+                    "tipo_liberacion": criterio["tipo_liberacion"],
+                    "porcentaje_avance": criterio["porcentaje_avance"],
+                    "porcentaje_requerido": criterio["porcentaje_requerido"],
+                    "estado_refinanciacion": "Listo" if esta_disponible else "Programado",
+                    "oportunidad_id": oportunidad.id,
+                    "estado_comercial": oportunidad.estado if esta_disponible else "programado",
+                    "reactivar_en": oportunidad.reactivar_en,
+                    "credito_nuevo_id": oportunidad.credito_nuevo_id,
+                }
+            )
+
+        if limit is None:
+            break
+        query_offset += batch_size
+
     if commit:
         db.commit()
     return elegibles[skip : skip + limit] if limit is not None else elegibles[skip:]
