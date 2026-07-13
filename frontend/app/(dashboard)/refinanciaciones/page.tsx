@@ -55,6 +55,7 @@ export default function RefinanciacionesPage() {
   const [query, setQuery] = useState("");
   const [vista, setVista] = useState<Vista>("hoy");
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState({
     montoMin: "",
@@ -128,8 +129,24 @@ export default function RefinanciacionesPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
+
   function resetPage() {
     setPage(1);
+  }
+
+  function goToPage(value: string) {
+    const nextPage = Number(value);
+    if (!Number.isFinite(nextPage) || nextPage < 1) {
+      setPageInput(String(page));
+      return;
+    }
+
+    const normalizedPage = Math.min(totalPages, Math.floor(nextPage));
+    setPage(normalizedPage);
+    setPageInput(String(normalizedPage));
   }
 
   function updateFilter(field: keyof typeof filters, value: string) {
@@ -295,18 +312,40 @@ export default function RefinanciacionesPage() {
           <p>
             {loading ? "Actualizando filtros..." : `Mostrando ${items.length} de ${total} oportunidades. Pagina ${page} de ${totalPages}.`}
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="button-muted px-2.5 py-1.5 text-xs"
+              className="button-muted px-3 py-2 text-xs"
               disabled={page === 1 || loading}
               onClick={() => setPage((current) => Math.max(1, current - 1))}
             >
               Anterior
             </button>
+            <label className="flex items-center gap-2">
+              Ir a
+              <input
+                className="input-base h-9 w-20 px-2 py-1 text-sm"
+                max={totalPages}
+                min="1"
+                type="number"
+                value={pageInput}
+                onBlur={() => goToPage(pageInput)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (/^\d*$/.test(value)) {
+                    setPageInput(value);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+            </label>
             <button
               type="button"
-              className="button-muted px-2.5 py-1.5 text-xs"
+              className="button-muted px-3 py-2 text-xs"
               disabled={page >= totalPages || loading}
               onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             >

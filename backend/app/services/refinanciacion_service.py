@@ -585,8 +585,13 @@ def listar_creditos_elegibles_paginados(
         raise HTTPException(status_code=422, detail="Vista de refinanciacion no valida")
 
     total = query.with_entities(func.count(func.distinct(OportunidadRefinanciacion.id))).scalar() or 0
+    order_columns = (
+        [disponible_desde_expr.asc(), OportunidadRefinanciacion.id.asc()]
+        if vista in {"hoy", "proximos", "todos"}
+        else [OportunidadRefinanciacion.updated_at.desc(), OportunidadRefinanciacion.id.desc()]
+    )
     oportunidades = (
-        query.order_by(OportunidadRefinanciacion.updated_at.desc(), OportunidadRefinanciacion.id.desc())
+        query.order_by(*order_columns)
         .offset(skip)
         .limit(limit)
         .all()
