@@ -6,7 +6,7 @@ Implementa CRUD, validación contra cooperativa y máquina de estados.
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import Date, cast, func, text
+from sqlalchemy import Date, String, cast, func, or_, text
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 
@@ -490,6 +490,9 @@ def listar_creditos(
     estado: str | None = None,
     tipo_credito: str | None = None,
     refinanciacion: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
     usuario_actual: Usuario | None = None,
     skip: int = 0,
     limit: int = 15,
@@ -529,6 +532,24 @@ def listar_creditos(
 
     if tipo_credito is not None:
         query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
+    if fecha_desde is not None:
+        query = query.filter(cast(Credito.fecha_registro, Date) >= fecha_desde)
+    if fecha_hasta is not None:
+        query = query.filter(cast(Credito.fecha_registro, Date) <= fecha_hasta)
+    if texto:
+        term = f"%{texto.strip()}%"
+        query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
+        query = query.outerjoin(Oficina, Oficina.id == Credito.oficina_id)
+        query = query.filter(
+            or_(
+                cast(Credito.id, String).ilike(term),
+                Credito.estado.ilike(term),
+                Credito.tipo_credito.ilike(term),
+                Pensionado.nombre_completo.ilike(term),
+                Pensionado.documento.ilike(term),
+                Oficina.nombre.ilike(term),
+            )
+        )
 
     query = _filtrar_por_refinanciacion(db, query, refinanciacion)
 
@@ -548,6 +569,9 @@ def contar_creditos(
     estado: str | None = None,
     tipo_credito: str | None = None,
     refinanciacion: str | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
     usuario_actual: Usuario | None = None,
 ) -> int:
     query = db.query(Credito).filter(Credito.is_active == True)  # noqa: E712
@@ -567,6 +591,24 @@ def contar_creditos(
         query = query.filter(Credito.estado == estado)
     if tipo_credito is not None:
         query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
+    if fecha_desde is not None:
+        query = query.filter(cast(Credito.fecha_registro, Date) >= fecha_desde)
+    if fecha_hasta is not None:
+        query = query.filter(cast(Credito.fecha_registro, Date) <= fecha_hasta)
+    if texto:
+        term = f"%{texto.strip()}%"
+        query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
+        query = query.outerjoin(Oficina, Oficina.id == Credito.oficina_id)
+        query = query.filter(
+            or_(
+                cast(Credito.id, String).ilike(term),
+                Credito.estado.ilike(term),
+                Credito.tipo_credito.ilike(term),
+                Pensionado.nombre_completo.ilike(term),
+                Pensionado.documento.ilike(term),
+                Oficina.nombre.ilike(term),
+            )
+        )
 
     query = _filtrar_por_refinanciacion(db, query, refinanciacion)
 

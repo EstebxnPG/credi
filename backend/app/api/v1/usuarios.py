@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
@@ -19,10 +19,14 @@ def crear_usuario(
 @router.get("/", response_model=List[UsuarioRead])
 def listar_usuarios(
     skip: int = 0, limit: int = 100,
+    response: Response = None,
     db: Session = Depends(get_db),
     _: object = Depends(solo_admin)
 ):
-    return UsuarioService(db).listar(skip=skip, limit=limit)
+    service = UsuarioService(db)
+    if response is not None:
+        response.headers["X-Total-Count"] = str(service.contar())
+    return service.listar(skip=skip, limit=limit)
 
 @router.get("/{usuario_id}", response_model=UsuarioRead)
 def obtener_usuario(

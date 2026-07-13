@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, get_db
@@ -32,9 +32,19 @@ def listar_pendientes(
     estado: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
+    response: Response = None,
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),
 ):
+    total = pendiente_credito_service.contar_pendientes(
+        db,
+        usuario_actual,
+        credito_id,
+        estado,
+    )
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
     return pendiente_credito_service.listar_pendientes(
         db,
         usuario_actual,

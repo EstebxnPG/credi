@@ -4,7 +4,7 @@ Router de Documentos con upload y versionado.
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -42,9 +42,19 @@ def listar_documentos(
     solo_activos: bool = Query(True),
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
+    response: Response = None,
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(get_current_user),
 ):
+    total = documento_service.contar_documentos(
+        db,
+        usuario_actual,
+        credito_id,
+        solo_activos,
+    )
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+
     return documento_service.listar_documentos(
         db,
         usuario_actual,

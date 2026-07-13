@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.db.models.usuario import Usuario
 from app.schemas.usuario import UsuarioCreate, UsuarioUpdate
 from typing import Optional
@@ -31,6 +31,10 @@ class UsuarioRepository:
             .offset(skip).limit(limit)
         )
         return list(self.db.execute(stmt).scalars().all())
+
+    def count_all(self) -> int:
+        stmt = select(func.count()).select_from(Usuario).where(Usuario.is_active == True)
+        return int(self.db.execute(stmt).scalar_one())
 
     def create(self, data: dict) -> Usuario:
         # data ya viene con contrasena hasheada desde el servicio

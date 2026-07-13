@@ -35,6 +35,9 @@ class UsuarioService:
     def listar(self, skip: int = 0, limit: int = 100):
         return self.repo.get_all(skip=skip, limit=limit)
 
+    def contar(self):
+        return self.repo.count_all()
+
     def actualizar(self, usuario_id: int, data: UsuarioUpdate):
         usuario = self.obtener_o_404(usuario_id)
         cambios = data.model_dump(exclude_unset=True)

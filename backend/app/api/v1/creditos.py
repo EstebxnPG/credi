@@ -5,6 +5,7 @@ Router de Créditos — sin lógica, solo delega al servicio.
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import date
 
 from app.core.dependencies import get_db, get_current_user, solo_admin
 from app.db.models.usuario import Usuario
@@ -38,6 +39,9 @@ def listar_creditos(
     estado: Optional[str] = Query(None),
     tipo_credito: Optional[str] = Query(None),
     refinanciacion: Optional[str] = Query(None),
+    fecha_desde: Optional[date] = Query(None),
+    fecha_hasta: Optional[date] = Query(None),
+    texto: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
     response: Response = None,
@@ -52,6 +56,9 @@ def listar_creditos(
         estado,
         tipo_credito,
         refinanciacion,
+        fecha_desde,
+        fecha_hasta,
+        texto,
         usuario_actual,
     )
     if response is not None:
@@ -65,6 +72,9 @@ def listar_creditos(
         estado,
         tipo_credito,
         refinanciacion,
+        fecha_desde,
+        fecha_hasta,
+        texto,
         usuario_actual,
         skip,
         limit,

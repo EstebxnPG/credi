@@ -97,6 +97,22 @@ def listar_pendientes(
     )
 
 
+def contar_pendientes(
+    db: Session,
+    usuario_actual: Usuario,
+    credito_id: int | None = None,
+    estado: str | None = None,
+) -> int:
+    query = db.query(PendienteCredito).join(Credito)
+    if usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+    if credito_id is not None:
+        query = query.filter(PendienteCredito.credito_id == credito_id)
+    if estado is not None:
+        query = query.filter(PendienteCredito.estado == estado)
+    return query.count()
+
+
 def crear_pendiente(
     db: Session, data: PendienteCreditoCreate, usuario_actual: Usuario
 ) -> PendienteCredito:

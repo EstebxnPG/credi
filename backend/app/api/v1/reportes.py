@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, get_db
 from app.db.models.usuario import Usuario
-from app.services.reporte_service import obtener_resumen_reportes
+from app.services.reporte_service import obtener_metricas_reporte, obtener_resumen_creditos_reporte, obtener_resumen_reportes
 from app.services.credito_export_service import DEFAULT_COLUMNS, exportar_creditos
 
 
@@ -18,6 +18,48 @@ def obtener_resumen(
     usuario_actual: Usuario = Depends(get_current_user),
 ):
     return obtener_resumen_reportes(db, usuario_actual)
+
+
+@router.get("/creditos/resumen")
+def obtener_resumen_creditos(
+    desde: date | None = None,
+    hasta: date | None = None,
+    oficina_id: int | None = None,
+    texto: str | None = Query(None),
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return obtener_resumen_creditos_reporte(
+        db,
+        usuario_actual,
+        oficina_id=oficina_id,
+        fecha_desde=desde,
+        fecha_hasta=hasta,
+        texto=texto,
+    )
+
+
+@router.get("/{reporte}/metricas")
+def obtener_metricas(
+    reporte: str,
+    desde: date | None = None,
+    hasta: date | None = None,
+    oficina_id: int | None = None,
+    texto: str | None = Query(None),
+    estado_comercial: str | None = Query(None),
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return obtener_metricas_reporte(
+        db,
+        usuario_actual,
+        reporte=reporte,
+        oficina_id=oficina_id,
+        fecha_desde=desde,
+        fecha_hasta=hasta,
+        texto=texto,
+        estado_comercial=estado_comercial,
+    )
 
 
 @router.get("/creditos/exportar.xlsx")
