@@ -62,6 +62,13 @@ type LogItem = {
   created_at: string;
 };
 
+type LogPage = {
+  items: LogItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
 export default function AsesoraReportPage() {
   const params = useParams<{ id: string }>();
   const asesoraId = Number(params.id);
@@ -95,7 +102,7 @@ export default function AsesoraReportPage() {
             apiFetch<Credito[]>("/api/v1/creditos/?limit=15"),
             apiFetch<Seguimiento[]>(`/api/v1/seguimientos/?usuario_id=${asesoraId}&limit=15`),
             apiFetch<Pendiente[]>("/api/v1/pendientes-credito/?limit=15"),
-            apiFetch<LogItem[]>(`/api/v1/logs/?usuario_id=${asesoraId}`),
+            apiFetch<LogPage>(`/api/v1/logs/?usuario_id=${asesoraId}&page_size=100`),
           ]);
         if (!ignore) {
           setAsesora(usuarioData);
@@ -103,7 +110,7 @@ export default function AsesoraReportPage() {
           setCreditos(creditosData);
           setSeguimientos(seguimientosData);
           setPendientes(pendientesData);
-          setLogs(logsData);
+          setLogs(logsData.items);
         }
       } catch (loadError) {
         if (!ignore) {

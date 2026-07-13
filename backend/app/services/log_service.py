@@ -35,6 +35,7 @@ def listar_logs(
     db: Session,
     usuario_id: int | None = None,
     tabla_afectada: str | None = None,
+    registro_afectado: int | None = None,
     tipo_accion: str | None = None,
     fecha_desde: datetime | None = None,
     fecha_hasta: datetime | None = None,
@@ -47,6 +48,8 @@ def listar_logs(
         query = query.filter(Log.usuario_id == usuario_id)
     if tabla_afectada:
         query = query.filter(Log.tabla_afectada == tabla_afectada)
+    if registro_afectado is not None:
+        query = query.filter(Log.registro_afectado == registro_afectado)
     if tipo_accion:
         query = query.filter(Log.tipo_accion == tipo_accion)
     if fecha_desde:

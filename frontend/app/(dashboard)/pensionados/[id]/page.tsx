@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
@@ -69,12 +69,20 @@ type Oficina = {
 type LogItem = {
   id: number;
   usuario_id: number;
+  usuario_nombre: string | null;
   tabla_afectada: string;
   registro_afectado: number;
   tipo_accion: string;
   valores_antes: Record<string, unknown> | null;
   valores_despues: Record<string, unknown> | null;
   created_at: string;
+};
+
+type LogPage = {
+  items: LogItem[];
+  total: number;
+  page: number;
+  page_size: number;
 };
 
 const views = [
@@ -124,6 +132,20 @@ const emptySeguimientoForm: SeguimientoFormValues = {
   fecha_proximo_contacto: "",
 };
 
+const auditFieldLabels: Record<string, string> = {
+  nombre: "Nombre",
+  segundo_nombre: "Segundo nombre",
+  apellidos: "Apellidos",
+  genero: "Genero",
+  fecha_nacimiento: "Fecha de nacimiento",
+  correo: "Correo",
+  telefono: "Telefono",
+  celular: "Celular",
+  direccion: "Direccion",
+  is_active: "Estado",
+  oficina_id: "Oficina",
+};
+
 export default function PensionadoDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -147,6 +169,28 @@ export default function PensionadoDetailPage() {
   const [seguimientoForm, setSeguimientoForm] = useState<SeguimientoFormValues | null>(null);
   const [seguimientoError, setSeguimientoError] = useState<string | null>(null);
   const [savingSeguimiento, setSavingSeguimiento] = useState(false);
+
+  const loadLogs = useCallback(async () => {
+    if (session?.rol !== "administrador") {
+      setLogs([]);
+      setLogsError(null);
+      return;
+    }
+
+    try {
+      const logsData = await apiFetch<LogPage>(
+        `/api/v1/logs/?tabla_afectada=pensionados&registro_afectado=${pensionadoId}&page_size=100`,
+      );
+      setLogs(logsData.items);
+      setLogsError(null);
+    } catch (loadLogsError) {
+      setLogsError(
+        loadLogsError instanceof ApiError
+          ? loadLogsError.message
+          : "No se pudieron cargar las actualizaciones",
+      );
+    }
+  }, [pensionadoId, session?.rol]);
 
   useEffect(() => {
     if (!Number.isFinite(pensionadoId)) {
@@ -188,23 +232,8 @@ export default function PensionadoDetailPage() {
           setOficinas(oficinasData);
         }
 
-        if (session?.rol === "administrador") {
-          try {
-            const logsData = await apiFetch<LogItem[]>(
-              "/api/v1/logs/?tabla_afectada=pensionados",
-            );
-            if (!ignore) {
-              setLogs(logsData.filter((item) => item.registro_afectado === pensionadoId));
-            }
-          } catch (loadLogsError) {
-            if (!ignore) {
-              setLogsError(
-                loadLogsError instanceof ApiError
-                  ? loadLogsError.message
-                  : "No se pudieron cargar las actualizaciones",
-              );
-            }
-          }
+        if (!ignore) {
+          await loadLogs();
         }
       } catch (loadError) {
         if (!ignore) {
@@ -226,7 +255,7 @@ export default function PensionadoDetailPage() {
     return () => {
       ignore = true;
     };
-  }, [pensionadoId, session?.rol]);
+  }, [loadLogs, pensionadoId]);
 
   const resumen = useMemo(() => {
     const activos = creditos.filter((credito) =>
@@ -367,6 +396,9 @@ export default function PensionadoDetailPage() {
 
       setPensionado(updated);
       setForm(null);
+      const freshPensionado = await apiFetch<Pensionado>(`/api/v1/pensionados/${pensionado.id}`);
+      setPensionado(freshPensionado);
+      await loadLogs();
     } catch (saveError) {
       setFormError(
         saveError instanceof ApiError ? saveError.message : "No se pudo guardar el pensionado",
@@ -807,17 +839,41 @@ function ActualizacionesList({
     <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
       <h2 className="text-lg font-semibold text-stone-950">Actualizaciones</h2>
       <div className="mt-4 divide-y divide-stone-800/10">
-        {logs.map((log) => (
-          <div key={log.id} className="py-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold text-stone-950">{log.tipo_accion}</p>
-              <p className="text-xs text-stone-500">{formatDateTime(log.created_at)}</p>
+        {logs.map((log) => {
+          const summary = describePensionadoLog(log);
+
+          return (
+            <div key={log.id} className="py-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-stone-950">{summary.title}</p>
+                  <p className="mt-1 text-sm text-stone-600">
+                    {summary.description} Por {log.usuario_nombre ?? `usuario #${log.usuario_id}`}.
+                  </p>
+                </div>
+                <p className="text-xs text-stone-500">{formatDateTime(log.created_at)}</p>
+              </div>
+              {summary.changes.length > 0 ? (
+                <div className="mt-3 overflow-hidden rounded-md border border-stone-800/10">
+                  {summary.changes.map((change) => (
+                    <div
+                      key={change.field}
+                      className="grid gap-2 border-b border-stone-800/10 px-3 py-2 text-sm last:border-b-0 md:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)]"
+                    >
+                      <span className="font-semibold text-stone-800">{change.field}</span>
+                      <span className="text-stone-500">
+                        Antes: <span className="text-stone-800">{change.before}</span>
+                      </span>
+                      <span className="text-stone-500">
+                        Despues: <span className="text-stone-800">{change.after}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <pre className="mt-3 overflow-auto rounded-md bg-stone-950 p-3 text-xs text-stone-100">
-              {JSON.stringify(log.valores_despues ?? log.valores_antes ?? {}, null, 2)}
-            </pre>
-          </div>
-        ))}
+          );
+        })}
 
         {logs.length === 0 ? (
           <p className="py-6 text-sm text-stone-500">No hay actualizaciones registradas.</p>
@@ -825,6 +881,74 @@ function ActualizacionesList({
       </div>
     </article>
   );
+}
+
+function describePensionadoLog(log: LogItem) {
+  const changes = getAuditChanges(log);
+
+  if (log.tipo_accion === "crear") {
+    return {
+      title: "Ficha creada",
+      description: "Se registro el pensionado en el sistema.",
+      changes,
+    };
+  }
+
+  if (log.tipo_accion === "desactivar") {
+    return {
+      title: "Ficha desactivada",
+      description: "El pensionado fue marcado como inactivo.",
+      changes,
+    };
+  }
+
+  if (log.tipo_accion === "actualizar") {
+    return {
+      title: "Datos actualizados",
+      description:
+        changes.length > 0
+          ? `Se modificaron ${changes.length} campo${changes.length === 1 ? "" : "s"} de la ficha.`
+          : "Se actualizo la ficha del pensionado.",
+      changes,
+    };
+  }
+
+  return {
+    title: formatActionLabel(log.tipo_accion),
+    description: "Se registro una actualizacion en la ficha.",
+    changes,
+  };
+}
+
+function getAuditChanges(log: LogItem) {
+  const before = log.valores_antes ?? {};
+  const after = log.valores_despues ?? {};
+  const fieldNames = new Set([...Object.keys(before), ...Object.keys(after)]);
+
+  return Array.from(fieldNames)
+    .filter((field) => !["created_by", "documento"].includes(field))
+    .filter((field) => formatAuditValue(before[field]) !== formatAuditValue(after[field]))
+    .map((field) => ({
+      field: auditFieldLabels[field] ?? formatActionLabel(field),
+      before: formatAuditValue(before[field]),
+      after: formatAuditValue(after[field]),
+    }));
+}
+
+function formatAuditValue(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "Sin registrar";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Activo" : "Inactivo";
+  }
+
+  return String(value);
+}
+
+function formatActionLabel(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function PensionadoEditModal({

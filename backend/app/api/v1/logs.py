@@ -19,6 +19,7 @@ router = APIRouter(prefix="/logs", tags=["Logs"])
 def listar_logs(
     usuario_id: Optional[int] = Query(None),
     tabla_afectada: Optional[str] = Query(None),
+    registro_afectado: Optional[int] = Query(None),
     tipo_accion: Optional[str] = Query(None),
     fecha_desde: Optional[datetime] = Query(None),
     fecha_hasta: Optional[datetime] = Query(None),
@@ -31,6 +32,7 @@ def listar_logs(
         db=db,
         usuario_id=usuario_id,
         tabla_afectada=tabla_afectada,
+        registro_afectado=registro_afectado,
         tipo_accion=tipo_accion,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,

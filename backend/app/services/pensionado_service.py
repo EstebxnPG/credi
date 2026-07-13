@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from app.db.repositories.pensionado_repo import PensionadoRepository
 from app.schemas.pensionado import PensionadoCreate, PensionadoUpdate
 from app.db.models.usuario import Usuario
@@ -121,18 +122,26 @@ class PensionadoService:
     def actualizar(self, pensionado_id: int, data: PensionadoUpdate, usuario: Usuario):
         pensionado = self.obtener_o_404(pensionado_id, usuario)
         cambios = data.model_dump(exclude_unset=True)
-        valores_antes = {campo: getattr(pensionado, campo) for campo in cambios.keys()}
+        valores_antes = {}
+        valores_despues = {}
+        for campo, valor_nuevo in cambios.items():
+            valor_anterior = getattr(pensionado, campo)
+            if jsonable_encoder(valor_anterior) != jsonable_encoder(valor_nuevo):
+                valores_antes[campo] = valor_anterior
+                valores_despues[campo] = valor_nuevo
+
         pensionado = self.repo.update(pensionado, data)
-        registrar_log(
-            self.repo.db,
-            usuario.id,
-            "pensionados",
-            pensionado.id,
-            "actualizar",
-            valores_antes=valores_antes,
-            valores_despues=cambios,
-        )
-        self.repo.db.commit()
+        if valores_despues:
+            registrar_log(
+                self.repo.db,
+                usuario.id,
+                "pensionados",
+                pensionado.id,
+                "actualizar",
+                valores_antes=valores_antes,
+                valores_despues=valores_despues,
+            )
+            self.repo.db.commit()
         return pensionado
 
     def eliminar(self, pensionado_id: int, usuario: Usuario):
