@@ -207,6 +207,9 @@ export default function CreditosPage() {
       if (filters.tipoCredito) {
         creditosParams.set("tipo_credito", filters.tipoCredito);
       }
+      if (filters.refinanciacion) {
+        creditosParams.set("refinanciacion", filters.refinanciacion);
+      }
 
       const usuariosRequest =
         session?.rol === "administrador"
@@ -254,9 +257,14 @@ export default function CreditosPage() {
       setOficinas(oficinasData);
       setUsuarios(usuariosData);
 
-      void apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/?limit=15")
-        .then(setOpportunities)
-        .catch(() => setOpportunities([]));
+      const opportunityRequests = creditosResponse.data.map((credito) =>
+        apiFetch<Opportunity[]>(`/api/v1/refinanciaciones/elegibles/?credito_id=${credito.id}&limit=1`)
+          .then((items) => items[0])
+          .catch(() => null),
+      );
+      void Promise.all(opportunityRequests).then((items) => {
+        setOpportunities(items.filter((item): item is Opportunity => Boolean(item)));
+      });
     } catch (loadError) {
       setError(
         loadError instanceof ApiError
@@ -266,7 +274,7 @@ export default function CreditosPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.estado, filters.tipoCredito, page]);
+  }, [filters.estado, filters.refinanciacion, filters.tipoCredito, page]);
 
   useEffect(() => {
     void loadData();
@@ -316,7 +324,6 @@ export default function CreditosPage() {
     return creditos.filter((credito) => {
       const pensionado = pensionadoById.get(credito.pensionado_id);
       const pendientesAbiertos = pendientesByCreditoId.get(credito.id) ?? [];
-      const oportunidad = opportunityByCreditoId.get(credito.id);
 
       if (filters.estado && credito.estado !== filters.estado) {
         return false;
@@ -339,22 +346,6 @@ export default function CreditosPage() {
       if (filters.pendientes === "sin" && pendientesAbiertos.length > 0) {
         return false;
       }
-      if (
-        filters.refinanciacion === "listos" &&
-        !(
-          oportunidad?.estado_refinanciacion === "Listo" &&
-          !["rechazado", "convertido"].includes(oportunidad.estado_comercial)
-        )
-      ) {
-        return false;
-      }
-      if (filters.refinanciacion === "programados" && oportunidad?.estado_refinanciacion !== "Programado") {
-        return false;
-      }
-      if (filters.refinanciacion === "sin" && oportunidad) {
-        return false;
-      }
-
       if (!term) {
         return true;
       }
@@ -376,7 +367,7 @@ export default function CreditosPage() {
         .filter((value) => value !== null && value !== undefined)
         .some((value) => String(value).toLowerCase().includes(term));
     });
-  }, [creditos, filters, opportunityByCreditoId, pendientesByCreditoId, pensionadoById, query]);
+  }, [creditos, filters, pendientesByCreditoId, pensionadoById, query]);
 
   const estadosDisponibles = useMemo(() => {
     return estadosCredito;

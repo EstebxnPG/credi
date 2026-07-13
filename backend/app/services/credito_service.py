@@ -6,10 +6,11 @@ Implementa CRUD, validación contra cooperativa y máquina de estados.
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy import Date, cast, func, text
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import joinedload
 
-from app.db.models.cooperativa import Cooperativa
+from app.db.models.cooperativa import Cooperativa, CooperativaRefinanciacionRegla
 from app.db.models.credito import Credito
 from app.db.models.historial_credito import HistorialCredito
 from app.db.models.oficina import Oficina
@@ -485,6 +486,7 @@ def listar_creditos(
     oficina_id: int | None = None,
     estado: str | None = None,
     tipo_credito: str | None = None,
+    refinanciacion: str | None = None,
     usuario_actual: Usuario | None = None,
     skip: int = 0,
     limit: int = 15,
@@ -525,6 +527,8 @@ def listar_creditos(
     if tipo_credito is not None:
         query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
 
+    query = _filtrar_por_refinanciacion(db, query, refinanciacion)
+
     return (
         query.order_by(Credito.fecha_registro.desc(), Credito.id.desc())
         .offset(skip)
@@ -540,6 +544,7 @@ def contar_creditos(
     oficina_id: int | None = None,
     estado: str | None = None,
     tipo_credito: str | None = None,
+    refinanciacion: str | None = None,
     usuario_actual: Usuario | None = None,
 ) -> int:
     query = db.query(Credito).filter(Credito.is_active == True)  # noqa: E712
@@ -560,7 +565,68 @@ def contar_creditos(
     if tipo_credito is not None:
         query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
 
+    query = _filtrar_por_refinanciacion(db, query, refinanciacion)
+
     return query.count()
+
+
+def _filtrar_por_refinanciacion(query_db: Session, query, refinanciacion: str | None):
+    if not refinanciacion:
+        return query
+
+    if refinanciacion == "sin":
+        return (
+            query.outerjoin(
+                OportunidadRefinanciacion,
+                OportunidadRefinanciacion.credito_id == Credito.id,
+            )
+            .filter(OportunidadRefinanciacion.id.is_(None))
+        )
+
+    if refinanciacion not in {"listos", "programados"}:
+        raise HTTPException(status_code=422, detail="Filtro de refinanciacion no valido")
+
+    aprobacion_subquery = (
+        query_db.query(
+            HistorialCredito.credito_id.label("credito_id"),
+            func.max(HistorialCredito.created_at).label("aprobado_en"),
+        )
+        .filter(HistorialCredito.estado_nuevo == "Aprobado")
+        .group_by(HistorialCredito.credito_id)
+        .subquery()
+    )
+    fecha_base_expr = func.coalesce(
+        Credito.fecha_desembolso,
+        cast(aprobacion_subquery.c.aprobado_en, Date),
+        cast(Credito.fecha_registro, Date),
+        cast(Credito.created_at, Date),
+    )
+    disponible_desde_expr = fecha_base_expr + (
+        CooperativaRefinanciacionRegla.meses_para_refinanciar * text("interval '1 month'")
+    )
+    hoy = date.today()
+
+    query = (
+        query.join(OportunidadRefinanciacion, OportunidadRefinanciacion.credito_id == Credito.id)
+        .join(Cooperativa, Credito.cooperativa_id == Cooperativa.id)
+        .join(
+            CooperativaRefinanciacionRegla,
+            (CooperativaRefinanciacionRegla.cooperativa_id == Credito.cooperativa_id)
+            & (CooperativaRefinanciacionRegla.plazo_minimo <= Credito.plazo)
+            & (CooperativaRefinanciacionRegla.plazo_maximo >= Credito.plazo),
+        )
+        .outerjoin(aprobacion_subquery, aprobacion_subquery.c.credito_id == Credito.id)
+        .filter(
+            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Cooperativa.is_active == True,  # noqa: E712
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado"]),
+        )
+    )
+
+    if refinanciacion == "listos":
+        return query.filter(disponible_desde_expr <= hoy)
+
+    return query.filter(disponible_desde_expr > hoy)
 
 
 def obtener_credito(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:

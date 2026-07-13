@@ -37,6 +37,7 @@ def listar_creditos(
     oficina_id: Optional[int] = Query(None),
     estado: Optional[str] = Query(None),
     tipo_credito: Optional[str] = Query(None),
+    refinanciacion: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
     response: Response = None,
@@ -50,6 +51,7 @@ def listar_creditos(
         oficina_id,
         estado,
         tipo_credito,
+        refinanciacion,
         usuario_actual,
     )
     if response is not None:
@@ -62,6 +64,7 @@ def listar_creditos(
         oficina_id,
         estado,
         tipo_credito,
+        refinanciacion,
         usuario_actual,
         skip,
         limit,
