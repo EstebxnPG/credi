@@ -5,12 +5,13 @@ Logica de negocio para refinanciaciones asociadas a creditos.
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import Date, String, cast, func, or_, text
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models.cooperativa import Cooperativa
+from app.db.models.cooperativa import Cooperativa, CooperativaRefinanciacionRegla
 from app.db.models.credito import Credito
 from app.db.models.historial_credito import HistorialCredito
+from app.db.models.pensionado import Pensionado
 from app.db.models.refinanciacion import Refinanciacion, OportunidadRefinanciacion, HistorialOportunidadRefinanciacion
 from app.db.models.usuario import Usuario
 from app.db.models.notificacion import Notificacion
@@ -491,38 +492,243 @@ def listar_creditos_elegibles_paginados(
     fecha_max = _parse_date_filter(fecha_hasta, "fecha_hasta")
     term = (texto or "").strip().lower()
 
-    items = listar_creditos_elegibles(
-        db,
-        usuario_actual=usuario_actual,
-        commit=True,
-        skip=0,
-        limit=None,
+    aprobacion_subquery = (
+        db.query(
+            HistorialCredito.credito_id.label("credito_id"),
+            func.max(HistorialCredito.created_at).label("aprobado_en"),
+        )
+        .filter(HistorialCredito.estado_nuevo == "Aprobado")
+        .group_by(HistorialCredito.credito_id)
+        .subquery()
     )
-    base_items = [
-        item
-        for item in items
-        if (not term or any(
-            term in str(value or "").lower()
-            for value in (
-                item["credito_id"],
-                item["pensionado_nombre"],
-                item["documento"],
-                item["cooperativa_nombre"],
+    fecha_base_expr = func.coalesce(
+        Credito.fecha_desembolso,
+        cast(aprobacion_subquery.c.aprobado_en, Date),
+        cast(Credito.fecha_registro, Date),
+        cast(Credito.created_at, Date),
+    )
+    disponible_desde_expr = fecha_base_expr + (
+        CooperativaRefinanciacionRegla.meses_para_refinanciar * text("interval '1 month'")
+    )
+
+    query = (
+        db.query(OportunidadRefinanciacion)
+        .join(Credito, OportunidadRefinanciacion.credito_id == Credito.id)
+        .join(Cooperativa, Credito.cooperativa_id == Cooperativa.id)
+        .join(
+            CooperativaRefinanciacionRegla,
+            (CooperativaRefinanciacionRegla.cooperativa_id == Credito.cooperativa_id)
+            & (CooperativaRefinanciacionRegla.plazo_minimo <= Credito.plazo)
+            & (CooperativaRefinanciacionRegla.plazo_maximo >= Credito.plazo),
+        )
+        .outerjoin(aprobacion_subquery, aprobacion_subquery.c.credito_id == Credito.id)
+        .join(Credito.pensionado)
+        .options(
+            selectinload(OportunidadRefinanciacion.credito).selectinload(Credito.pensionado),
+            selectinload(OportunidadRefinanciacion.credito).selectinload(Credito.cooperativa),
+            selectinload(OportunidadRefinanciacion.credito)
+            .selectinload(Credito.cooperativa)
+            .selectinload(Cooperativa.reglas_refinanciacion),
+        )
+        .filter(
+            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Credito.is_active == True,  # noqa: E712
+            Cooperativa.is_active == True,  # noqa: E712
+        )
+    )
+
+    if usuario_actual and usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+    if cooperativa_id is not None:
+        query = query.filter(Credito.cooperativa_id == cooperativa_id)
+    if monto_min is not None:
+        query = query.filter(Credito.monto_aprobado >= monto_min)
+    if monto_max is not None:
+        query = query.filter(Credito.monto_aprobado <= monto_max)
+    if fecha_min is not None:
+        query = query.filter(disponible_desde_expr >= fecha_min)
+    if fecha_max is not None:
+        query = query.filter(disponible_desde_expr <= fecha_max)
+    if term:
+        like_term = f"%{term}%"
+        query = query.filter(
+            or_(
+                cast(Credito.id, String).ilike(like_term),
+                Pensionado.nombre.ilike(like_term),
+                Pensionado.segundo_nombre.ilike(like_term),
+                Pensionado.apellidos.ilike(like_term),
+                Pensionado.documento.ilike(like_term),
+                Cooperativa.nombre.ilike(like_term),
             )
-        ))
-        and (cooperativa_id is None or item["cooperativa_id"] == cooperativa_id)
-        and (monto_min is None or (item["monto_aprobado"] or 0) >= monto_min)
-        and (monto_max is None or (item["monto_aprobado"] or 0) <= monto_max)
-        and (fecha_min is None or item["disponible_desde"] >= fecha_min)
-        and (fecha_max is None or item["disponible_desde"] <= fecha_max)
+        )
+
+    base_count_query = query
+
+    today = date.today()
+    if vista == "gestionados":
+        query = query.filter(OportunidadRefinanciacion.estado.in_(["contactado", "aceptado", "rechazado"]))
+    elif vista == "convertidos":
+        query = query.filter(OportunidadRefinanciacion.estado == "convertido")
+    elif vista == "hoy":
+        query = query.filter(
+            disponible_desde_expr <= today,
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado"]),
+        )
+    elif vista == "proximos":
+        query = query.filter(
+            disponible_desde_expr > today,
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado"]),
+        )
+    elif vista == "todos":
+        query = query.filter(OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado"]))
+    else:
+        raise HTTPException(status_code=422, detail="Vista de refinanciacion no valida")
+
+    total = query.with_entities(func.count(func.distinct(OportunidadRefinanciacion.id))).scalar() or 0
+    oportunidades = (
+        query.order_by(OportunidadRefinanciacion.updated_at.desc(), OportunidadRefinanciacion.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    credito_ids = [oportunidad.credito_id for oportunidad in oportunidades]
+    aprobaciones = dict(
+        db.query(
+            HistorialCredito.credito_id,
+            func.max(HistorialCredito.created_at),
+        )
+        .filter(
+            HistorialCredito.credito_id.in_(credito_ids),
+            HistorialCredito.estado_nuevo == "Aprobado",
+        )
+        .group_by(HistorialCredito.credito_id)
+        .all()
+    ) if credito_ids else {}
+
+    ahora = datetime.now(timezone.utc)
+    changed = False
+    page_items = [
+        item for oportunidad in oportunidades
+        if (
+            item := _oportunidad_to_elegible_item(
+                db,
+                oportunidad,
+                aprobaciones,
+                ahora,
+            )
+        )
     ]
-    counts = _conteos_por_vista(base_items)
-    filtered = [item for item in base_items if _matches_vista(item, vista)]
+
+    for item in page_items:
+        changed = changed or bool(item.pop("_changed", False))
+
+    if changed:
+        db.commit()
+
+    counts = _conteos_oportunidades(base_count_query, disponible_desde_expr, today)
 
     return {
-        "items": filtered[skip : skip + limit],
-        "total": len(filtered),
+        "items": page_items,
+        "total": total,
         "counts": counts,
+    }
+
+
+def _conteos_oportunidades(query, disponible_desde_expr, today: date) -> dict:
+    hoy = (
+        query.filter(
+            disponible_desde_expr <= today,
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado"]),
+        )
+        .with_entities(func.count(func.distinct(OportunidadRefinanciacion.id)))
+        .scalar()
+        or 0
+    )
+    proximos = (
+        query.filter(
+            disponible_desde_expr > today,
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado"]),
+        )
+        .with_entities(func.count(func.distinct(OportunidadRefinanciacion.id)))
+        .scalar()
+        or 0
+    )
+    gestionados = (
+        query.filter(OportunidadRefinanciacion.estado.in_(["contactado", "aceptado", "rechazado"]))
+        .with_entities(func.count(func.distinct(OportunidadRefinanciacion.id)))
+        .scalar()
+        or 0
+    )
+    convertidos = (
+        query.filter(OportunidadRefinanciacion.estado == "convertido")
+        .with_entities(func.count(func.distinct(OportunidadRefinanciacion.id)))
+        .scalar()
+        or 0
+    )
+    return {
+        "hoy": hoy,
+        "proximos": proximos,
+        "gestionados": gestionados,
+        "convertidos": convertidos,
+    }
+
+
+def _oportunidad_to_elegible_item(
+    db: Session,
+    oportunidad: OportunidadRefinanciacion,
+    aprobaciones: dict[int, datetime],
+    ahora: datetime,
+) -> dict | None:
+    credito = oportunidad.credito
+    if not credito or not credito.cooperativa or not credito.cooperativa.is_active:
+        return None
+
+    aprobacion = aprobaciones.get(credito.id)
+    criterio = _criterio_refinanciacion(
+        db,
+        credito,
+        aprobacion.date() if aprobacion else None,
+    )
+    if criterio is None:
+        return None
+
+    changed = False
+    if oportunidad.estado == "rechazado" and oportunidad.reactivar_en and oportunidad.reactivar_en <= ahora:
+        anterior = oportunidad.estado
+        oportunidad.estado = "disponible"
+        oportunidad.reactivar_en = None
+        db.add(HistorialOportunidadRefinanciacion(
+            oportunidad_id=oportunidad.id,
+            estado_anterior=anterior,
+            estado_nuevo="disponible",
+            justificacion="Reactivacion automatica a los 20 dias",
+        ))
+        changed = True
+
+    esta_disponible = criterio["esta_disponible"]
+    return {
+        "credito_id": credito.id,
+        "pensionado_id": credito.pensionado_id,
+        "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
+        "documento": credito.pensionado.documento if credito.pensionado else None,
+        "cooperativa_id": credito.cooperativa_id,
+        "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
+        "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,
+        "monto_aprobado": credito.monto_aprobado,
+        "plazo": credito.plazo,
+        "fecha_base": criterio["fecha_base"],
+        "disponible_desde": criterio["disponible_desde"] or date.today(),
+        "meses_transcurridos": criterio["meses_transcurridos"],
+        "meses_requeridos": criterio["meses_requeridos"],
+        "tipo_liberacion": criterio["tipo_liberacion"],
+        "porcentaje_avance": criterio["porcentaje_avance"],
+        "porcentaje_requerido": criterio["porcentaje_requerido"],
+        "estado_refinanciacion": "Listo" if esta_disponible else "Programado",
+        "oportunidad_id": oportunidad.id,
+        "estado_comercial": oportunidad.estado if esta_disponible else "programado",
+        "reactivar_en": oportunidad.reactivar_en,
+        "credito_nuevo_id": oportunidad.credito_nuevo_id,
+        "_changed": changed,
     }
 
 
