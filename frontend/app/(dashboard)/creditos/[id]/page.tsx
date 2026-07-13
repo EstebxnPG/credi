@@ -142,6 +142,10 @@ type EstadoForm = {
   fecha_fin_estimada: string;
 };
 
+type ObservacionesForm = {
+  observaciones: string;
+};
+
 const emptyPendienteForm: PendienteForm = {
   descripcion: "",
   origen: "cooperativa",
@@ -196,6 +200,9 @@ export default function CreditoDetailPage() {
   const [estadoForm, setEstadoForm] = useState<EstadoForm>(emptyEstadoForm);
   const [estadoError, setEstadoError] = useState<string | null>(null);
   const [savingEstado, setSavingEstado] = useState(false);
+  const [observacionesForm, setObservacionesForm] = useState<ObservacionesForm | null>(null);
+  const [observacionesError, setObservacionesError] = useState<string | null>(null);
+  const [savingObservaciones, setSavingObservaciones] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(creditoId)) {
@@ -313,6 +320,24 @@ export default function CreditoDetailPage() {
     setEditError(null);
   }
 
+  function openObservacionesModal() {
+    if (!credito) {
+      return;
+    }
+
+    setObservacionesForm({ observaciones: credito.observaciones ?? "" });
+    setObservacionesError(null);
+  }
+
+  function closeObservacionesModal() {
+    if (savingObservaciones) {
+      return;
+    }
+
+    setObservacionesForm(null);
+    setObservacionesError(null);
+  }
+
   async function handleUpdateCredito(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -355,6 +380,37 @@ export default function CreditoDetailPage() {
       setEditError(saveError instanceof ApiError ? saveError.message : "No se pudo editar el credito");
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  async function handleUpdateObservaciones(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!credito || !observacionesForm) {
+      return;
+    }
+
+    setSavingObservaciones(true);
+    setObservacionesError(null);
+
+    try {
+      const updated = await apiFetch<Credito>(`/api/v1/creditos/${credito.id}/observaciones`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          observaciones: nullableText(observacionesForm.observaciones),
+        }),
+      });
+
+      setCredito(updated);
+      closeObservacionesModal();
+    } catch (saveError) {
+      setObservacionesError(
+        saveError instanceof ApiError
+          ? saveError.message
+          : "No se pudieron guardar las observaciones",
+      );
+    } finally {
+      setSavingObservaciones(false);
     }
   }
 
@@ -790,9 +846,21 @@ export default function CreditoDetailPage() {
             <Detail label="Libranza" value={credito.nro_libranza ?? "Sin libranza"} />
           </div>
           <div className="mt-4 rounded-md border border-stone-800/10 bg-white/65 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-stone-500">
-              Descripcion / observaciones
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-stone-500">
+                Descripcion / observaciones
+              </p>
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-stone-800/10 bg-white text-stone-700 transition hover:border-teal-700/30 hover:bg-teal-50 hover:text-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Editar observaciones"
+                aria-label="Editar observaciones"
+                onClick={openObservacionesModal}
+                disabled={!credito.is_active}
+              >
+                <PencilIcon />
+              </button>
+            </div>
             <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-stone-800">
               {credito.observaciones ?? "Sin descripcion registrada"}
             </p>
@@ -991,6 +1059,16 @@ export default function CreditoDetailPage() {
           onChange={setEditForm}
           onClose={closeEditModal}
           onSubmit={handleUpdateCredito}
+        />
+      ) : null}
+      {observacionesForm ? (
+        <ObservacionesModal
+          form={observacionesForm}
+          error={observacionesError}
+          saving={savingObservaciones}
+          onChange={setObservacionesForm}
+          onClose={closeObservacionesModal}
+          onSubmit={handleUpdateObservaciones}
         />
       ) : null}
     </section>
@@ -1239,6 +1317,64 @@ function MoneyField({
   );
 }
 
+function ObservacionesModal({
+  form,
+  error,
+  saving,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  form: ObservacionesForm;
+  error: string | null;
+  saving: boolean;
+  onChange: (form: ObservacionesForm) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-2xl rounded-lg border border-stone-800/10 bg-white p-5 shadow-xl shadow-stone-950/20"
+      >
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+              Observaciones
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-stone-950">
+              Editar descripcion del credito
+            </h2>
+          </div>
+          <button type="button" className="button-muted px-3 py-2 text-sm" onClick={onClose}>
+            Cerrar
+          </button>
+        </div>
+
+        {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
+
+        <div className="mt-4">
+          <TextareaField
+            label="Descripcion / observaciones"
+            value={form.observaciones}
+            onChange={(value) => onChange({ observaciones: value })}
+          />
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" className="button-muted" onClick={onClose} disabled={saving}>
+            Cancelar
+          </button>
+          <button type="submit" className="button-primary" disabled={saving}>
+            {saving ? "Guardando..." : "Guardar observaciones"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function TextareaField({
   label,
   value,
@@ -1341,6 +1477,24 @@ function toApiStatus(estado: string) {
   }
 
   return estado;
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
 }
 
 function StateMessage({

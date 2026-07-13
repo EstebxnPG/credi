@@ -21,6 +21,7 @@ from app.db.models.notificacion import Notificacion
 from app.schemas.credito import (
     CreditoCambioEstado,
     CreditoCreate,
+    CreditoObservacionesUpdate,
     CreditoUpdate,
     TRANSICIONES_VALIDAS,
 )
@@ -740,6 +741,41 @@ def actualizar_credito(
     from app.services.notificacion_service import sincronizar_reglas
 
     sincronizar_reglas(db, commit=False)
+    db.commit()
+    db.refresh(credito)
+    return credito
+
+
+def actualizar_observaciones_credito(
+    db: Session,
+    credito_id: int,
+    data: CreditoObservacionesUpdate,
+    usuario_actual: Usuario,
+) -> Credito:
+    credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
+    if not credito.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"CrÃ©dito con id {credito_id} no encontrado",
+        )
+
+    observaciones = data.observaciones
+    if credito.observaciones == observaciones:
+        return credito
+
+    valor_anterior = credito.observaciones
+    credito.observaciones = observaciones
+
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="observaciones",
+        valores_antes={"observaciones": valor_anterior},
+        valores_despues={"observaciones": observaciones},
+    )
+
     db.commit()
     db.refresh(credito)
     return credito

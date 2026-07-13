@@ -8,7 +8,13 @@ from typing import Optional
 
 from app.core.dependencies import get_db, get_current_user, solo_admin
 from app.db.models.usuario import Usuario
-from app.schemas.credito import CreditoCreate, CreditoUpdate, CreditoCambioEstado, CreditoRead
+from app.schemas.credito import (
+    CreditoCambioEstado,
+    CreditoCreate,
+    CreditoObservacionesUpdate,
+    CreditoRead,
+    CreditoUpdate,
+)
 from app.schemas.historial_credito import HistorialCreditoRead
 from app.services import credito_service
 
@@ -102,6 +108,21 @@ def cambiar_estado(
     Valida que la transición sea permitida según la máquina de estados.
     """
     return credito_service.cambiar_estado(db, credito_id, data, usuario_actual)
+
+
+@router.patch("/{credito_id}/observaciones", response_model=CreditoRead)
+def actualizar_observaciones(
+    credito_id: int,
+    data: CreditoObservacionesUpdate,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return credito_service.actualizar_observaciones_credito(
+        db,
+        credito_id,
+        data,
+        usuario_actual,
+    )
 
 
 @router.delete("/{credito_id}", response_model=CreditoRead)

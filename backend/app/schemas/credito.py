@@ -130,6 +130,18 @@ class CreditoUpdate(BaseModel):
         return v or None
 
 
+class CreditoObservacionesUpdate(BaseModel):
+    observaciones: Optional[str] = None
+
+    @field_validator("observaciones")
+    @classmethod
+    def observaciones_limpias(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
+
 # ─── Cambio de estado ────────────────────────────────────────────────────────
 class CreditoCambioEstado(BaseModel):
     """
