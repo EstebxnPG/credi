@@ -70,6 +70,7 @@ export default function RefinanciacionesPage() {
     convertidos: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -118,6 +119,7 @@ export default function RefinanciacionesPage() {
           : "No se pudieron cargar las oportunidades",
       );
     } finally {
+      setHasLoadedOnce(true);
       setLoading(false);
     }
   }, [cooperativas.length, filters, page, query, vista]);
@@ -186,7 +188,7 @@ export default function RefinanciacionesPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !hasLoadedOnce) {
     return <Message text="Cargando refinanciaciones..." />;
   }
 
@@ -291,7 +293,7 @@ export default function RefinanciacionesPage() {
         </div>
         <div className="mt-3 flex flex-col gap-2 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            Mostrando {items.length} de {total} oportunidades. Pagina {page} de {totalPages}.
+            {loading ? "Actualizando filtros..." : `Mostrando ${items.length} de ${total} oportunidades. Pagina ${page} de ${totalPages}.`}
           </p>
           <div className="flex items-center gap-2">
             <button
