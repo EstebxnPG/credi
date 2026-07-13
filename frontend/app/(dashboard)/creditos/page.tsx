@@ -123,7 +123,7 @@ const emptyForm: FormValues = {
   monto_solicitado: "",
   plazo: "",
   nro_libranza: "",
-  tipo_credito: "Nuevo",
+  tipo_credito: "NUEVO",
   entidad_financiera_origen: "",
   observaciones: "",
   tiene_documentos_pendientes: false,
@@ -475,7 +475,7 @@ export default function CreditosPage() {
       oficina_id: String(source.oficina_id),
       cooperativa_id: String(source.cooperativa_id),
       pagaduria_id: String(source.pagaduria_id),
-      tipo_credito: "Refinanciacion",
+      tipo_credito: "REFINANCIACION",
       credito_refinanciado_id: String(source.id),
       observaciones: `Refinanciación del crédito #${source.id}`,
     });
@@ -495,7 +495,7 @@ export default function CreditosPage() {
       monto_solicitado: String(credito.monto_solicitado),
       plazo: String(credito.plazo),
       nro_libranza: credito.nro_libranza ?? "",
-      tipo_credito: credito.tipo_credito ?? "Nuevo",
+      tipo_credito: credito.tipo_credito ?? "NUEVO",
       entidad_financiera_origen: credito.entidad_financiera_origen ?? "",
       observaciones: credito.observaciones ?? "",
       tiene_documentos_pendientes: credito.tiene_documentos_pendientes,
@@ -547,14 +547,14 @@ export default function CreditosPage() {
             asesor_id: Number(form.asesor_id),
             oficina_id: Number(form.oficina_id),
             cooperativa_id: Number(form.cooperativa_id),
-            credito_refinanciado_id: form.tipo_credito === "Refinanciacion" ? Number(form.credito_refinanciado_id) : null,
+            credito_refinanciado_id: form.tipo_credito === "REFINANCIACION" ? Number(form.credito_refinanciado_id) : null,
             pagaduria_id: Number(form.pagaduria_id),
             monto_solicitado: parseMoneyInput(form.monto_solicitado),
             plazo: Number(form.plazo),
             nro_libranza: nullableText(form.nro_libranza),
             tipo_credito: form.tipo_credito,
             entidad_financiera_origen:
-              form.tipo_credito === "Compra de cartera"
+              form.tipo_credito === "COMPRA CARTERA"
                 ? nullableText(form.entidad_financiera_origen)
                 : null,
             observaciones: nullableText(form.observaciones),
@@ -571,14 +571,14 @@ export default function CreditosPage() {
           method: "PATCH",
           body: JSON.stringify({
             cooperativa_id: Number(form.cooperativa_id),
-            credito_refinanciado_id: form.tipo_credito === "Refinanciacion" ? Number(form.credito_refinanciado_id) : null,
+            credito_refinanciado_id: form.tipo_credito === "REFINANCIACION" ? Number(form.credito_refinanciado_id) : null,
             pagaduria_id: Number(form.pagaduria_id),
           monto_solicitado: parseMoneyInput(form.monto_solicitado),
           plazo: Number(form.plazo),
           nro_libranza: nullableText(form.nro_libranza),
           tipo_credito: form.tipo_credito,
           entidad_financiera_origen:
-            form.tipo_credito === "Compra de cartera"
+            form.tipo_credito === "COMPRA CARTERA"
               ? nullableText(form.entidad_financiera_origen)
               : null,
           observaciones: nullableText(form.observaciones),
@@ -687,9 +687,9 @@ export default function CreditosPage() {
             value={filters.tipoCredito}
             onChange={(value) => updateFilters({ ...filters, tipoCredito: value })}
             options={[
-              { value: "Nuevo", label: "Nuevo" },
-              { value: "Refinanciacion", label: "Refinanciacion" },
-              { value: "Compra de cartera", label: "Compra de cartera" },
+              { value: "NUEVO", label: "NUEVO" },
+              { value: "REFINANCIACION", label: "REFINANCIACION" },
+              { value: "COMPRA CARTERA", label: "COMPRA CARTERA" },
             ]}
           />
           <Field
@@ -1065,13 +1065,13 @@ function CreditoModal({
             value={form.tipo_credito}
             onChange={(value) => updateField("tipo_credito", value)}
             options={[
-              { value: "Nuevo", label: "Nuevo" },
-              { value: "Refinanciacion", label: "Refinanciacion" },
-              { value: "Compra de cartera", label: "Compra de cartera" },
+              { value: "NUEVO", label: "NUEVO" },
+              { value: "REFINANCIACION", label: "REFINANCIACION" },
+              { value: "COMPRA CARTERA", label: "COMPRA CARTERA" },
             ]}
             required
           />
-          {form.tipo_credito === "Refinanciacion" ? (
+          {form.tipo_credito === "REFINANCIACION" ? (
             <SelectField
               label="Credito que refinancia"
               value={form.credito_refinanciado_id}
@@ -1083,7 +1083,7 @@ function CreditoModal({
               required
             />
           ) : null}
-          {form.tipo_credito === "Compra de cartera" ? (
+          {form.tipo_credito === "COMPRA CARTERA" ? (
             <Field
               label="Entidad financiera de origen"
               value={form.entidad_financiera_origen}

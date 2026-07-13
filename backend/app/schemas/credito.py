@@ -14,10 +14,39 @@ ESTADOS_VALIDOS = {
 }
 
 TIPOS_CREDITO_VALIDOS = {
-    "Nuevo",
-    "Refinanciacion",
-    "Compra de cartera",
+    "NUEVO",
+    "REFINANCIACION",
+    "COMPRA CARTERA",
 }
+
+
+def normalizar_tipo_credito(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    normalized = " ".join(value.strip().upper().split())
+    if not normalized:
+        return None
+
+    aliases = {
+        "NUEVO": "NUEVO",
+        "NUEVA": "NUEVO",
+        "PLAN PRIMA": "NUEVO",
+        "CAMBIO": "NUEVO",
+        "REF": "REFINANCIACION",
+        "REFINANCIACION": "REFINANCIACION",
+        "REFINANCIACIÓN": "REFINANCIACION",
+        "COMPRA": "COMPRA CARTERA",
+        "COMPRA CARTERA": "COMPRA CARTERA",
+        "COMPRA DE CARTERA": "COMPRA CARTERA",
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    if normalized.startswith("REF"):
+        return "REFINANCIACION"
+    if "COMPRA" in normalized or "CARTERA" in normalized:
+        return "COMPRA CARTERA"
+    return normalized
 
 # Transiciones permitidas: desde → {hacia donde puede ir}
 TRANSICIONES_VALIDAS: dict[str, set[str]] = {
@@ -42,7 +71,7 @@ class CreditoCreate(BaseModel):
     monto_solicitado: float
     plazo: int
     nro_libranza: Optional[str] = None
-    tipo_credito: str = "Nuevo"
+    tipo_credito: str = "NUEVO"
     entidad_financiera_origen: Optional[str] = None
     observaciones: Optional[str] = None
     tiene_documentos_pendientes: bool = False
@@ -65,9 +94,9 @@ class CreditoCreate(BaseModel):
     @field_validator("tipo_credito")
     @classmethod
     def tipo_credito_valido(cls, v: str) -> str:
-        v = v.strip()
+        v = normalizar_tipo_credito(v)
         if v not in TIPOS_CREDITO_VALIDOS:
-            raise ValueError("Tipo de credito debe ser Nuevo, Refinanciacion o Compra de cartera")
+            raise ValueError("Tipo de credito debe ser NUEVO, REFINANCIACION o COMPRA CARTERA")
         return v
 
     @field_validator("entidad_financiera_origen")
@@ -116,9 +145,9 @@ class CreditoUpdate(BaseModel):
     def tipo_credito_valido(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return None
-        v = v.strip()
+        v = normalizar_tipo_credito(v)
         if v not in TIPOS_CREDITO_VALIDOS:
-            raise ValueError("Tipo de credito debe ser Nuevo, Refinanciacion o Compra de cartera")
+            raise ValueError("Tipo de credito debe ser NUEVO, REFINANCIACION o COMPRA CARTERA")
         return v
 
     @field_validator("entidad_financiera_origen")

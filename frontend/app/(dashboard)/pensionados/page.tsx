@@ -147,7 +147,7 @@ const emptyCreditoForm: CreditoFormValues = {
   monto_solicitado: "",
   plazo: "",
   nro_libranza: "",
-  tipo_credito: "Nuevo",
+  tipo_credito: "NUEVO",
   entidad_financiera_origen: "",
   observaciones: "",
   tiene_documentos_pendientes: false,
@@ -979,12 +979,12 @@ function PensionadoModal({
                   value={creditoForm.tipo_credito}
                   onChange={(value) => updateCreditoField("tipo_credito", value)}
                   options={[
-                    { value: "Nuevo", label: "Nuevo" },
-                    { value: "Compra de cartera", label: "Compra de cartera" },
+                    { value: "NUEVO", label: "NUEVO" },
+                    { value: "COMPRA CARTERA", label: "COMPRA CARTERA" },
                   ]}
                   required
                 />
-                {creditoForm.tipo_credito === "Compra de cartera" ? (
+                {creditoForm.tipo_credito === "COMPRA CARTERA" ? (
                   <Field
                     label="Entidad financiera de origen"
                     value={creditoForm.entidad_financiera_origen}
@@ -1105,7 +1105,7 @@ async function createCredito(pensionadoId: number, creditoForm: CreditoFormValue
       nro_libranza: nullableText(creditoForm.nro_libranza),
       tipo_credito: creditoForm.tipo_credito,
       entidad_financiera_origen:
-        creditoForm.tipo_credito === "Compra de cartera"
+        creditoForm.tipo_credito === "COMPRA CARTERA"
           ? nullableText(creditoForm.entidad_financiera_origen)
           : null,
       observaciones: nullableText(creditoForm.observaciones),

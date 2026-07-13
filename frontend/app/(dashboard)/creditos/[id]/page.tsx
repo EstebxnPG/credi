@@ -299,7 +299,7 @@ export default function CreditoDetailPage() {
       monto_solicitado: String(credito.monto_solicitado),
       plazo: String(credito.plazo),
       nro_libranza: credito.nro_libranza ?? "",
-      tipo_credito: credito.tipo_credito ?? "Nuevo",
+      tipo_credito: credito.tipo_credito ?? "NUEVO",
       credito_refinanciado_id: credito.credito_refinanciado_id
         ? String(credito.credito_refinanciado_id)
         : "",
@@ -359,11 +359,11 @@ export default function CreditoDetailPage() {
           nro_libranza: nullableText(editForm.nro_libranza),
           tipo_credito: editForm.tipo_credito,
           credito_refinanciado_id:
-            editForm.tipo_credito === "Refinanciacion"
+            editForm.tipo_credito === "REFINANCIACION"
               ? Number(editForm.credito_refinanciado_id)
               : null,
           entidad_financiera_origen:
-            editForm.tipo_credito === "Compra de cartera"
+            editForm.tipo_credito === "COMPRA CARTERA"
               ? nullableText(editForm.entidad_financiera_origen)
               : null,
           observaciones: nullableText(editForm.observaciones),
@@ -827,7 +827,7 @@ export default function CreditoDetailPage() {
             <Detail label="Cooperativa" value={cooperativaActual?.nombre ?? "Sin cooperativa"} />
             {cooperativaActual?.simulador_url ? <a href={cooperativaActual.simulador_url} target="_blank" rel="noopener noreferrer" className="self-end pb-3 text-sm font-semibold text-teal-700 hover:underline">Abrir simuladora ↗</a> : null}
             <Detail label="Tipo" value={credito.tipo_credito ?? "Sin tipo"} />
-            {credito.tipo_credito === "Refinanciacion" ? (
+            {credito.tipo_credito === "REFINANCIACION" ? (
               <Detail
                 label="Credito refinanciado"
                 value={
@@ -837,7 +837,7 @@ export default function CreditoDetailPage() {
                 }
               />
             ) : null}
-            {credito.tipo_credito === "Compra de cartera" ? (
+            {credito.tipo_credito === "COMPRA CARTERA" ? (
               <Detail
                 label="Entidad de origen"
                 value={credito.entidad_financiera_origen ?? "Sin entidad registrada"}
@@ -1164,13 +1164,13 @@ function EditCreditoModal({
             value={form.tipo_credito}
             onChange={(value) => updateField("tipo_credito", value)}
             options={[
-              { value: "Nuevo", label: "Nuevo" },
-              { value: "Refinanciacion", label: "Refinanciacion" },
-              { value: "Compra de cartera", label: "Compra de cartera" },
+              { value: "NUEVO", label: "NUEVO" },
+              { value: "REFINANCIACION", label: "REFINANCIACION" },
+              { value: "COMPRA CARTERA", label: "COMPRA CARTERA" },
             ]}
             required
           />
-          {form.tipo_credito === "Refinanciacion" ? (
+          {form.tipo_credito === "REFINANCIACION" ? (
             <SelectField
               label="Credito que refinancia"
               value={form.credito_refinanciado_id}
@@ -1184,7 +1184,7 @@ function EditCreditoModal({
               required
             />
           ) : null}
-          {form.tipo_credito === "Compra de cartera" ? (
+          {form.tipo_credito === "COMPRA CARTERA" ? (
             <Field
               label="Entidad financiera de origen"
               value={form.entidad_financiera_origen}

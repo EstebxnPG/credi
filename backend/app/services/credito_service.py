@@ -25,6 +25,7 @@ from app.schemas.credito import (
     CreditoObservacionesUpdate,
     CreditoUpdate,
     TRANSICIONES_VALIDAS,
+    normalizar_tipo_credito,
 )
 from app.schemas.historial_credito import HistorialCreditoRead
 from app.services.cooperativa_service import validar_credito_contra_cooperativa
@@ -280,7 +281,9 @@ def _validar_tipo_credito(
     entidad_financiera_origen: str | None,
     credito_actual_id: int | None = None,
 ) -> None:
-    if tipo_credito == "Nuevo":
+    tipo_credito = normalizar_tipo_credito(tipo_credito)
+
+    if tipo_credito == "NUEVO":
         if credito_refinanciado_id or entidad_financiera_origen:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -288,7 +291,7 @@ def _validar_tipo_credito(
             )
         return
 
-    if tipo_credito == "Compra de cartera":
+    if tipo_credito == "COMPRA CARTERA":
         if credito_refinanciado_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -435,7 +438,7 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
     db.add(credito)
     db.flush()
 
-    if credito.tipo_credito == "Refinanciacion" and credito.credito_refinanciado_id:
+    if credito.tipo_credito == "REFINANCIACION" and credito.credito_refinanciado_id:
         oportunidad = db.query(OportunidadRefinanciacion).filter(
             OportunidadRefinanciacion.credito_id == credito.credito_refinanciado_id
         ).first()
@@ -750,12 +753,12 @@ def actualizar_credito(
         or "entidad_financiera_origen" in cambios
     ):
         tipo_credito = cambios.get("tipo_credito", credito.tipo_credito)
-        if tipo_credito == "Nuevo":
+        if tipo_credito == "NUEVO":
             cambios["credito_refinanciado_id"] = None
             cambios["entidad_financiera_origen"] = None
-        elif tipo_credito == "Refinanciacion":
+        elif tipo_credito == "REFINANCIACION":
             cambios["entidad_financiera_origen"] = None
-        elif tipo_credito == "Compra de cartera":
+        elif tipo_credito == "COMPRA CARTERA":
             cambios["credito_refinanciado_id"] = None
 
         _validar_tipo_credito(
