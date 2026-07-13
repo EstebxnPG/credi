@@ -602,7 +602,7 @@ function CreditosList({
         <span>Credito</span>
         <span>Estado</span>
         <span>Solicitado</span>
-        <span>Plazo</span>
+        <span>Plazo (meses)</span>
         <span>Registro</span>
         <span className="text-right">Acciones</span>
       </div>

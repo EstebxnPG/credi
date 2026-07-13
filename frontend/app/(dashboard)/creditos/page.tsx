@@ -161,6 +161,7 @@ const estadosCredito = [
 ];
 
 const PAGE_SIZE = 15;
+const CATALOG_LIMIT = 200;
 
 export default function CreditosPage() {
   const router = useRouter();
@@ -168,6 +169,7 @@ export default function CreditosPage() {
   const refinanceOpened = useRef(false);
   const [creditos, setCreditos] = useState<Credito[]>([]);
   const [pensionados, setPensionados] = useState<Pensionado[]>([]);
+  const [searchingPensionados, setSearchingPensionados] = useState(false);
   const [pendientes, setPendientes] = useState<PendienteCredito[]>([]);
   const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
   const [pagadurias, setPagadurias] = useState<Pagaduria[]>([]);
@@ -213,7 +215,7 @@ export default function CreditosPage() {
 
       const usuariosRequest =
         session?.rol === "administrador"
-          ? apiFetch<Usuario[]>("/api/v1/usuarios/?limit=15")
+          ? apiFetch<Usuario[]>(`/api/v1/usuarios/?limit=${CATALOG_LIMIT}`)
           : Promise.resolve(
               userId && session
                 ? [
@@ -239,7 +241,7 @@ export default function CreditosPage() {
       ] =
         await Promise.all([
         apiFetchWithMeta<Credito[]>(`/api/v1/creditos/?${creditosParams.toString()}`),
-        apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=15"),
+        apiFetch<Pensionado[]>(`/api/v1/pensionados/?solo_activos=true&limit=${CATALOG_LIMIT}`),
         apiFetch<PendienteCredito[]>("/api/v1/pendientes-credito/?estado=pendiente&limit=15"),
         apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
         apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
@@ -515,6 +517,32 @@ export default function CreditosPage() {
     setForm(emptyForm);
     setFormError(null);
   }
+
+  const searchPensionados = useCallback(async function searchPensionados(term: string) {
+    const cleanTerm = term.trim();
+    if (cleanTerm.length < 2) {
+      return;
+    }
+
+    setSearchingPensionados(true);
+    try {
+      const params = new URLSearchParams({
+        solo_activos: "true",
+        limit: String(CATALOG_LIMIT),
+        texto: cleanTerm,
+      });
+      const results = await apiFetch<Pensionado[]>(`/api/v1/pensionados/?${params.toString()}`);
+      setPensionados((current) => {
+        const byId = new Map(current.map((pensionado) => [pensionado.id, pensionado]));
+        results.forEach((pensionado) => byId.set(pensionado.id, pensionado));
+        return Array.from(byId.values());
+      });
+    } catch {
+      // The form keeps the current options and lets the submit path surface hard failures.
+    } finally {
+      setSearchingPensionados(false);
+    }
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -873,8 +901,10 @@ export default function CreditosPage() {
           asesores={asesores}
           oficinaById={oficinaById}
           cooperativaById={cooperativaById}
+          searchingPensionados={searchingPensionados}
           onChange={setForm}
           onClose={closeModal}
+          onSearchPensionados={searchPensionados}
           onSubmit={handleSubmit}
         />
       ) : null}
@@ -895,8 +925,10 @@ function CreditoModal({
   asesores,
   oficinaById,
   cooperativaById,
+  searchingPensionados,
   onChange,
   onClose,
+  onSearchPensionados,
   onSubmit,
 }: {
   mode: FormMode;
@@ -911,8 +943,10 @@ function CreditoModal({
   asesores: Usuario[];
   oficinaById: Map<number, Oficina>;
   cooperativaById: Map<number, Cooperativa>;
+  searchingPensionados: boolean;
   onChange: (form: FormValues) => void;
   onClose: () => void;
+  onSearchPensionados: (term: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const isCreate = mode === "create";
@@ -980,6 +1014,8 @@ function CreditoModal({
                 }))}
                 onChange={(value) => updateField("pensionado_id", value)}
                 placeholder="Buscar pensionado por nombre o documento"
+                onSearch={onSearchPensionados}
+                loading={searchingPensionados}
                 required
               />
             </div>
@@ -1192,6 +1228,8 @@ function SearchSelectField({
   options,
   onChange,
   placeholder,
+  onSearch,
+  loading = false,
   required = false,
 }: {
   label: string;
@@ -1199,6 +1237,8 @@ function SearchSelectField({
   options: SearchOption[];
   onChange: (value: string) => void;
   placeholder: string;
+  onSearch?: (term: string) => void;
+  loading?: boolean;
   required?: boolean;
 }) {
   const selected = options.find((option) => option.value === value);
@@ -1210,6 +1250,20 @@ function SearchSelectField({
       setSearch(`${selected.label} - ${selected.description}`);
     }
   }, [selected]);
+
+  useEffect(() => {
+    if (!onSearch || selected) {
+      return;
+    }
+
+    const term = search.trim();
+    if (term.length < 2) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => onSearch(term), 300);
+    return () => window.clearTimeout(timer);
+  }, [onSearch, search, selected]);
 
   const filteredOptions = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -1265,7 +1319,7 @@ function SearchSelectField({
             </button>
           ))}
           {filteredOptions.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-stone-500">No hay resultados.</p>
+            <p className="px-3 py-2 text-sm text-stone-500">{loading ? "Buscando..." : "No hay resultados."}</p>
           ) : null}
         </div>
       ) : null}
