@@ -18,9 +18,11 @@ class UsuarioCreate(UsuarioBase):
 
 class UsuarioUpdate(BaseModel):
     nombre: Optional[str] = None
+    documento: Optional[str] = None
     correo: Optional[EmailStr] = None
     oficina_id: Optional[int] = None
     rol: Optional[RolEnum] = None
+    contrasena: Optional[str] = None
 
 class UsuarioRead(UsuarioBase):
     id: int

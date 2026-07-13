@@ -20,6 +20,10 @@ class UsuarioRepository:
         stmt = select(Usuario).where(Usuario.correo == correo)
         return self.db.execute(stmt).scalar_one_or_none()
 
+    def get_by_documento(self, documento: str) -> Optional[Usuario]:
+        stmt = select(Usuario).where(Usuario.documento == documento)
+        return self.db.execute(stmt).scalar_one_or_none()
+
     def get_all(self, skip: int = 0, limit: int = 100) -> list[Usuario]:
         stmt = (
             select(Usuario)
@@ -51,6 +55,12 @@ class UsuarioRepository:
     def resetear_intentos(self, usuario: Usuario) -> None:
         usuario.intentos_fallidos = 0
         self.db.commit()
+
+    def desbloquear(self, usuario: Usuario) -> Usuario:
+        usuario.intentos_fallidos = 0
+        self.db.commit()
+        self.db.refresh(usuario)
+        return usuario
 
     def soft_delete(self, usuario: Usuario) -> Usuario:
         usuario.is_active = False

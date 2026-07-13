@@ -41,6 +41,14 @@ def actualizar_usuario(
 ):
     return UsuarioService(db).actualizar(usuario_id, data)
 
+@router.patch("/{usuario_id}/desbloquear", response_model=UsuarioRead)
+def desbloquear_usuario(
+    usuario_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(solo_admin)
+):
+    return UsuarioService(db).desbloquear(usuario_id)
+
 @router.delete("/{usuario_id}", status_code=204)
 def eliminar_usuario(
     usuario_id: int,
