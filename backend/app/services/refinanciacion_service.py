@@ -343,6 +343,105 @@ def listar_creditos_elegibles(
     return elegibles[skip : skip + limit] if limit is not None else elegibles[skip:]
 
 
+def obtener_credito_elegible(
+    db: Session,
+    credito_id: int,
+    usuario_actual: Usuario | None = None,
+) -> dict | None:
+    query = (
+        db.query(Credito)
+        .options(
+            selectinload(Credito.pensionado),
+            selectinload(Credito.cooperativa),
+            selectinload(Credito.cooperativa).selectinload(Cooperativa.reglas_refinanciacion),
+        )
+        .filter(
+            Credito.id == credito_id,
+            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Credito.is_active == True,  # noqa: E712
+        )
+    )
+    if usuario_actual and usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+
+    credito = query.first()
+    if not credito or not credito.cooperativa or not credito.cooperativa.is_active:
+        return None
+
+    aprobacion = (
+        db.query(func.max(HistorialCredito.created_at))
+        .filter(
+            HistorialCredito.credito_id == credito.id,
+            HistorialCredito.estado_nuevo == "Aprobado",
+        )
+        .scalar()
+    )
+    criterio = _criterio_refinanciacion(
+        db,
+        credito,
+        aprobacion.date() if aprobacion else None,
+    )
+    if criterio is None:
+        return None
+
+    ahora = datetime.now(timezone.utc)
+    oportunidad = (
+        db.query(OportunidadRefinanciacion)
+        .filter(OportunidadRefinanciacion.credito_id == credito.id)
+        .first()
+    )
+    if oportunidad and oportunidad.estado == "rechazado" and oportunidad.reactivar_en and oportunidad.reactivar_en <= ahora:
+        anterior = oportunidad.estado
+        oportunidad.estado = "disponible"
+        oportunidad.reactivar_en = None
+        db.add(HistorialOportunidadRefinanciacion(
+            oportunidad_id=oportunidad.id,
+            estado_anterior=anterior,
+            estado_nuevo="disponible",
+            justificacion="Reactivacion automatica a los 20 dias",
+        ))
+    if not oportunidad:
+        oportunidad = OportunidadRefinanciacion(
+            credito_id=credito.id,
+            oficina_id=credito.oficina_id,
+            responsable_id=credito.asesor_id,
+            estado="disponible",
+        )
+        db.add(oportunidad)
+        db.flush()
+        db.add(HistorialOportunidadRefinanciacion(
+            oportunidad_id=oportunidad.id,
+            estado_nuevo="disponible",
+            justificacion="Credito habilitado por regla de refinanciacion",
+        ))
+
+    esta_disponible = criterio["esta_disponible"]
+    db.commit()
+    return {
+        "credito_id": credito.id,
+        "pensionado_id": credito.pensionado_id,
+        "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
+        "documento": credito.pensionado.documento if credito.pensionado else None,
+        "cooperativa_id": credito.cooperativa_id,
+        "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
+        "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,
+        "monto_aprobado": credito.monto_aprobado,
+        "plazo": credito.plazo,
+        "fecha_base": criterio["fecha_base"],
+        "disponible_desde": criterio["disponible_desde"] or date.today(),
+        "meses_transcurridos": criterio["meses_transcurridos"],
+        "meses_requeridos": criterio["meses_requeridos"],
+        "tipo_liberacion": criterio["tipo_liberacion"],
+        "porcentaje_avance": criterio["porcentaje_avance"],
+        "porcentaje_requerido": criterio["porcentaje_requerido"],
+        "estado_refinanciacion": "Listo" if esta_disponible else "Programado",
+        "oportunidad_id": oportunidad.id,
+        "estado_comercial": oportunidad.estado if esta_disponible else "programado",
+        "reactivar_en": oportunidad.reactivar_en,
+        "credito_nuevo_id": oportunidad.credito_nuevo_id,
+    }
+
+
 def _parse_date_filter(value: str | None, field_name: str) -> date | None:
     if not value:
         return None

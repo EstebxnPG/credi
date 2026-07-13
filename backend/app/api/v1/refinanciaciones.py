@@ -44,6 +44,7 @@ def listar_refinanciaciones(
 @router.get("/elegibles/", response_model=list[RefinanciacionElegibleRead])
 def listar_creditos_elegibles(
     response: Response,
+    credito_id: Optional[int] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
     vista: str = Query("todos"),
@@ -56,6 +57,24 @@ def listar_creditos_elegibles(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
+    if credito_id is not None:
+        item = refinanciacion_service.obtener_credito_elegible(
+            db,
+            credito_id,
+            usuario,
+        )
+        items = [item] if item else []
+        response.headers["X-Total-Count"] = str(len(items))
+        response.headers["X-Count-Hoy"] = str(
+            sum(1 for item in items if item["estado_refinanciacion"] == "Listo")
+        )
+        response.headers["X-Count-Proximos"] = str(
+            sum(1 for item in items if item["estado_refinanciacion"] == "Programado")
+        )
+        response.headers["X-Count-Gestionados"] = "0"
+        response.headers["X-Count-Convertidos"] = "0"
+        return items
+
     result = refinanciacion_service.listar_creditos_elegibles_paginados(
         db,
         usuario,

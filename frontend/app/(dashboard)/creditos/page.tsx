@@ -208,41 +208,42 @@ export default function CreditosPage() {
         creditosParams.set("tipo_credito", filters.tipoCredito);
       }
 
+      const usuariosRequest =
+        session?.rol === "administrador"
+          ? apiFetch<Usuario[]>("/api/v1/usuarios/?limit=15")
+          : Promise.resolve(
+              userId && session
+                ? [
+                    {
+                      id: userId,
+                      nombre: session.nombre,
+                      rol: session.rol,
+                      oficina_id: session.oficinaId ?? 0,
+                      is_active: true,
+                    },
+                  ]
+                : [],
+            );
+
       const [
+        creditosResponse,
         pensionadosData,
         pendientesData,
         cooperativasData,
         pagaduriasData,
         oficinasData,
-        opportunitiesData,
+        usuariosData,
       ] =
         await Promise.all([
+        apiFetchWithMeta<Credito[]>(`/api/v1/creditos/?${creditosParams.toString()}`),
         apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=15"),
         apiFetch<PendienteCredito[]>("/api/v1/pendientes-credito/?estado=pendiente&limit=15"),
         apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
         apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
         apiFetch<Oficina[]>("/api/v1/oficinas/"),
-        apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/?limit=15"),
+        usuariosRequest,
       ]);
-      const creditosResponse = await apiFetchWithMeta<Credito[]>(
-        `/api/v1/creditos/?${creditosParams.toString()}`,
-      );
       const total = Number(creditosResponse.headers.get("X-Total-Count") ?? creditosResponse.data.length);
-
-      let usuariosData: Usuario[] = [];
-      if (session?.rol === "administrador") {
-        usuariosData = await apiFetch<Usuario[]>("/api/v1/usuarios/?limit=15");
-      } else if (userId && session) {
-        usuariosData = [
-          {
-            id: userId,
-            nombre: session.nombre,
-            rol: session.rol,
-            oficina_id: session.oficinaId ?? 0,
-            is_active: true,
-          },
-        ];
-      }
 
       setCreditos(creditosResponse.data);
       setTotalCreditos(Number.isFinite(total) ? total : creditosResponse.data.length);
@@ -251,8 +252,11 @@ export default function CreditosPage() {
       setCooperativas(cooperativasData);
       setPagadurias(pagaduriasData);
       setOficinas(oficinasData);
-      setOpportunities(opportunitiesData);
       setUsuarios(usuariosData);
+
+      void apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/?limit=15")
+        .then(setOpportunities)
+        .catch(() => setOpportunities([]));
     } catch (loadError) {
       setError(
         loadError instanceof ApiError

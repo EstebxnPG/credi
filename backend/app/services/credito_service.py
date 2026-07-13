@@ -578,7 +578,12 @@ def obtener_credito(db: Session, credito_id: int, usuario_actual: Usuario) -> Cr
 def obtener_historial_credito(
     db: Session, credito_id: int, usuario_actual: Usuario
 ) -> list[HistorialCreditoRead]:
-    obtener_credito(db, credito_id, usuario_actual)
+    credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
+    if not credito.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"CrÃ©dito con id {credito_id} no encontrado",
+        )
     historial = (
         db.query(HistorialCredito)
         .filter(HistorialCredito.credito_id == credito_id)

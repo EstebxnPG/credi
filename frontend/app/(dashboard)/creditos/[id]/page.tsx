@@ -219,7 +219,6 @@ export default function CreditoDetailPage() {
           cooperativasData,
           pagaduriasData,
           oficinasData,
-          opportunitiesData,
         ] = await Promise.all([
           apiFetch<Credito>(`/api/v1/creditos/${creditoId}`),
           apiFetch<HistorialCredito[]>(`/api/v1/creditos/${creditoId}/historial`),
@@ -228,7 +227,6 @@ export default function CreditoDetailPage() {
           apiFetch<Cooperativa[]>("/api/v1/cooperativas/"),
           apiFetch<Pagaduria[]>("/api/v1/pagadurias/"),
           apiFetch<Oficina[]>("/api/v1/oficinas/"),
-          apiFetch<Opportunity[]>("/api/v1/refinanciaciones/elegibles/?limit=15"),
         ]);
         const [pensionadoData, creditosPensionadoData] = await Promise.all([
           apiFetch<Pensionado>(`/api/v1/pensionados/${creditoData.pensionado_id}`),
@@ -247,9 +245,19 @@ export default function CreditoDetailPage() {
           setPagadurias(pagaduriasData);
           setOficinas(oficinasData);
           setCreditosPensionado(creditosPensionadoData);
-          setRefinanceOpportunity(
-            opportunitiesData.find((item) => item.credito_id === creditoData.id) ?? null,
-          );
+          void apiFetch<Opportunity[]>(
+            `/api/v1/refinanciaciones/elegibles/?credito_id=${creditoData.id}&limit=1`,
+          )
+            .then((items) => {
+              if (!ignore) {
+                setRefinanceOpportunity(items[0] ?? null);
+              }
+            })
+            .catch(() => {
+              if (!ignore) {
+                setRefinanceOpportunity(null);
+              }
+            });
         }
       } catch (loadError) {
         if (!ignore) {
