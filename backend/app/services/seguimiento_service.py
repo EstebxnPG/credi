@@ -1,4 +1,7 @@
+from datetime import date, datetime, time, timedelta
+
 from fastapi import HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.oficina import Oficina
@@ -162,20 +165,106 @@ def listar_seguimientos(
     pensionado_id: int | None = None,
     oficina_id: int | None = None,
     usuario_id: int | None = None,
+    tipo: str | None = None,
+    estado: str | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    fecha_rapida: str | None = None,
+    texto: str | None = None,
     solo_pendientes: bool = False,
     skip: int = 0,
     limit: int = 15,
 ) -> list[SeguimientoRead]:
-    query = (
-        db.query(Seguimiento)
-        .options(
+    query = _seguimientos_query(
+        db,
+        usuario_actual,
+        pensionado_id=pensionado_id,
+        oficina_id=oficina_id,
+        usuario_id=usuario_id,
+        tipo=tipo,
+        estado=estado,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        fecha_rapida=fecha_rapida,
+        texto=texto,
+        solo_pendientes=solo_pendientes,
+    )
+
+    seguimientos = (
+        query.options(
             joinedload(Seguimiento.pensionado),
             joinedload(Seguimiento.oficina),
             joinedload(Seguimiento.usuario),
             joinedload(Seguimiento.soluciones).joinedload(SeguimientoSolucion.usuario),
         )
-        .filter(Seguimiento.is_active == True)  # noqa: E712
+        .order_by(Seguimiento.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
     )
+    return [_to_read(item) for item in seguimientos]
+
+
+def contar_seguimientos(
+    db: Session,
+    usuario_actual: Usuario,
+    pensionado_id: int | None = None,
+    oficina_id: int | None = None,
+    usuario_id: int | None = None,
+    tipo: str | None = None,
+    estado: str | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    fecha_rapida: str | None = None,
+    texto: str | None = None,
+    solo_pendientes: bool = False,
+) -> int:
+    return _seguimientos_query(
+        db,
+        usuario_actual,
+        pensionado_id=pensionado_id,
+        oficina_id=oficina_id,
+        usuario_id=usuario_id,
+        tipo=tipo,
+        estado=estado,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        fecha_rapida=fecha_rapida,
+        texto=texto,
+        solo_pendientes=solo_pendientes,
+    ).count()
+
+
+def _parse_date(value: str | None, field_name: str) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{field_name} debe tener formato YYYY-MM-DD") from exc
+
+
+def _day_range(value: date) -> tuple[datetime, datetime]:
+    start = datetime.combine(value, time.min)
+    end = datetime.combine(value, time.max)
+    return start, end
+
+
+def _seguimientos_query(
+    db: Session,
+    usuario_actual: Usuario,
+    pensionado_id: int | None = None,
+    oficina_id: int | None = None,
+    usuario_id: int | None = None,
+    tipo: str | None = None,
+    estado: str | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    fecha_rapida: str | None = None,
+    texto: str | None = None,
+    solo_pendientes: bool = False,
+):
+    query = db.query(Seguimiento).filter(Seguimiento.is_active == True)  # noqa: E712
 
     if usuario_actual.rol != "administrador":
         query = query.filter(Seguimiento.oficina_id == usuario_actual.oficina_id)
@@ -186,11 +275,57 @@ def listar_seguimientos(
         query = query.filter(Seguimiento.pensionado_id == pensionado_id)
     if usuario_id is not None:
         query = query.filter(Seguimiento.usuario_id == usuario_id)
+    if tipo:
+        query = query.filter(Seguimiento.tipo == tipo)
+    if estado:
+        query = query.filter(Seguimiento.estado == estado)
     if solo_pendientes:
         query = query.filter(Seguimiento.estado.in_(["abierto", "pendiente", "esperando"]))
+    if fecha_rapida:
+        hoy = date.today()
+        if fecha_rapida == "vencidos":
+            query = query.filter(Seguimiento.fecha_proximo_contacto < datetime.combine(hoy, time.min))
+        elif fecha_rapida == "hoy":
+            start, end = _day_range(hoy)
+            query = query.filter(Seguimiento.fecha_proximo_contacto.between(start, end))
+        elif fecha_rapida == "manana":
+            start, end = _day_range(hoy + timedelta(days=1))
+            query = query.filter(Seguimiento.fecha_proximo_contacto.between(start, end))
+        elif fecha_rapida == "sin_programar":
+            query = query.filter(Seguimiento.fecha_proximo_contacto.is_(None))
+        else:
+            raise HTTPException(status_code=422, detail="Filtro rapido de fecha no valido")
+    else:
+        desde = _parse_date(fecha_desde, "fecha_desde")
+        hasta = _parse_date(fecha_hasta, "fecha_hasta")
+        if desde:
+            query = query.filter(Seguimiento.fecha_proximo_contacto >= datetime.combine(desde, time.min))
+        if hasta:
+            query = query.filter(Seguimiento.fecha_proximo_contacto <= datetime.combine(hasta, time.max))
 
-    seguimientos = query.order_by(Seguimiento.created_at.desc()).offset(skip).limit(limit).all()
-    return [_to_read(item) for item in seguimientos]
+    if texto:
+        term = f"%{texto.strip()}%"
+        query = (
+            query.outerjoin(Seguimiento.pensionado)
+            .outerjoin(Seguimiento.oficina)
+            .outerjoin(Seguimiento.usuario)
+            .filter(
+                or_(
+                    Seguimiento.tipo.ilike(term),
+                    Seguimiento.estado.ilike(term),
+                    Seguimiento.comentario.ilike(term),
+                    Seguimiento.resultado.ilike(term),
+                    Pensionado.nombre.ilike(term),
+                    Pensionado.segundo_nombre.ilike(term),
+                    Pensionado.apellidos.ilike(term),
+                    Pensionado.documento.ilike(term),
+                    Oficina.nombre.ilike(term),
+                    Usuario.nombre.ilike(term),
+                )
+            )
+        )
+
+    return query
 
 
 def obtener_seguimiento(

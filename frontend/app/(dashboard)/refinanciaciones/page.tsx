@@ -78,6 +78,7 @@ export default function RefinanciacionesPage() {
   const [rejecting, setRejecting] = useState<Item | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const canGoNext = page < totalPages;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,6 +149,54 @@ export default function RefinanciacionesPage() {
     setPage(normalizedPage);
     setPageInput(String(normalizedPage));
   }
+
+  const paginationControls = (
+    <div className="flex flex-col gap-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        {loading ? "Actualizando filtros..." : `Pagina ${page} de ${totalPages}. Mostrando ${items.length} de ${total} oportunidades.`}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="button-muted px-3 py-2 text-xs"
+          disabled={page === 1 || loading}
+          onClick={() => setPage((current) => Math.max(1, current - 1))}
+        >
+          Anterior
+        </button>
+        <label className="flex items-center gap-2">
+          Ir a
+          <input
+            className="input-base h-9 w-20 px-2 py-1 text-sm"
+            max={totalPages}
+            min="1"
+            type="number"
+            value={pageInput}
+            onBlur={() => goToPage(pageInput)}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (/^\d*$/.test(value)) {
+                setPageInput(value);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="button-muted px-3 py-2 text-xs"
+          disabled={!canGoNext || loading}
+          onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
 
   function updateFilter(field: keyof typeof filters, value: string) {
     resetPage();
@@ -308,51 +357,7 @@ export default function RefinanciacionesPage() {
             Limpiar
           </button>
         </div>
-        <div className="mt-3 flex flex-col gap-2 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            {loading ? "Actualizando filtros..." : `Mostrando ${items.length} de ${total} oportunidades. Pagina ${page} de ${totalPages}.`}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="button-muted px-3 py-2 text-xs"
-              disabled={page === 1 || loading}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              Anterior
-            </button>
-            <label className="flex items-center gap-2">
-              Ir a
-              <input
-                className="input-base h-9 w-20 px-2 py-1 text-sm"
-                max={totalPages}
-                min="1"
-                type="number"
-                value={pageInput}
-                onBlur={() => goToPage(pageInput)}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (/^\d*$/.test(value)) {
-                    setPageInput(value);
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              className="button-muted px-3 py-2 text-xs"
-              disabled={page >= totalPages || loading}
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
+        <div className="mt-3">{paginationControls}</div>
       </div>
 
       <div className="overflow-x-auto border-y bg-white/80">
@@ -465,6 +470,10 @@ export default function RefinanciacionesPage() {
             ) : null}
           </tbody>
         </table>
+      </div>
+
+      <div className="rounded-lg border border-stone-800/10 bg-white px-3 py-3 shadow-sm">
+        {paginationControls}
       </div>
 
       {rejecting ? (

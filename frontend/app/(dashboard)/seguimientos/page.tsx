@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { readSession } from "@/lib/session";
 
@@ -84,6 +84,9 @@ const emptyForm: FormValues = {
   fecha_proximo_contacto: "",
 };
 
+const PAGE_SIZE = 15;
+const CATALOG_LIMIT = 200;
+
 export default function SeguimientosPage() {
   const router = useRouter();
   const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
@@ -95,6 +98,9 @@ export default function SeguimientosPage() {
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [fechaRapida, setFechaRapida] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [totalSeguimientos, setTotalSeguimientos] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,18 +108,33 @@ export default function SeguimientosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState<FormValues>(emptyForm);
 
-  async function loadData() {
+  const loadData = useCallback(async function loadData() {
     setLoading(true);
     setError(null);
 
     try {
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        skip: String((page - 1) * PAGE_SIZE),
+      });
+      if (query.trim()) params.set("texto", query.trim());
+      if (tipoFilter) params.set("tipo", tipoFilter);
+      if (estadoFilter) params.set("estado", estadoFilter);
+      if (fechaRapida) {
+        params.set("fecha_rapida", fechaRapida);
+      } else {
+        if (fechaDesde) params.set("fecha_desde", fechaDesde);
+        if (fechaHasta) params.set("fecha_hasta", fechaHasta);
+      }
+
       const [seguimientosData, pensionadosData, oficinasData] = await Promise.all([
-        apiFetch<Seguimiento[]>("/api/v1/seguimientos/?limit=15"),
-        apiFetch<Pensionado[]>("/api/v1/pensionados/?limit=15"),
+        apiFetchWithMeta<Seguimiento[]>(`/api/v1/seguimientos/?${params.toString()}`),
+        apiFetch<Pensionado[]>(`/api/v1/pensionados/?solo_activos=true&limit=${CATALOG_LIMIT}`),
         apiFetch<Oficina[]>("/api/v1/oficinas/"),
       ]);
 
-      setSeguimientos(seguimientosData);
+      setSeguimientos(seguimientosData.data);
+      setTotalSeguimientos(Number(seguimientosData.headers.get("X-Total-Count") ?? seguimientosData.data.length));
       setPensionados(pensionadosData);
       setOficinas(oficinasData);
     } catch (loadError) {
@@ -125,63 +146,54 @@ export default function SeguimientosPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [estadoFilter, fechaDesde, fechaHasta, fechaRapida, page, query, tipoFilter]);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [loadData]);
 
-  const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    const today = localDateValue(new Date());
-    const tomorrow = addDaysValue(today, 1);
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
 
-    return seguimientos.filter((seguimiento) => {
-      const fechaContacto = seguimiento.fecha_proximo_contacto?.slice(0, 10) ?? "";
+  const totalPages = Math.max(1, Math.ceil(totalSeguimientos / PAGE_SIZE));
+  const canGoNext = page < totalPages;
 
-      if (tipoFilter && seguimiento.tipo !== tipoFilter) {
-        return false;
-      }
-      if (estadoFilter && seguimiento.estado !== estadoFilter) {
-        return false;
-      }
-      if (fechaDesde && (!fechaContacto || fechaContacto < fechaDesde)) {
-        return false;
-      }
-      if (fechaHasta && (!fechaContacto || fechaContacto > fechaHasta)) {
-        return false;
-      }
-      if (fechaRapida === "vencidos" && (!fechaContacto || fechaContacto >= today)) {
-        return false;
-      }
-      if (fechaRapida === "hoy" && fechaContacto !== today) {
-        return false;
-      }
-      if (fechaRapida === "manana" && fechaContacto !== tomorrow) {
-        return false;
-      }
-      if (fechaRapida === "sin_programar" && fechaContacto) {
-        return false;
-      }
-      if (!term) {
-        return true;
-      }
+  function resetPage() {
+    setPage(1);
+  }
 
-      return [
-          seguimiento.id,
-          seguimiento.tipo,
-          seguimiento.estado,
-          seguimiento.comentario,
-          seguimiento.resultado,
-          seguimiento.pensionado_nombre,
-          seguimiento.pensionado_documento,
-          seguimiento.oficina_nombre,
-          seguimiento.usuario_nombre,
-        ]
-          .filter((value) => value !== null && value !== undefined)
-          .some((value) => String(value).toLowerCase().includes(term));
-    });
-  }, [estadoFilter, fechaDesde, fechaHasta, fechaRapida, query, seguimientos, tipoFilter]);
+  function goToPage(value: string) {
+    const nextPage = Number(value);
+    if (!Number.isFinite(nextPage) || nextPage < 1) {
+      setPageInput(String(page));
+      return;
+    }
+
+    const normalizedPage = Math.min(totalPages, Math.floor(nextPage));
+    setPage(normalizedPage);
+    setPageInput(String(normalizedPage));
+  }
+
+  const paginationControls = (
+    <div className="flex flex-col gap-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        Pagina {page} de {totalPages}. Mostrando {seguimientos.length} de {totalSeguimientos} seguimientos.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="button-muted px-3 py-2 text-xs" disabled={page === 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+          Anterior
+        </button>
+        <label className="flex items-center gap-2">
+          Ir a
+          <input className="input-base h-9 w-20 px-2 py-1 text-sm" max={totalPages} min="1" type="number" value={pageInput} onBlur={() => goToPage(pageInput)} onChange={(event) => { const value = event.target.value; if (/^\d*$/.test(value)) setPageInput(value); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+        </label>
+        <button type="button" className="button-muted px-3 py-2 text-xs" disabled={!canGoNext || loading} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
 
   function clearFilters() {
     setQuery("");
@@ -190,6 +202,7 @@ export default function SeguimientosPage() {
     setFechaDesde("");
     setFechaHasta("");
     setFechaRapida("");
+    setPage(1);
   }
 
   function openCreateModal() {
@@ -291,7 +304,10 @@ export default function SeguimientosPage() {
             <input
               className="input-base min-w-0 sm:w-96"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                resetPage();
+                setQuery(event.target.value);
+              }}
               placeholder="Buscar por pensionado, documento, tipo o comentario"
             />
             <button type="button" className="button-primary whitespace-nowrap" onClick={openCreateModal}>
@@ -304,19 +320,26 @@ export default function SeguimientosPage() {
           <SelectField
             label="Tipo"
             value={tipoFilter}
-            onChange={setTipoFilter}
+            onChange={(value) => {
+              resetPage();
+              setTipoFilter(value);
+            }}
             options={seguimientoTipos}
           />
           <SelectField
             label="Estado"
             value={estadoFilter}
-            onChange={setEstadoFilter}
+            onChange={(value) => {
+              resetPage();
+              setEstadoFilter(value);
+            }}
             options={seguimientoEstados}
           />
           <SelectField
             label="Proximo contacto"
             value={fechaRapida}
             onChange={(value) => {
+              resetPage();
               setFechaRapida(value);
               if (value) {
                 setFechaDesde("");
@@ -330,6 +353,7 @@ export default function SeguimientosPage() {
             type="date"
             value={fechaDesde}
             onChange={(value) => {
+              resetPage();
               setFechaDesde(value);
               if (value) {
                 setFechaRapida("");
@@ -341,6 +365,7 @@ export default function SeguimientosPage() {
             type="date"
             value={fechaHasta}
             onChange={(value) => {
+              resetPage();
               setFechaHasta(value);
               if (value) {
                 setFechaRapida("");
@@ -353,6 +378,7 @@ export default function SeguimientosPage() {
             </button>
           </div>
         </div>
+        <div className="mt-3">{paginationControls}</div>
       </article>
 
       {loading ? <StateMessage text="Cargando seguimientos..." /> : null}
@@ -371,10 +397,7 @@ export default function SeguimientosPage() {
           </div>
 
           <div className="divide-y divide-stone-800/10">
-            <div className="px-3 py-2 text-xs font-medium text-stone-500">
-              Mostrando {filtered.length} de {seguimientos.length} seguimientos
-            </div>
-            {filtered.map((seguimiento) => (
+            {seguimientos.map((seguimiento) => (
               <div
                 key={seguimiento.id}
                 role="link"
@@ -425,11 +448,14 @@ export default function SeguimientosPage() {
               </div>
             ))}
 
-            {filtered.length === 0 ? (
+            {seguimientos.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-stone-500">
                 No hay seguimientos para la busqueda actual.
               </div>
             ) : null}
+          </div>
+          <div className="border-t border-stone-800/10 px-3 py-3">
+            {paginationControls}
           </div>
         </div>
       ) : null}
@@ -825,17 +851,6 @@ function UserIcon() {
 function nullableText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function localDateValue(date: Date) {
-  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return offsetDate.toISOString().slice(0, 10);
-}
-
-function addDaysValue(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00`);
-  date.setDate(date.getDate() + days);
-  return localDateValue(date);
 }
 
 function isBusinessTime(value: string) {

@@ -47,6 +47,7 @@ export default function CooperativasPage() {
   const isAdmin = readSession()?.rol === "administrador";
   const [items, setItems] = useState<Cooperativa[]>([]);
   const [query, setQuery] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<"activas" | "inactivas" | "todas">("activas");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,13 +60,13 @@ export default function CooperativasPage() {
     setLoading(true);
     setError(null);
     try {
-      setItems(await apiFetch<Cooperativa[]>(`/api/v1/cooperativas/?solo_activas=${isAdmin ? "false" : "true"}`));
+      setItems(await apiFetch<Cooperativa[]>("/api/v1/cooperativas/?solo_activas=false"));
     } catch (loadError) {
       setError(loadError instanceof ApiError ? loadError.message : "No se pudo cargar cooperativas");
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     void loadItems();
@@ -73,13 +74,15 @@ export default function CooperativasPage() {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((item) =>
-      [item.nombre, item.is_active ? "activo" : "inactivo"].some((value) =>
+    return items.filter((item) => {
+      if (estadoFilter === "activas" && !item.is_active) return false;
+      if (estadoFilter === "inactivas" && item.is_active) return false;
+      if (!term) return true;
+      return [item.nombre, item.is_active ? "activo" : "inactivo"].some((value) =>
         value.toLowerCase().includes(term),
-      ),
-    );
-  }, [items, query]);
+      );
+    });
+  }, [estadoFilter, items, query]);
 
   function openCreate() {
     setSelected(null);
@@ -181,6 +184,11 @@ export default function CooperativasPage() {
           </div>
           <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:items-center">
             <input className="input-base min-w-0 sm:w-80" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nombre o estado" />
+            <select className="input-base sm:w-44" value={estadoFilter} onChange={(event) => setEstadoFilter(event.target.value as "activas" | "inactivas" | "todas")}>
+              <option value="activas">Activas</option>
+              <option value="inactivas">Inactivas</option>
+              <option value="todas">Todas</option>
+            </select>
             {isAdmin ? <button type="button" className="button-primary whitespace-nowrap" onClick={openCreate}>Crear cooperativa</button> : null}
           </div>
         </div>

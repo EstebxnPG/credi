@@ -37,6 +37,7 @@ const estados = ["", "pendiente", "en_progreso", "pospuesta", "resuelta", "desca
 export default function NotificationsPage() {
   const [data, setData] = useState<Page>({ items: [], total: 0, page: 1, page_size: 25, unread: 0 });
   const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const [state, setState] = useState("");
   const [kind, setKind] = useState("");
   const [priority, setPriority] = useState("");
@@ -62,6 +63,45 @@ export default function NotificationsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
+
+  const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
+  const canGoNext = page < totalPages;
+
+  function goToPage(value: string) {
+    const nextPage = Number(value);
+    if (!Number.isFinite(nextPage) || nextPage < 1) {
+      setPageInput(String(page));
+      return;
+    }
+
+    const normalizedPage = Math.min(totalPages, Math.floor(nextPage));
+    setPage(normalizedPage);
+    setPageInput(String(normalizedPage));
+  }
+
+  const paginationControls = (
+    <div className="flex flex-col gap-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+      <p>
+        Pagina {page} de {totalPages}. Mostrando {data.items.length} de {data.total} notificaciones.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="button-muted px-3 py-2 text-xs" disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+          Anterior
+        </button>
+        <label className="flex items-center gap-2">
+          Ir a
+          <input className="input-base h-9 w-20 px-2 py-1 text-sm" max={totalPages} min="1" type="number" value={pageInput} onBlur={() => goToPage(pageInput)} onChange={(event) => { const value = event.target.value; if (/^\d*$/.test(value)) setPageInput(value); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
+        </label>
+        <button className="button-muted px-3 py-2 text-xs" disabled={!canGoNext} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
 
   async function action(item: Item, next: Estado) {
     let justificacion: string | undefined;
@@ -184,6 +224,10 @@ export default function NotificationsPage() {
         </button>
       </div>
 
+      <div className="rounded-lg border border-stone-800/10 bg-white px-3 py-3 shadow-sm">
+        {paginationControls}
+      </div>
+
       <div className="divide-y border-y bg-white/80">
         {data.items.map((item) => (
           <article key={item.id} className={item.leida ? "p-4 text-stone-500" : "p-4 text-stone-950"}>
@@ -208,17 +252,8 @@ export default function NotificationsPage() {
         ) : null}
       </div>
 
-      <div className="flex justify-between">
-        <button className="button-muted" disabled={page === 1} onClick={() => setPage((current) => current - 1)}>
-          Anterior
-        </button>
-        <button
-          className="button-muted"
-          disabled={page * data.page_size >= data.total}
-          onClick={() => setPage((current) => current + 1)}
-        >
-          Siguiente
-        </button>
+      <div className="rounded-lg border border-stone-800/10 bg-white px-3 py-3 shadow-sm">
+        {paginationControls}
       </div>
     </section>
   );
