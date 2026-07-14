@@ -671,9 +671,12 @@ export default function CreditoDetailPage() {
             {canRefinance ? (
               <Link
                 href={`/creditos?refinanciar=${credito.id}`}
-                className="button-primary whitespace-nowrap text-center"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-700/30 bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-900/20 transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
               >
-                Refinanciar
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-xs">
+                  $
+                </span>
+                Refinanciar ahora
               </Link>
             ) : refinanceOpportunity ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">

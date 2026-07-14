@@ -464,25 +464,67 @@ export default function CreditosPage() {
   useEffect(() => {
     const sourceId = Number(searchParams.get("refinanciar"));
     if (loading || !sourceId || refinanceOpened.current) return;
-    const source = creditos.find(
-      (item) => item.id === sourceId && isCreditoRefinanciable(item),
-    );
-    if (!source) return;
-    refinanceOpened.current = true;
-    setSelected(null);
-    setForm({
-      ...emptyForm,
-      pensionado_id: String(source.pensionado_id),
-      asesor_id: String(source.asesor_id),
-      oficina_id: String(source.oficina_id),
-      cooperativa_id: String(source.cooperativa_id),
-      pagaduria_id: String(source.pagaduria_id),
-      tipo_credito: "REFINANCIACION",
-      credito_refinanciado_id: String(source.id),
-      observaciones: `Refinanciación del crédito #${source.id}`,
-    });
-    setFormError(null);
-    setModalMode("create");
+
+    let ignore = false;
+
+    async function openRefinanceShortcut() {
+      try {
+        const source =
+          creditos.find((item) => item.id === sourceId) ??
+          (await apiFetch<Credito>(`/api/v1/creditos/${sourceId}`));
+
+        if (ignore || !isCreditoRefinanciable(source)) {
+          return;
+        }
+
+        refinanceOpened.current = true;
+        setCreditos((current) =>
+          current.some((item) => item.id === source.id) ? current : [source, ...current],
+        );
+        setPensionados((current) => {
+          if (current.some((item) => item.id === source.pensionado_id)) {
+            return current;
+          }
+
+          return [
+            {
+              id: source.pensionado_id,
+              nombre_completo: source.pensionado_nombre ?? `Pensionado #${source.pensionado_id}`,
+              documento: source.pensionado_documento ?? "Sin documento",
+            },
+            ...current,
+          ];
+        });
+        setSelected(null);
+        setForm({
+          ...emptyForm,
+          pensionado_id: String(source.pensionado_id),
+          asesor_id: String(source.asesor_id),
+          oficina_id: String(source.oficina_id),
+          cooperativa_id: String(source.cooperativa_id),
+          pagaduria_id: String(source.pagaduria_id),
+          tipo_credito: "REFINANCIACION",
+          credito_refinanciado_id: String(source.id),
+          observaciones: `Refinanciación del crédito #${source.id}`,
+        });
+        setFormError(null);
+        setModalMode("create");
+      } catch (shortcutError) {
+        if (!ignore) {
+          setError(
+            shortcutError instanceof ApiError
+              ? shortcutError.message
+              : "No se pudo preparar la refinanciacion",
+          );
+        }
+      }
+    }
+
+    void openRefinanceShortcut();
+
+    return () => {
+      ignore = true;
+    };
   }, [creditos, loading, searchParams]);
 
   function openEditModal(credito: Credito) {
