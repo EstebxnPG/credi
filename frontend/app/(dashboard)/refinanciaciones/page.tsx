@@ -364,7 +364,7 @@ export default function RefinanciacionesPage() {
         <table className="min-w-full text-left text-sm">
           <thead className="border-b bg-stone-50 text-xs uppercase text-stone-500">
             <tr>
-              {["Credito", "Pensionado", "Cooperativa", "Tentativa para refi", "Estado", "Gestion"].map(
+              {["Credito base", "Pensionado", "Cooperativa", "Tentativa para refi", "Estado", "Gestion"].map(
                 (header) => (
                   <th key={header} className="px-4 py-3">
                     {header}
@@ -376,7 +376,26 @@ export default function RefinanciacionesPage() {
           <tbody className="divide-y">
             {items.map((item) => (
               <tr key={item.credito_id}>
-                <td className="px-4 py-3 font-semibold">#{item.credito_id}</td>
+                <td className="px-4 py-3">
+                  <Link
+                    className="font-semibold text-teal-800 hover:underline"
+                    href={`/creditos/${item.credito_id}`}
+                  >
+                    #{item.credito_id}
+                  </Link>
+                  {item.credito_nuevo_id ? (
+                    <p className="mt-1 text-xs text-stone-500">
+                      Nuevo:{" "}
+                      <Link
+                        className="font-semibold text-teal-700 hover:underline"
+                        href={`/creditos/${item.credito_nuevo_id}`}
+                      >
+                        #{item.credito_nuevo_id}
+                      </Link>
+                    </p>
+                  ) : null   
+                  }
+                </td>
                 <td className="px-4 py-3">
                   <Link
                     className="font-semibold text-teal-800 hover:underline"
