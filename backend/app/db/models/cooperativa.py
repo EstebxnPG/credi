@@ -30,6 +30,8 @@ class CooperativaRefinanciacionRegla(Base):
     cooperativa_id: Mapped[int] = mapped_column(ForeignKey("cooperativas.id"), nullable=False)
     plazo_minimo: Mapped[int] = mapped_column(Integer, nullable=False)
     plazo_maximo: Mapped[int] = mapped_column(Integer, nullable=False)
-    meses_para_refinanciar: Mapped[int] = mapped_column(Integer, nullable=False)
+    tipo_liberacion: Mapped[str] = mapped_column(String(20), nullable=False, default="meses")
+    meses_para_refinanciar: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    porcentaje_credito: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
 
     cooperativa: Mapped["Cooperativa"] = relationship(back_populates="reglas_refinanciacion")

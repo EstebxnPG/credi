@@ -7,10 +7,17 @@ from app.schemas.cooperativa import CooperativaCreate, CooperativaUpdate
 
 def _regla_model_payload(regla) -> dict:
     payload = regla if isinstance(regla, dict) else regla.model_dump()
+    tipo_liberacion = payload.get("tipo_liberacion") or "meses"
     return {
         "plazo_minimo": payload["plazo_minimo"],
         "plazo_maximo": payload["plazo_maximo"],
-        "meses_para_refinanciar": payload.get("meses_para_refinanciar") or 1,
+        "tipo_liberacion": tipo_liberacion,
+        "meses_para_refinanciar": payload.get("meses_para_refinanciar")
+        if tipo_liberacion == "meses"
+        else None,
+        "porcentaje_credito": payload.get("porcentaje_credito")
+        if tipo_liberacion == "porcentaje"
+        else None,
     }
 
 

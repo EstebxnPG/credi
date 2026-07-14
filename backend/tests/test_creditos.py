@@ -96,6 +96,18 @@ class CreditosTests(unittest.TestCase):
                 fecha_fin_estimada=date(2026, 1, 1),
             )
 
+    def test_finalizar_exige_motivo_finalizacion(self):
+        with self.assertRaises(ValueError):
+            CreditoCambioEstado(estado_nuevo="Finalizado")
+
+    def test_finalizar_normaliza_motivo_finalizacion(self):
+        data = CreditoCambioEstado(
+            estado_nuevo="Finalizado",
+            motivo_finalizacion=" refinanciado ",
+        )
+
+        self.assertEqual(data.motivo_finalizacion, "REFINANCIADO")
+
     def test_aprobar_exige_fecha_fin_exacta_segun_plazo(self):
         from app.services.credito_service import _validar_fecha_fin_por_plazo
 

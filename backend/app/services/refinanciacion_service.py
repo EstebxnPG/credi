@@ -188,10 +188,15 @@ def _criterio_refinanciacion(
 
 
 def validar_credito_refinanciable(db: Session, credito: Credito) -> None:
-    if credito.estado not in {"Aprobado", "Finalizado"} or not credito.is_active:
+    if credito.estado != "Aprobado" or not credito.is_active:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Solo los creditos aprobados y activos pueden refinanciarse",
+        )
+    if getattr(credito, "motivo_finalizacion", None) == "REFINANCIADO":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Un credito finalizado por refinanciacion no puede refinanciarse de nuevo",
         )
     if not credito.cooperativa or not credito.cooperativa.is_active:
         raise HTTPException(
@@ -237,7 +242,7 @@ def listar_creditos_elegibles(
             selectinload(Credito.cooperativa).selectinload(Cooperativa.reglas_refinanciacion),
         )
         .filter(
-            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Credito.estado == "Aprobado",
             Credito.is_active == True,  # noqa: E712
         )
         .order_by(Credito.fecha_desembolso.asc())
@@ -358,7 +363,7 @@ def obtener_credito_elegible(
         )
         .filter(
             Credito.id == credito_id,
-            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Credito.estado == "Aprobado",
             Credito.is_active == True,  # noqa: E712
         )
     )
@@ -531,7 +536,7 @@ def listar_creditos_elegibles_paginados(
             .selectinload(Cooperativa.reglas_refinanciacion),
         )
         .filter(
-            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Credito.estado == "Aprobado",
             Credito.is_active == True,  # noqa: E712
             Cooperativa.is_active == True,  # noqa: E712
         )

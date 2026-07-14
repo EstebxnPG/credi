@@ -19,6 +19,14 @@ TIPOS_CREDITO_VALIDOS = {
     "COMPRA CARTERA",
 }
 
+MOTIVOS_FINALIZACION_VALIDOS = {
+    "PAGO_NORMAL",
+    "REFINANCIADO",
+    "AJUSTE_MIGRACION",
+    "ANULADO",
+    "OTRO",
+}
+
 
 def normalizar_tipo_credito(value: str | None) -> str | None:
     if value is None:
@@ -179,6 +187,7 @@ class CreditoCambioEstado(BaseModel):
     """
     estado_nuevo: str
     observaciones: Optional[str] = None
+    motivo_finalizacion: Optional[str] = None
 
     # Campos solo relevantes al aprobar
     monto_aprobado: Optional[float] = None
@@ -206,6 +215,15 @@ class CreditoCambioEstado(BaseModel):
                 raise ValueError("fecha_fin_estimada es obligatoria cuando el estado es Aprobado")
             if self.fecha_fin_estimada <= self.fecha_desembolso:
                 raise ValueError("fecha_fin_estimada debe ser posterior a fecha_desembolso")
+        if self.estado_nuevo == "Finalizado":
+            if not self.motivo_finalizacion:
+                raise ValueError("motivo_finalizacion es obligatorio cuando el estado es Finalizado")
+            self.motivo_finalizacion = self.motivo_finalizacion.strip().upper()
+            if self.motivo_finalizacion not in MOTIVOS_FINALIZACION_VALIDOS:
+                raise ValueError(
+                    "motivo_finalizacion debe ser PAGO_NORMAL, REFINANCIADO, "
+                    "AJUSTE_MIGRACION, ANULADO u OTRO"
+                )
         if self.monto_aprobado is not None and self.monto_aprobado <= 0:
             raise ValueError("monto_aprobado debe ser mayor a 0")
         return self
@@ -231,6 +249,7 @@ class CreditoRead(BaseModel):
     monto_aprobado: Optional[float]
     plazo: int
     estado: str
+    motivo_finalizacion: Optional[str]
     valor_cuota: Optional[float]
     fecha_desembolso: Optional[date]
     fecha_fin_estimada: Optional[date]

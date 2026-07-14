@@ -100,15 +100,13 @@ function LoginContent() {
             El frente comercial del crédito ya tiene forma.
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-8 text-stone-600">
-            Inicia sesión para entrar al panel, navegar por los módulos del
-            negocio y empezar a conectar la operación real del sistema sin perder
-            tiempo en estructura.
+            Ingresa con tu usuario y contraseña para acceder al panel, gestionar tus créditos y administrar tu operación de manera sencilla.
           </p>
 
           <div className="mt-10 grid gap-4 md:grid-cols-2">
             <article className="card-panel p-5">
               <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                Ya visible
+                Plataforma lista
               </p>
               <p className="mt-3 text-2xl font-semibold text-stone-900">
                 Login, shell, dashboard y créditos conectados
@@ -116,10 +114,10 @@ function LoginContent() {
             </article>
             <article className="card-panel p-5">
               <p className="text-xs uppercase tracking-[0.28em] text-stone-500">
-                Siguiente foco
+                Plataforma lista
               </p>
               <p className="mt-3 text-2xl font-semibold text-stone-900">
-                Formularios y documentos reales
+                Tu sistema está listo para operar.
               </p>
             </article>
           </div>

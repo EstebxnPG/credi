@@ -22,6 +22,7 @@ class Credito(Base, TimestampMixin, SoftDeleteMixin):
     monto_aprobado: Mapped[float | None] = mapped_column(Numeric(12, 2))
     plazo: Mapped[int] = mapped_column(Integer, nullable=False)
     estado: Mapped[str] = mapped_column(String(30), nullable=False, default="Prospecto")
+    motivo_finalizacion: Mapped[str | None] = mapped_column(String(50))
     valor_cuota: Mapped[float | None] = mapped_column(Numeric(12, 2))
     fecha_desembolso: Mapped[date | None] = mapped_column(Date)
     fecha_fin_estimada: Mapped[date | None] = mapped_column(Date)

@@ -32,6 +32,7 @@ type Credito = {
   monto_aprobado: number | null;
   plazo: number;
   estado: string;
+  motivo_finalizacion: string | null;
   valor_cuota: number | null;
   fecha_desembolso: string | null;
   fecha_fin_estimada: string | null;
@@ -140,6 +141,7 @@ type EstadoForm = {
   valor_cuota: string;
   fecha_desembolso: string;
   fecha_fin_estimada: string;
+  motivo_finalizacion: string;
 };
 
 type ObservacionesForm = {
@@ -158,6 +160,7 @@ const emptyEstadoForm: EstadoForm = {
   valor_cuota: "",
   fecha_desembolso: "",
   fecha_fin_estimada: "",
+  motivo_finalizacion: "",
 };
 
 const transitionsByStatus: Record<string, string[]> = {
@@ -528,6 +531,10 @@ export default function CreditoDetailPage() {
           valor_cuota: parseNullableMoneyInput(estadoForm.valor_cuota),
           fecha_desembolso: nullableText(estadoForm.fecha_desembolso),
           fecha_fin_estimada: nullableText(estadoForm.fecha_fin_estimada),
+          motivo_finalizacion:
+            estadoForm.estado_nuevo === "Finalizado"
+              ? estadoForm.motivo_finalizacion
+              : null,
         }),
       });
       const historialData = await apiFetch<HistorialCredito[]>(
@@ -748,6 +755,8 @@ export default function CreditoDetailPage() {
                         value === "Aprobado" && current.fecha_desembolso
                           ? addMonthsToIsoDate(current.fecha_desembolso, credito.plazo)
                           : current.fecha_fin_estimada,
+                      motivo_finalizacion:
+                        value === "Finalizado" ? current.motivo_finalizacion : "",
                     }))
                   }
                   options={availableTransitions.map((estado) => ({ value: estado, label: estado }))}
@@ -795,6 +804,24 @@ export default function CreditoDetailPage() {
                 </div>
               ) : null}
 
+              {estadoForm.estado_nuevo === "Finalizado" ? (
+                <SelectField
+                  label="Motivo de finalizacion"
+                  value={estadoForm.motivo_finalizacion}
+                  onChange={(value) =>
+                    setEstadoForm((current) => ({ ...current, motivo_finalizacion: value }))
+                  }
+                  options={[
+                    { value: "PAGO_NORMAL", label: "Pago normal" },
+                    { value: "REFINANCIADO", label: "Refinanciado" },
+                    { value: "AJUSTE_MIGRACION", label: "Ajuste migracion" },
+                    { value: "ANULADO", label: "Anulado" },
+                    { value: "OTRO", label: "Otro" },
+                  ]}
+                  required
+                />
+              ) : null}
+
               <TextareaField
                 label="Observación del cambio de estado"
                 value={estadoForm.observaciones}
@@ -830,6 +857,12 @@ export default function CreditoDetailPage() {
             <Detail label="Cooperativa" value={cooperativaActual?.nombre ?? "Sin cooperativa"} />
             {cooperativaActual?.simulador_url ? <a href={cooperativaActual.simulador_url} target="_blank" rel="noopener noreferrer" className="self-end pb-3 text-sm font-semibold text-teal-700 hover:underline">Abrir simuladora ↗</a> : null}
             <Detail label="Tipo" value={credito.tipo_credito ?? "Sin tipo"} />
+            {credito.estado === "Finalizado" ? (
+              <Detail
+                label="Motivo finalizacion"
+                value={formatFinalizationReason(credito.motivo_finalizacion)}
+              />
+            ) : null}
             {credito.tipo_credito === "REFINANCIACION" ? (
               <Detail
                 label="Credito refinanciado"
@@ -1463,6 +1496,18 @@ function isReadyToRefinance(opportunity: Opportunity | null) {
     opportunity?.estado_refinanciacion === "Listo" &&
     !["rechazado", "convertido"].includes(opportunity.estado_comercial)
   );
+}
+
+function formatFinalizationReason(value: string | null) {
+  const labels: Record<string, string> = {
+    PAGO_NORMAL: "Pago normal",
+    REFINANCIADO: "Refinanciado",
+    AJUSTE_MIGRACION: "Ajuste migracion",
+    ANULADO: "Anulado",
+    OTRO: "Otro",
+  };
+
+  return value ? labels[value] ?? value : "Sin motivo registrado";
 }
 
 function addMonthsToIsoDate(value: string, months: number) {

@@ -47,6 +47,21 @@ class RefinanciacionesTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             validar_credito_refinanciable(db, credito)
 
+    def test_credito_finalizado_no_es_refinanciable(self):
+        db = MagicMock()
+        credito = SimpleNamespace(
+            id=1,
+            estado="Finalizado",
+            motivo_finalizacion="REFINANCIADO",
+            is_active=True,
+            plazo=12,
+            fecha_desembolso=date(2025, 1, 1),
+            cooperativa=SimpleNamespace(is_active=True, reglas_refinanciacion=[]),
+        )
+
+        with self.assertRaises(HTTPException):
+            validar_credito_refinanciable(db, credito)
+
     def test_credito_no_refinanciable_antes_de_porcentaje_requerido(self):
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None

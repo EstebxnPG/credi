@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatMoneyInput, parseMoneyInput } from "@/lib/format";
 import { readSession } from "@/lib/session";
 
 type Cooperativa = {
@@ -235,8 +235,8 @@ export default function CooperativasPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <NumberField label="Edad minima" value={form.edad_minima} onChange={(value) => setForm({ ...form, edad_minima: value })} />
             <NumberField label="Edad maxima" value={form.edad_maxima} onChange={(value) => setForm({ ...form, edad_maxima: value })} />
-            <NumberField label="Monto minimo" value={form.monto_minimo} onChange={(value) => setForm({ ...form, monto_minimo: value })} />
-            <NumberField label="Monto maximo" value={form.monto_maximo} onChange={(value) => setForm({ ...form, monto_maximo: value })} />
+            <MoneyField label="Monto minimo" value={form.monto_minimo} onChange={(value) => setForm({ ...form, monto_minimo: value })} />
+            <MoneyField label="Monto maximo" value={form.monto_maximo} onChange={(value) => setForm({ ...form, monto_maximo: value })} />
             <NumberField label="Plazo minimo" value={form.plazo_minimo} onChange={(value) => setForm({ ...form, plazo_minimo: value })} />
             <NumberField label="Plazo maximo" value={form.plazo_maximo} onChange={(value) => setForm({ ...form, plazo_maximo: value })} />
           </div>
@@ -339,6 +339,31 @@ function NumberField({ label, value, onChange, step = "1" }: { label: string; va
           if (nextValue !== "") onChange(Number(nextValue));
         }}
         onWheel={(event) => event.currentTarget.blur()}
+        required
+      />
+    </label>
+  );
+}
+
+function MoneyField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  const [displayValue, setDisplayValue] = useState(formatMoneyInput(String(value)));
+
+  useEffect(() => {
+    setDisplayValue(formatMoneyInput(String(value)));
+  }, [value]);
+
+  return (
+    <label className="block text-sm font-medium text-stone-700">
+      <span>{label}</span>
+      <input
+        className="input-base mt-2"
+        inputMode="numeric"
+        value={displayValue}
+        onChange={(event) => {
+          const nextValue = formatMoneyInput(event.target.value);
+          setDisplayValue(nextValue);
+          onChange(parseMoneyInput(nextValue));
+        }}
         required
       />
     </label>

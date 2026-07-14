@@ -188,6 +188,7 @@ def _sincronizar_creditos_finalizados(
 
     for credito in query.all():
         credito.estado = "Finalizado"
+        credito.motivo_finalizacion = "PAGO_NORMAL"
         if usuario_id is not None:
             _registrar_historial(
                 db=db,
@@ -319,7 +320,7 @@ def _validar_tipo_credito(
         .filter(
             Credito.id == credito_refinanciado_id,
             Credito.pensionado_id == pensionado_id,
-            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Credito.estado == "Aprobado",
             Credito.is_active == True,  # noqa: E712
         )
         .first()
@@ -327,7 +328,7 @@ def _validar_tipo_credito(
     if not credito_anterior:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El credito refinanciado debe ser aprobado y pertenecer al mismo pensionado",
+            detail="El credito refinanciado debe estar aprobado y pertenecer al mismo pensionado",
         )
 
     from app.services.refinanciacion_service import validar_credito_refinanciable
@@ -439,6 +440,19 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
     db.flush()
 
     if credito.tipo_credito == "REFINANCIACION" and credito.credito_refinanciado_id:
+        credito_anterior = db.query(Credito).filter(Credito.id == credito.credito_refinanciado_id).first()
+        if credito_anterior:
+            estado_anterior = credito_anterior.estado
+            credito_anterior.estado = "Finalizado"
+            credito_anterior.motivo_finalizacion = "REFINANCIADO"
+            _registrar_historial(
+                db=db,
+                credito_id=credito_anterior.id,
+                usuario_id=usuario_actual.id,
+                estado_anterior=estado_anterior,
+                estado_nuevo="Finalizado",
+                observacion=f"Finalizado por refinanciacion con credito #{credito.id}",
+            )
         oportunidad = db.query(OportunidadRefinanciacion).filter(
             OportunidadRefinanciacion.credito_id == credito.credito_refinanciado_id
         ).first()
@@ -662,7 +676,7 @@ def _filtrar_por_refinanciacion(query_db: Session, query, refinanciacion: str | 
         )
         .outerjoin(aprobacion_subquery, aprobacion_subquery.c.credito_id == Credito.id)
         .filter(
-            Credito.estado.in_(["Aprobado", "Finalizado"]),
+            Credito.estado == "Aprobado",
             Cooperativa.is_active == True,  # noqa: E712
             OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado"]),
         )
@@ -941,6 +955,9 @@ def cambiar_estado(
         credito.valor_cuota = data.valor_cuota
         credito.fecha_desembolso = data.fecha_desembolso
         credito.fecha_fin_estimada = data.fecha_fin_estimada
+        credito.motivo_finalizacion = None
+    if estado_nuevo == "Finalizado":
+        credito.motivo_finalizacion = data.motivo_finalizacion
 
     _registrar_historial(
         db=db,
@@ -960,6 +977,7 @@ def cambiar_estado(
         valores_antes={"estado": estado_actual},
         valores_despues={
             "estado": estado_nuevo,
+            "motivo_finalizacion": data.motivo_finalizacion,
             "monto_aprobado": data.monto_aprobado,
             "valor_cuota": data.valor_cuota,
             "fecha_desembolso": data.fecha_desembolso,

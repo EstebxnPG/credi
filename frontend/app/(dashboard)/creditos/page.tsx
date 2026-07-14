@@ -32,6 +32,7 @@ type Credito = {
   monto_aprobado: number | null;
   plazo: number;
   estado: string;
+  motivo_finalizacion: string | null;
   valor_cuota: number | null;
   fecha_desembolso: string | null;
   fecha_fin_estimada: string | null;
@@ -1606,7 +1607,7 @@ function isCreditoEditable(credito: Credito) {
 }
 
 function isCreditoRefinanciable(credito: Credito) {
-  return ["aprobado", "finalizado"].includes(normalizeText(credito.estado));
+  return normalizeText(credito.estado) === "aprobado";
 }
 
 function normalizeText(value: string) {
