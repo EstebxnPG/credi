@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.models.cooperativa import Cooperativa
 from app.db.models.credito import Credito
 from app.db.models.documento import Documento
+from app.db.models.notificacion import Notificacion
 from app.db.models.oficina import Oficina
 from app.db.models.pendiente_credito import PendienteCredito
 from app.db.models.pensionado import Pensionado
@@ -20,6 +21,8 @@ ESTADOS_ACTIVOS = {
     "Reenviado",
     "Aprobado",
 }
+ESTADOS_APROBACION_EXITOSA = {"Aprobado", "Finalizado"}
+ESTADOS_APROBACION_DECIDIDA = {"Aprobado", "Finalizado", "Rechazado"}
 
 
 def _base_creditos_query(db: Session, usuario_actual: Usuario):
@@ -42,20 +45,178 @@ def _esta_en_proximos_30_dias(fecha_nacimiento: date | None, hoy: date) -> bool:
     return hoy <= cumple_este_anio <= fin
 
 
+def _resumen_oficinas_dashboard(db: Session, usuario_actual: Usuario, inicio_mes: datetime) -> list[dict]:
+    oficinas_query = db.query(Oficina)
+    if usuario_actual.rol != "administrador":
+        oficinas_query = oficinas_query.filter(Oficina.id == usuario_actual.oficina_id)
+
+    oficinas = oficinas_query.order_by(Oficina.nombre).all()
+    oficina_ids = [oficina.id for oficina in oficinas]
+    if not oficina_ids:
+        return []
+
+    creditos_rows = (
+        db.query(
+            Credito.oficina_id,
+            func.count(Credito.id).label("creditos_total"),
+            func.sum(case((Credito.fecha_registro >= inicio_mes, 1), else_=0)).label("creditos_mes"),
+            func.sum(case((Credito.estado.in_(ESTADOS_APROBACION_EXITOSA), 1), else_=0)).label("aprobados_total"),
+            func.sum(case((Credito.estado == "Rechazado", 1), else_=0)).label("rechazados_total"),
+            func.sum(
+                case(
+                    (
+                        (Credito.estado.in_(ESTADOS_APROBACION_EXITOSA))
+                        & (Credito.fecha_registro >= inicio_mes),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("aprobados_mes"),
+            func.coalesce(func.sum(Credito.monto_solicitado), 0).label("monto_solicitado"),
+            func.coalesce(func.sum(Credito.monto_aprobado), 0).label("monto_aprobado"),
+            func.sum(
+                case(
+                    (
+                        (Credito.tiene_documentos_pendientes == True)  # noqa: E712
+                        | Credito.estado.ilike("%devuelto%"),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("creditos_friccion"),
+        )
+        .filter(Credito.is_active == True, Credito.oficina_id.in_(oficina_ids))  # noqa: E712
+        .group_by(Credito.oficina_id)
+        .all()
+    )
+    creditos_por_oficina = {row.oficina_id: row for row in creditos_rows}
+
+    seguimientos_vencidos = dict(
+        db.query(Seguimiento.oficina_id, func.count(Seguimiento.id))
+        .filter(
+            Seguimiento.is_active == True,  # noqa: E712
+            Seguimiento.oficina_id.in_(oficina_ids),
+            Seguimiento.estado.in_(["abierto", "pendiente"]),
+            Seguimiento.fecha_proximo_contacto.isnot(None),
+            Seguimiento.fecha_proximo_contacto < datetime.now(),
+        )
+        .group_by(Seguimiento.oficina_id)
+        .all()
+    )
+    refinanciaciones_listas = dict(
+        db.query(OportunidadRefinanciacion.oficina_id, func.count(OportunidadRefinanciacion.id))
+        .filter(
+            OportunidadRefinanciacion.oficina_id.in_(oficina_ids),
+            OportunidadRefinanciacion.estado.in_(["disponible", "contactado", "aceptado"]),
+        )
+        .group_by(OportunidadRefinanciacion.oficina_id)
+        .all()
+    )
+    alertas_pendientes = dict(
+        db.query(Notificacion.oficina_id, func.count(Notificacion.id))
+        .filter(
+            Notificacion.oficina_id.in_(oficina_ids),
+            Notificacion.estado == "pendiente",
+        )
+        .group_by(Notificacion.oficina_id)
+        .all()
+    )
+    cumple_key_hoy = datetime.now().month * 100 + datetime.now().day
+    cumple_key = (
+        func.extract("month", Pensionado.fecha_nacimiento) * 100
+        + func.extract("day", Pensionado.fecha_nacimiento)
+    )
+    cumpleanos_hoy = dict(
+        db.query(Pensionado.oficina_id, func.count(Pensionado.id))
+        .filter(
+            Pensionado.is_active == True,  # noqa: E712
+            Pensionado.oficina_id.in_(oficina_ids),
+            Pensionado.fecha_nacimiento.isnot(None),
+            cumple_key == cumple_key_hoy,
+        )
+        .group_by(Pensionado.oficina_id)
+        .all()
+    )
+
+    resumen = []
+    for oficina in oficinas:
+        row = creditos_por_oficina.get(oficina.id)
+        creditos_total = row.creditos_total if row else 0
+        aprobados_total = (row.aprobados_total or 0) if row else 0
+        rechazados_total = (row.rechazados_total or 0) if row else 0
+        decisiones_total = aprobados_total + rechazados_total
+        tasa_aprobacion = (aprobados_total / decisiones_total * 100) if decisiones_total else 0
+        resumen.append(
+            {
+                "id": oficina.id,
+                "nombre": oficina.nombre,
+                "direccion": oficina.direccion,
+                "color": oficina.color,
+                "is_active": oficina.is_active,
+                "creditos_total": creditos_total,
+                "creditos_mes": (row.creditos_mes or 0) if row else 0,
+                "aprobados_mes": (row.aprobados_mes or 0) if row else 0,
+                "tasa_aprobacion": round(tasa_aprobacion, 2),
+                "monto_solicitado": float(row.monto_solicitado if row else 0),
+                "monto_aprobado": float(row.monto_aprobado if row else 0),
+                "creditos_friccion": (row.creditos_friccion or 0) if row else 0,
+                "seguimientos_vencidos": seguimientos_vencidos.get(oficina.id, 0),
+                "refinanciaciones_listas": refinanciaciones_listas.get(oficina.id, 0),
+                "alertas_pendientes": alertas_pendientes.get(oficina.id, 0),
+                "cumpleanos_hoy": cumpleanos_hoy.get(oficina.id, 0),
+            }
+        )
+    return resumen
+
+
+def _cumpleanos_hoy_dashboard(db: Session, usuario_actual: Usuario, hoy: date) -> list[dict]:
+    cumple_key_hoy = hoy.month * 100 + hoy.day
+    cumple_key = (
+        func.extract("month", Pensionado.fecha_nacimiento) * 100
+        + func.extract("day", Pensionado.fecha_nacimiento)
+    )
+    query = (
+        db.query(Pensionado)
+        .filter(
+            Pensionado.is_active == True,  # noqa: E712
+            Pensionado.fecha_nacimiento.isnot(None),
+            cumple_key == cumple_key_hoy,
+        )
+        .order_by(Pensionado.nombre, Pensionado.apellidos, Pensionado.id)
+    )
+    if usuario_actual.rol != "administrador":
+        query = query.filter(Pensionado.oficina_id == usuario_actual.oficina_id)
+
+    return [
+        {
+            "id": pensionado.id,
+            "nombre": pensionado.nombre_completo,
+            "documento": pensionado.documento,
+            "oficina_id": pensionado.oficina_id,
+            "fecha_nacimiento": pensionado.fecha_nacimiento.isoformat()
+            if pensionado.fecha_nacimiento
+            else None,
+        }
+        for pensionado in query.limit(12).all()
+    ]
+
+
 def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
     hoy = date.today()
     inicio_mes = datetime(hoy.year, hoy.month, 1)
 
     creditos_query = _base_creditos_query(db, usuario_actual)
     total = creditos_query.count()
-    total_aprobados = creditos_query.filter(Credito.estado == "Aprobado").count()
+    total_aprobados = creditos_query.filter(Credito.estado.in_(ESTADOS_APROBACION_EXITOSA)).count()
+    total_rechazados = creditos_query.filter(Credito.estado == "Rechazado").count()
     creditos_mes = creditos_query.filter(Credito.fecha_registro >= inicio_mes).count()
     aprobados_mes = creditos_query.filter(
-        Credito.estado == "Aprobado",
+        Credito.estado.in_(ESTADOS_APROBACION_EXITOSA),
         Credito.fecha_registro >= inicio_mes,
     ).count()
     activos = creditos_query.filter(Credito.estado.in_(ESTADOS_ACTIVOS)).count()
-    tasa_aprobacion = (total_aprobados / total * 100) if total else 0
+    decisiones_total = total_aprobados + total_rechazados
+    tasa_aprobacion = (total_aprobados / decisiones_total * 100) if decisiones_total else 0
 
     estados = (
         creditos_query
@@ -86,7 +247,8 @@ def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
         .with_entities(
             Cooperativa.nombre,
             func.count(Credito.id).label("total"),
-            func.sum(case((Credito.estado == "Aprobado", 1), else_=0)).label("aprobados"),
+            func.sum(case((Credito.estado.in_(ESTADOS_APROBACION_EXITOSA), 1), else_=0)).label("aprobados"),
+            func.sum(case((Credito.estado == "Rechazado", 1), else_=0)).label("rechazados"),
         )
         .group_by(Cooperativa.nombre)
         .all()
@@ -96,9 +258,14 @@ def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
             "nombre": nombre,
             "total": total_cooperativa,
             "aprobados": aprobados_cooperativa or 0,
-            "tasa_aprobacion": round(((aprobados_cooperativa or 0) / total_cooperativa) * 100, 2),
+            "tasa_aprobacion": round(
+                ((aprobados_cooperativa or 0) / ((aprobados_cooperativa or 0) + (rechazados_cooperativa or 0))) * 100,
+                2,
+            )
+            if (aprobados_cooperativa or 0) + (rechazados_cooperativa or 0)
+            else 0,
         }
-        for nombre, total_cooperativa, aprobados_cooperativa in cooperativas
+        for nombre, total_cooperativa, aprobados_cooperativa, rechazados_cooperativa in cooperativas
     ]
     tasas_cooperativa.sort(key=lambda item: item["tasa_aprobacion"], reverse=True)
 
@@ -176,6 +343,8 @@ def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
             {"nombre": nombre, "creditos": total_oficina}
             for nombre, total_oficina in productividad_oficinas
         ],
+        "oficinas_resumen": _resumen_oficinas_dashboard(db, usuario_actual, inicio_mes),
+        "cumpleanos_hoy": _cumpleanos_hoy_dashboard(db, usuario_actual, hoy),
         "cooperativas": tasas_cooperativa,
         "cumpleanos_proximos": cumpleanos,
     }
@@ -216,7 +385,7 @@ def obtener_resumen_creditos_reporte(
 
     total, aprobados, solicitado, aprobado = query.with_entities(
         func.count(Credito.id),
-        func.sum(case((Credito.estado == "Aprobado", 1), else_=0)),
+        func.sum(case((Credito.estado.in_(ESTADOS_APROBACION_EXITOSA), 1), else_=0)),
         func.coalesce(func.sum(Credito.monto_solicitado), 0),
         func.coalesce(func.sum(Credito.monto_aprobado), 0),
     ).one()

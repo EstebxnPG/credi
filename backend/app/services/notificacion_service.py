@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.db.models.credito import Credito
 from app.db.models.notificacion import Notificacion, NotificacionLectura
 from app.db.models.pendiente_credito import PendienteCredito
+from app.db.models.pensionado import Pensionado
 from app.db.models.seguimiento import Seguimiento
 from app.db.models.usuario import Usuario
 from app.schemas.notificacion import NotificacionAsignar, NotificacionEstadoUpdate
@@ -118,6 +119,40 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
     ahora = referencia or _ahora()
     hoy = ahora.date()
     cambios = 0
+
+    cumple_key_hoy = hoy.month * 100 + hoy.day
+    cumple_key = (
+        func.extract("month", Pensionado.fecha_nacimiento) * 100
+        + func.extract("day", Pensionado.fecha_nacimiento)
+    )
+    cumpleanos = (
+        db.query(Pensionado)
+        .filter(
+            Pensionado.is_active == True,  # noqa: E712
+            Pensionado.fecha_nacimiento.is_not(None),
+            cumple_key == cumple_key_hoy,
+        )
+        .all()
+    )
+    for pensionado in cumpleanos:
+        cambios += _crear_si_falta(
+            db,
+            clave=f"cumpleanos-{pensionado.id}-{hoy.isoformat()}",
+            oficina_id=pensionado.oficina_id,
+            responsable_id=None,
+            tipo="cumpleanos_hoy",
+            clase="informativa",
+            estado="pendiente",
+            titulo="Cumpleanos hoy",
+            mensaje=f"{pensionado.nombre_completo} cumple anos hoy",
+            prioridad="media",
+            href=f"/pensionados/{pensionado.id}",
+            entidad_tipo="pensionado",
+            entidad_id=pensionado.id,
+            pensionado_id=pensionado.id,
+            fecha=ahora,
+            leida=False,
+        )
 
     seguimientos = (
         db.query(Seguimiento)
