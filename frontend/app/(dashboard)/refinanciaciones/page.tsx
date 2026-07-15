@@ -7,7 +7,7 @@ import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
 type Estado = "programado" | "disponible" | "contactado" | "aceptado" | "rechazado" | "convertido" | "pospuesto";
-type Vista = "hoy" | "proximos" | "gestionados" | "convertidos" | "creditos_nuevos" | "todos";
+type Vista = "hoy" | "proximos" | "gestionados" | "convertidos" | "pospuestos" | "creditos_nuevos" | "todos";
 
 type Item = {
   credito_id: number;
@@ -29,6 +29,7 @@ type Item = {
   estado_refinanciacion: string;
   oportunidad_id: number;
   estado_comercial: Estado;
+  justificacion: string | null;
   reactivar_en: string | null;
   credito_nuevo_id: number | null;
 };
@@ -55,6 +56,7 @@ const tabs: Array<{ key: Vista; label: string }> = [
   { key: "proximos", label: "Proximos" },
   { key: "gestionados", label: "En gestion" },
   { key: "convertidos", label: "Convertidos" },
+  { key: "pospuestos", label: "Pospuestos" },
   { key: "creditos_nuevos", label: "Creditos nuevos" },
   { key: "todos", label: "Todos" },
 ];
@@ -82,6 +84,7 @@ export default function RefinanciacionesPage() {
     proximos: 0,
     gestionados: 0,
     convertidos: 0,
+    pospuestos: 0,
   });
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -90,6 +93,7 @@ export default function RefinanciacionesPage() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<Item | null>(null);
   const [postponing, setPostponing] = useState<Item | null>(null);
+  const [unpostponing, setUnpostponing] = useState<Item | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canGoNext = page < totalPages;
@@ -145,6 +149,7 @@ export default function RefinanciacionesPage() {
         proximos: Number(response.headers.get("X-Count-Proximos") ?? 0),
         gestionados: Number(response.headers.get("X-Count-Gestionados") ?? 0),
         convertidos: Number(response.headers.get("X-Count-Convertidos") ?? 0),
+        pospuestos: Number(response.headers.get("X-Count-Pospuestos") ?? 0),
       });
       if (cooperativasData) setCooperativas(cooperativasData);
     } catch (loadError) {
@@ -319,11 +324,12 @@ export default function RefinanciacionesPage() {
       {error ? <Message tone="error" text={error} /> : null}
       {success ? <Message tone="success" text={success} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-5">
         <Metric label="Disponibles ahora" value={counts.hoy} />
         <Metric label="Proximos" value={counts.proximos} />
         <Metric label="En gestion" value={counts.gestionados} />
         <Metric label="Convertidos" value={counts.convertidos} />
+        <Metric label="Pospuestos" value={counts.pospuestos} />
       </div>
 
       <div className="flex flex-wrap gap-2 border-b pb-3">
@@ -538,6 +544,19 @@ export default function RefinanciacionesPage() {
                       Alerta: {formatDateTime(item.reactivar_en)}
                     </p>
                   ) : null}
+                  {item.estado_comercial === "pospuesto" ? (
+                    <div className="mt-2 max-w-xs text-xs text-stone-500">
+                      <p>
+                        Reactivar:{" "}
+                        <span className="font-medium text-stone-700">
+                          {item.reactivar_en ? formatDateTime(item.reactivar_en) : "Sin fecha"}
+                        </span>
+                      </p>
+                      <p className="mt-1">
+                        {item.justificacion?.trim() || "Sin motivo registrado"}
+                      </p>
+                    </div>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex min-w-72 flex-wrap gap-1.5">
@@ -580,6 +599,13 @@ export default function RefinanciacionesPage() {
                         ) : null}
                       </>
                     ) : null}
+                    {item.estado_comercial === "pospuesto" ? (
+                      <Action
+                        disabled={savingId === item.oportunidad_id}
+                        text="Quitar pospuesto"
+                        onClick={() => setUnpostponing(item)}
+                      />
+                    ) : null}
                   </div>
                 </td>
               </tr>
@@ -620,6 +646,17 @@ export default function RefinanciacionesPage() {
           onConfirm={async (reason, reactivarEn) => {
             await change(postponing, "pospuesto", reason, reactivarEn);
             setPostponing(null);
+          }}
+        />
+      ) : null}
+      {unpostponing ? (
+        <UnpostponeModal
+          item={unpostponing}
+          saving={savingId === unpostponing.oportunidad_id}
+          onClose={() => setUnpostponing(null)}
+          onConfirm={async (reason) => {
+            await change(unpostponing, "disponible", reason);
+            setUnpostponing(null);
           }}
         />
       ) : null}
@@ -790,6 +827,54 @@ function PostponeModal({
             onClick={() => void onConfirm(reason.trim(), reactivarEn)}
           >
             {saving ? "Guardando..." : "Posponer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnpostponeModal({
+  item,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  item: Item;
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-semibold">Quitar pospuesto #{item.credito_id}</h2>
+        <p className="mt-2 text-sm text-stone-600">
+          La oportunidad volvera a disponibles y generara alerta nuevamente.
+        </p>
+        <label className="mt-4 block text-sm font-medium">
+          Motivo
+          <textarea
+            autoFocus
+            className="input-base mt-1 min-h-24"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ej: Se pospuso el credito equivocado"
+          />
+        </label>
+        <div className="mt-3 flex justify-end gap-2">
+          <button type="button" className="button-muted" disabled={saving} onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="button-primary"
+            disabled={saving || !reason.trim()}
+            onClick={() => void onConfirm(reason.trim())}
+          >
+            {saving ? "Guardando..." : "Quitar pospuesto"}
           </button>
         </div>
       </div>

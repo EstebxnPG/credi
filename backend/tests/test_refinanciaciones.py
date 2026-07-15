@@ -153,6 +153,61 @@ class RefinanciacionesTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             cambiar_estado_oportunidad(db, 9, data, usuario)
 
+    def test_oportunidad_pospuesta_puede_quitarse_manualmente(self):
+        credito = SimpleNamespace(
+            id=1,
+            estado="Aprobado",
+            is_active=True,
+            plazo=12,
+            fecha_desembolso=date(2025, 1, 1),
+            cooperativa=SimpleNamespace(
+                is_active=True,
+                reglas_refinanciacion=[
+                    SimpleNamespace(plazo_minimo=12, plazo_maximo=24, meses_para_refinanciar=1)
+                ],
+            ),
+        )
+        oportunidad = SimpleNamespace(
+            id=9,
+            credito_id=1,
+            estado="pospuesto",
+            justificacion="Cliente moroso",
+            reactivar_en=datetime.now(timezone.utc) + timedelta(days=365),
+            credito=credito,
+        )
+        notificacion = SimpleNamespace(
+            estado="resuelta",
+            resuelta_en=datetime.now(timezone.utc),
+            resuelta_por=3,
+        )
+
+        oportunidad_query = MagicMock()
+        oportunidad_query.filter.return_value = oportunidad_query
+        oportunidad_query.first.return_value = oportunidad
+        notificacion_query = MagicMock()
+        notificacion_query.filter.return_value = notificacion_query
+        notificacion_query.first.return_value = notificacion
+        db = MagicMock()
+        db.query.side_effect = [oportunidad_query, notificacion_query]
+        usuario = SimpleNamespace(id=3, rol="administrador", oficina_id=1)
+
+        with patch("app.services.refinanciacion_service.registrar_log"), patch(
+            "app.services.notificacion_service.sincronizar_reglas"
+        ):
+            cambiar_estado_oportunidad(
+                db,
+                9,
+                OportunidadEstadoUpdate(
+                    estado="disponible",
+                    justificacion="Se pospuso el credito equivocado",
+                ),
+                usuario,
+            )
+
+        self.assertEqual(oportunidad.estado, "disponible")
+        self.assertIsNone(oportunidad.reactivar_en)
+        self.assertEqual(notificacion.estado, "pendiente")
+
     def test_oportunidad_aceptada_resuelve_notificacion(self):
         credito = SimpleNamespace(
             id=1,

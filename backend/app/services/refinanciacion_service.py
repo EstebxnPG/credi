@@ -335,6 +335,7 @@ def listar_creditos_elegibles(
                     "estado_refinanciacion": "Listo" if esta_disponible else "Programado",
                     "oportunidad_id": oportunidad.id,
                     "estado_comercial": oportunidad.estado if esta_disponible else "programado",
+                    "justificacion": oportunidad.justificacion,
                     "reactivar_en": oportunidad.reactivar_en,
                     "credito_nuevo_id": oportunidad.credito_nuevo_id,
                 }
@@ -443,6 +444,7 @@ def obtener_credito_elegible(
         "estado_refinanciacion": "Listo" if esta_disponible else "Programado",
         "oportunidad_id": oportunidad.id,
         "estado_comercial": oportunidad.estado if esta_disponible else "programado",
+        "justificacion": oportunidad.justificacion,
         "reactivar_en": oportunidad.reactivar_en,
         "credito_nuevo_id": oportunidad.credito_nuevo_id,
     }
@@ -468,6 +470,8 @@ def _matches_vista(item: dict, vista: str) -> bool:
         return item["estado_comercial"] in {"contactado", "aceptado", "rechazado"}
     if vista == "convertidos":
         return item["estado_comercial"] == "convertido"
+    if vista == "pospuestos":
+        return item["estado_comercial"] == "pospuesto"
     raise HTTPException(status_code=422, detail="Vista de refinanciacion no valida")
 
 
@@ -477,6 +481,7 @@ def _conteos_por_vista(items: list[dict]) -> dict:
         "proximos": sum(1 for item in items if _matches_vista(item, "proximos")),
         "gestionados": sum(1 for item in items if _matches_vista(item, "gestionados")),
         "convertidos": sum(1 for item in items if _matches_vista(item, "convertidos")),
+        "pospuestos": sum(1 for item in items if _matches_vista(item, "pospuestos")),
     }
 
 
@@ -574,6 +579,8 @@ def listar_creditos_elegibles_paginados(
         query = query.filter(OportunidadRefinanciacion.estado.in_(["contactado", "aceptado", "rechazado"]))
     elif vista == "convertidos":
         query = query.filter(OportunidadRefinanciacion.estado == "convertido")
+    elif vista == "pospuestos":
+        query = query.filter(OportunidadRefinanciacion.estado == "pospuesto")
     elif vista == "hoy":
         query = query.filter(
             disponible_desde_expr <= today,
@@ -776,11 +783,18 @@ def _conteos_oportunidades(query, disponible_desde_expr, today: date) -> dict:
         .scalar()
         or 0
     )
+    pospuestos = (
+        query.filter(OportunidadRefinanciacion.estado == "pospuesto")
+        .with_entities(func.count(func.distinct(OportunidadRefinanciacion.id)))
+        .scalar()
+        or 0
+    )
     return {
         "hoy": hoy,
         "proximos": proximos,
         "gestionados": gestionados,
         "convertidos": convertidos,
+        "pospuestos": pospuestos,
     }
 
 
@@ -837,6 +851,7 @@ def _oportunidad_to_elegible_item(
         "estado_refinanciacion": "Listo" if esta_disponible else "Programado",
         "oportunidad_id": oportunidad.id,
         "estado_comercial": oportunidad.estado if esta_disponible else "programado",
+        "justificacion": oportunidad.justificacion,
         "reactivar_en": oportunidad.reactivar_en,
         "credito_nuevo_id": oportunidad.credito_nuevo_id,
         "_changed": changed,
@@ -852,10 +867,18 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
         raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
     credito = oportunidad.credito
     validar_credito_refinanciable(db, credito)
-    if oportunidad.estado in {"rechazado", "pospuesto"} and oportunidad.reactivar_en and oportunidad.reactivar_en > datetime.now(timezone.utc):
+    reactivacion_manual = oportunidad.estado == "pospuesto" and data.estado == "disponible"
+    if (
+        oportunidad.estado in {"rechazado", "pospuesto"}
+        and oportunidad.reactivar_en
+        and oportunidad.reactivar_en > datetime.now(timezone.utc)
+        and not reactivacion_manual
+    ):
         raise HTTPException(status_code=409, detail="La oportunidad se reactivara en la fecha programada")
     if oportunidad.estado == "convertido":
         raise HTTPException(status_code=400, detail="Una oportunidad convertida no puede modificarse")
+    if reactivacion_manual and not data.justificacion:
+        raise HTTPException(status_code=422, detail="Quitar pospuesto exige justificacion")
     if data.estado == "rechazado" and not data.justificacion:
         raise HTTPException(status_code=422, detail="Rechazar exige justificacion")
     reactivar_en = data.reactivar_en
@@ -878,20 +901,38 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
         oportunidad.reactivar_en = reactivar_en
     else:
         oportunidad.reactivar_en = None
+    ahora = datetime.now(timezone.utc)
     notificacion = db.query(Notificacion).filter(Notificacion.clave == f"refinanciacion-{oportunidad.credito_id}").first()
     if notificacion and data.estado in ("aceptado", "rechazado", "pospuesto"):
         notificacion.estado = "resuelta"
-        notificacion.resuelta_en = datetime.now(timezone.utc)
+        notificacion.resuelta_en = ahora
         notificacion.resuelta_por = usuario.id
     elif notificacion and data.estado in ("disponible", "contactado"):
         notificacion.estado = "pendiente"
+        notificacion.leida = False
+        notificacion.leida_en = None
         notificacion.resuelta_en = None
         notificacion.resuelta_por = None
+    elif notificacion is None and data.estado in ("disponible", "contactado"):
+        db.add(Notificacion(
+            clave=f"refinanciacion-{oportunidad.credito_id}",
+            oficina_id=credito.oficina_id,
+            responsable_id=None,
+            tipo="refinanciacion_disponible",
+            clase="accion",
+            estado="pendiente",
+            titulo="Refinanciacion disponible",
+            mensaje=f"El credito #{credito.id} ya puede refinanciarse",
+            prioridad="alta",
+            href=f"/creditos/{credito.id}",
+            entidad_tipo="credito",
+            entidad_id=credito.id,
+            pensionado_id=credito.pensionado_id,
+            fecha=ahora,
+            leida=False,
+        ))
     db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, usuario_id=usuario.id, estado_anterior=anterior, estado_nuevo=data.estado, justificacion=data.justificacion))
     registrar_log(db, usuario.id, "oportunidades_refinanciacion", oportunidad.id, "cambiar_estado", {"estado": anterior}, {"estado": data.estado, "justificacion": data.justificacion, "reactivar_en": reactivar_en})
-    from app.services.notificacion_service import sincronizar_reglas
-
-    sincronizar_reglas(db, commit=False)
     db.commit()
     db.refresh(oportunidad)
     return {"id": oportunidad.id, "estado": oportunidad.estado, "reactivar_en": oportunidad.reactivar_en}

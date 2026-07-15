@@ -262,7 +262,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
 
         credito = db.get(Credito, elegible["credito_id"])
         clave = f"refinanciacion-{credito.id}"
-        if elegible["estado_comercial"] in ("aceptado", "rechazado", "convertido"):
+        if elegible["estado_comercial"] in ("aceptado", "rechazado", "convertido", "pospuesto"):
             _resolver_por_clave(db, clave)
             continue
 

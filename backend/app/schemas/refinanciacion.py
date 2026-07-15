@@ -106,6 +106,7 @@ class RefinanciacionElegibleRead(BaseModel):
     estado_refinanciacion: str
     oportunidad_id: int | None = None
     estado_comercial: str = "programado"
+    justificacion: str | None = None
     reactivar_en: datetime | None = None
     credito_nuevo_id: int | None = None
 
