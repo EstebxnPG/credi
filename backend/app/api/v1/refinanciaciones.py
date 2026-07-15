@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, get_db
 from app.db.models.usuario import Usuario
 from app.schemas.refinanciacion import (
+    CreditoNuevoOportunidadRead,
     RefinanciacionCreate,
     RefinanciacionElegibleRead,
     RefinanciacionRead,
@@ -93,6 +94,26 @@ def listar_creditos_elegibles(
     response.headers["X-Count-Proximos"] = str(result["counts"]["proximos"])
     response.headers["X-Count-Gestionados"] = str(result["counts"]["gestionados"])
     response.headers["X-Count-Convertidos"] = str(result["counts"]["convertidos"])
+    return result["items"]
+
+
+@router.get("/creditos-nuevos/", response_model=list[CreditoNuevoOportunidadRead])
+def listar_oportunidades_credito_nuevo(
+    response: Response,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(15, ge=1, le=100),
+    texto: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    result = refinanciacion_service.listar_oportunidades_credito_nuevo(
+        db,
+        usuario,
+        skip=skip,
+        limit=limit,
+        texto=texto,
+    )
+    response.headers["X-Total-Count"] = str(result["total"])
     return result["items"]
 
 

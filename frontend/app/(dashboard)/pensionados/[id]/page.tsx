@@ -32,7 +32,9 @@ type Credito = {
   plazo: number;
   estado: string;
   cooperativa_id: number;
+  cooperativa_nombre: string | null;
   pagaduria_id: number;
+  nro_libranza: string | null;
   tiene_documentos_pendientes: boolean;
   documentos_pendientes: string | null;
   fecha_registro: string;
@@ -598,9 +600,11 @@ function CreditosList({
         <h2 className="text-lg font-semibold text-stone-950">Creditos del pensionado</h2>
       </div>
 
-      <div className="hidden grid-cols-[0.8fr_1fr_1fr_0.8fr_1fr_88px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
+      <div className="hidden grid-cols-[0.7fr_1fr_1.2fr_1fr_1fr_0.8fr_1fr_88px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
         <span>Credito</span>
         <span>Estado</span>
+        <span>Cooperativa</span>
+        <span>Nro libranza</span>
         <span>Solicitado</span>
         <span>Plazo (meses)</span>
         <span>Registro</span>
@@ -616,16 +620,28 @@ function CreditosList({
             <Link
               key={credito.id}
               href={href}
-              className="group grid gap-3 px-3 py-2.5 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.8fr_1fr_1fr_0.8fr_1fr_88px] md:items-center md:py-2"
+              className="group grid gap-3 px-3 py-2.5 text-sm transition hover:bg-teal-50/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-700/35 md:grid-cols-[0.7fr_1fr_1.2fr_1fr_1fr_0.8fr_1fr_88px] md:items-center md:py-2"
             >
               <div className="min-w-0">
                 <p className="font-semibold text-stone-950">#{credito.id}</p>
                 <p className="mt-1 text-xs text-stone-500 md:hidden">
                   {formatDate(credito.fecha_registro)}
                 </p>
+                <p className="mt-1 text-xs text-stone-500 md:hidden">
+                  {credito.cooperativa_nombre ?? `Cooperativa #${credito.cooperativa_id}`}
+                </p>
+                <p className="mt-1 text-xs text-stone-500 md:hidden">
+                  Libranza: {credito.nro_libranza ?? "Sin registrar"}
+                </p>
               </div>
               <span>
                 <CreditoStatusBadge estado={credito.estado} />
+              </span>
+              <span className="min-w-0 truncate text-stone-700">
+                {credito.cooperativa_nombre ?? `Cooperativa #${credito.cooperativa_id}`}
+              </span>
+              <span className="min-w-0 truncate text-stone-700">
+                {credito.nro_libranza ?? "Sin registrar"}
               </span>
               <span className="font-medium text-stone-800">
                 {formatCurrency(credito.monto_solicitado)}

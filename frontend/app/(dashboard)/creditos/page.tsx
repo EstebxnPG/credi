@@ -168,6 +168,7 @@ export default function CreditosPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const refinanceOpened = useRef(false);
+  const newCreditOpened = useRef(false);
   const [creditos, setCreditos] = useState<Credito[]>([]);
   const [pensionados, setPensionados] = useState<Pensionado[]>([]);
   const [searchingPensionados, setSearchingPensionados] = useState(false);
@@ -527,6 +528,63 @@ export default function CreditosPage() {
       ignore = true;
     };
   }, [creditos, loading, searchParams]);
+
+  useEffect(() => {
+    const pensionadoId = Number(searchParams.get("pensionado"));
+    if (loading || !pensionadoId || newCreditOpened.current) return;
+
+    let ignore = false;
+
+    async function openNewCreditShortcut() {
+      try {
+        const pensionado =
+          pensionados.find((item) => item.id === pensionadoId) ??
+          (await apiFetch<Pensionado>(`/api/v1/pensionados/${pensionadoId}`));
+
+        if (ignore) {
+          return;
+        }
+
+        const session = readSession();
+        const userId = readSessionUserId();
+        const defaultAsesor =
+          session?.rol === "administrador"
+            ? asesores[0]
+            : asesores.find((asesor) => asesor.id === userId);
+        const defaultOficinaId =
+          defaultAsesor?.oficina_id || session?.oficinaId || oficinas[0]?.id || "";
+
+        newCreditOpened.current = true;
+        setPensionados((current) =>
+          current.some((item) => item.id === pensionado.id) ? current : [pensionado, ...current],
+        );
+        setSelected(null);
+        setForm({
+          ...emptyForm,
+          pensionado_id: String(pensionado.id),
+          asesor_id: defaultAsesor?.id ? String(defaultAsesor.id) : userId ? String(userId) : "",
+          oficina_id: defaultOficinaId ? String(defaultOficinaId) : "",
+          tipo_credito: "NUEVO",
+        });
+        setFormError(null);
+        setModalMode("create");
+      } catch (shortcutError) {
+        if (!ignore) {
+          setError(
+            shortcutError instanceof ApiError
+              ? shortcutError.message
+              : "No se pudo preparar el credito nuevo",
+          );
+        }
+      }
+    }
+
+    void openNewCreditShortcut();
+
+    return () => {
+      ignore = true;
+    };
+  }, [asesores, loading, oficinas, pensionados, searchParams]);
 
   function openEditModal(credito: Credito) {
     setSelected(credito);

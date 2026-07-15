@@ -644,6 +644,107 @@ def listar_creditos_elegibles_paginados(
     }
 
 
+def listar_oportunidades_credito_nuevo(
+    db: Session,
+    usuario_actual: Usuario | None = None,
+    skip: int = 0,
+    limit: int = 15,
+    texto: str | None = None,
+) -> dict:
+    term = (texto or "").strip()
+
+    finalizados_subquery = (
+        db.query(
+            Credito.pensionado_id.label("pensionado_id"),
+            func.count(Credito.id).label("creditos_finalizados"),
+            func.max(Credito.id).label("ultimo_credito_id"),
+            func.max(Credito.fecha_fin_estimada).label("ultimo_credito_finalizado_en"),
+            func.max(Credito.monto_aprobado).label("ultimo_monto_aprobado"),
+        )
+        .filter(
+            Credito.estado == "Finalizado",
+            Credito.is_active == True,  # noqa: E712
+        )
+        .group_by(Credito.pensionado_id)
+        .subquery()
+    )
+
+    aprobados_subquery = (
+        db.query(Credito.pensionado_id.label("pensionado_id"))
+        .filter(
+            Credito.estado == "Aprobado",
+            Credito.is_active == True,  # noqa: E712
+        )
+        .group_by(Credito.pensionado_id)
+        .subquery()
+    )
+
+    query = (
+        db.query(
+            Pensionado,
+            finalizados_subquery.c.creditos_finalizados,
+            finalizados_subquery.c.ultimo_credito_id,
+            finalizados_subquery.c.ultimo_credito_finalizado_en,
+            finalizados_subquery.c.ultimo_monto_aprobado,
+        )
+        .join(finalizados_subquery, finalizados_subquery.c.pensionado_id == Pensionado.id)
+        .outerjoin(aprobados_subquery, aprobados_subquery.c.pensionado_id == Pensionado.id)
+        .filter(
+            Pensionado.is_active == True,  # noqa: E712
+            aprobados_subquery.c.pensionado_id.is_(None),
+        )
+    )
+
+    if usuario_actual and usuario_actual.rol != "administrador":
+        query = query.filter(Pensionado.oficina_id == usuario_actual.oficina_id)
+
+    if term:
+        like_term = f"%{term}%"
+        query = query.filter(
+            or_(
+                Pensionado.nombre.ilike(like_term),
+                Pensionado.segundo_nombre.ilike(like_term),
+                Pensionado.apellidos.ilike(like_term),
+                Pensionado.documento.ilike(like_term),
+                cast(Pensionado.id, String).ilike(like_term),
+            )
+        )
+
+    total = query.count()
+    rows = (
+        query.order_by(
+            finalizados_subquery.c.ultimo_credito_finalizado_en.desc().nullslast(),
+            Pensionado.id.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": [
+            {
+                "pensionado_id": pensionado.id,
+                "pensionado_nombre": pensionado.nombre_completo,
+                "documento": pensionado.documento,
+                "oficina_id": pensionado.oficina_id,
+                "ultimo_credito_id": ultimo_credito_id,
+                "ultimo_credito_finalizado_en": ultimo_credito_finalizado_en,
+                "ultimo_monto_aprobado": ultimo_monto_aprobado,
+                "creditos_finalizados": creditos_finalizados,
+            }
+            for (
+                pensionado,
+                creditos_finalizados,
+                ultimo_credito_id,
+                ultimo_credito_finalizado_en,
+                ultimo_monto_aprobado,
+            ) in rows
+        ],
+        "total": total,
+    }
+
+
 def _conteos_oportunidades(query, disponible_desde_expr, today: date) -> dict:
     hoy = (
         query.filter(

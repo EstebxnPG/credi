@@ -28,8 +28,8 @@ export const navItems: NavItem[] = [
   },
   {
     href: "/refinanciaciones",
-    label: "Refinanciaciones",
-    description: "Creditos listos para renovar cupo",
+    label: "Oportunidades",
+    description: "Refinanciaciones y creditos nuevos",
     section: "operacion",
   },
   {

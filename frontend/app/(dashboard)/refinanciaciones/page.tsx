@@ -7,7 +7,7 @@ import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
 type Estado = "programado" | "disponible" | "contactado" | "aceptado" | "rechazado" | "convertido";
-type Vista = "hoy" | "proximos" | "gestionados" | "convertidos" | "todos";
+type Vista = "hoy" | "proximos" | "gestionados" | "convertidos" | "creditos_nuevos" | "todos";
 
 type Item = {
   credito_id: number;
@@ -39,11 +39,23 @@ type Cooperativa = {
   is_active: boolean;
 };
 
+type CreditoNuevoItem = {
+  pensionado_id: number;
+  pensionado_nombre: string | null;
+  documento: string | null;
+  oficina_id: number;
+  ultimo_credito_id: number | null;
+  ultimo_credito_finalizado_en: string | null;
+  ultimo_monto_aprobado: number | null;
+  creditos_finalizados: number;
+};
+
 const tabs: Array<{ key: Vista; label: string }> = [
-  { key: "hoy", label: "Disponibles ahora" },
+  { key: "hoy", label: "Refis disponibles ahora" },
   { key: "proximos", label: "Proximos" },
   { key: "gestionados", label: "En gestion" },
   { key: "convertidos", label: "Convertidos" },
+  { key: "creditos_nuevos", label: "Creditos nuevos" },
   { key: "todos", label: "Todos" },
 ];
 
@@ -51,6 +63,7 @@ const PAGE_SIZE = 15;
 
 export default function RefinanciacionesPage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [creditosNuevos, setCreditosNuevos] = useState<CreditoNuevoItem[]>([]);
   const [cooperativas, setCooperativas] = useState<Cooperativa[]>([]);
   const [query, setQuery] = useState("");
   const [vista, setVista] = useState<Vista>("hoy");
@@ -88,10 +101,28 @@ export default function RefinanciacionesPage() {
       const params = new URLSearchParams({
         limit: String(PAGE_SIZE),
         skip: String((page - 1) * PAGE_SIZE),
-        vista,
       });
 
       if (query.trim()) params.set("texto", query.trim());
+
+      if (vista === "creditos_nuevos") {
+        const [response, cooperativasData] = await Promise.all([
+          apiFetchWithMeta<CreditoNuevoItem[]>(
+            `/api/v1/refinanciaciones/creditos-nuevos/?${params.toString()}`,
+          ),
+          cooperativas.length
+            ? Promise.resolve(null)
+            : apiFetch<Cooperativa[]>("/api/v1/cooperativas/?solo_activas=true"),
+        ]);
+
+        setCreditosNuevos(response.data);
+        setItems([]);
+        setTotal(Number(response.headers.get("X-Total-Count") ?? response.data.length));
+        if (cooperativasData) setCooperativas(cooperativasData);
+        return;
+      }
+
+      params.set("vista", vista);
       if (filters.montoMin) params.set("monto_min", filters.montoMin);
       if (filters.montoMax) params.set("monto_max", filters.montoMax);
       if (filters.fechaDesde) params.set("fecha_desde", filters.fechaDesde);
@@ -106,6 +137,7 @@ export default function RefinanciacionesPage() {
       ]);
 
       setItems(response.data);
+      setCreditosNuevos([]);
       setTotal(Number(response.headers.get("X-Total-Count") ?? response.data.length));
       setCounts({
         hoy: Number(response.headers.get("X-Count-Hoy") ?? 0),
@@ -153,7 +185,11 @@ export default function RefinanciacionesPage() {
   const paginationControls = (
     <div className="flex flex-col gap-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
       <p>
-        {loading ? "Actualizando filtros..." : `Pagina ${page} de ${totalPages}. Mostrando ${items.length} de ${total} oportunidades.`}
+        {loading
+          ? "Actualizando filtros..."
+          : `Pagina ${page} de ${totalPages}. Mostrando ${
+              vista === "creditos_nuevos" ? creditosNuevos.length : items.length
+            } de ${total} oportunidades.`}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -255,7 +291,7 @@ export default function RefinanciacionesPage() {
   }
 
   if (loading && !hasLoadedOnce) {
-    return <Message text="Cargando refinanciaciones..." />;
+    return <Message text="Cargando oportunidades..." />;
   }
 
   return (
@@ -264,9 +300,9 @@ export default function RefinanciacionesPage() {
         <p className="text-xs font-semibold uppercase tracking-[.22em] text-stone-500">
           Operacion comercial
         </p>
-        <h1 className="mt-2 text-xl font-semibold">Refinanciaciones</h1>
+        <h1 className="mt-2 text-xl font-semibold">Oportunidades comerciales</h1>
         <p className="mt-2 text-sm text-stone-600">
-          Oportunidades liberadas segun las reglas de cada cooperativa.
+          Refinanciaciones listas y pensionados disponibles para credito nuevo.
         </p>
       </header>
 
@@ -311,48 +347,30 @@ export default function RefinanciacionesPage() {
                 resetPage();
                 setQuery(event.target.value);
               }}
-              placeholder="Credito, pensionado, documento o cooperativa"
+              placeholder={
+                vista === "creditos_nuevos"
+                  ? "Pensionado o documento"
+                  : "Credito, pensionado, documento o cooperativa"
+              }
             />
           </label>
-          <Field
-            label="Monto min"
-            value={filters.montoMin}
-            onChange={(value) => updateFilter("montoMin", value)}
-            type="number"
-          />
-          <Field
-            label="Monto max"
-            value={filters.montoMax}
-            onChange={(value) => updateFilter("montoMax", value)}
-            type="number"
-          />
-          <Field
-            label="Desde"
-            value={filters.fechaDesde}
-            onChange={(value) => updateFilter("fechaDesde", value)}
-            type="date"
-          />
-          <Field
-            label="Hasta"
-            value={filters.fechaHasta}
-            onChange={(value) => updateFilter("fechaHasta", value)}
-            type="date"
-          />
-          <label className="block text-sm font-medium text-stone-700">
-            <span>Cooperativa</span>
-            <select
-              className="input-base mt-1"
-              value={filters.cooperativaId}
-              onChange={(event) => updateFilter("cooperativaId", event.target.value)}
-            >
-              <option value="">Todas</option>
-              {cooperativas.map((cooperativa) => (
-                <option key={cooperativa.id} value={cooperativa.id}>
-                  {cooperativa.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
+          {vista !== "creditos_nuevos" ? (
+            <>
+              <Field label="Monto min" value={filters.montoMin} onChange={(value) => updateFilter("montoMin", value)} type="number" />
+              <Field label="Monto max" value={filters.montoMax} onChange={(value) => updateFilter("montoMax", value)} type="number" />
+              <Field label="Desde" value={filters.fechaDesde} onChange={(value) => updateFilter("fechaDesde", value)} type="date" />
+              <Field label="Hasta" value={filters.fechaHasta} onChange={(value) => updateFilter("fechaHasta", value)} type="date" />
+              <label className="block text-sm font-medium text-stone-700">
+                <span>Cooperativa</span>
+                <select className="input-base mt-1" value={filters.cooperativaId} onChange={(event) => updateFilter("cooperativaId", event.target.value)}>
+                  <option value="">Todas</option>
+                  {cooperativas.map((cooperativa) => (
+                    <option key={cooperativa.id} value={cooperativa.id}>{cooperativa.nombre}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
           <button type="button" className="button-muted whitespace-nowrap" onClick={clearFilters}>
             Limpiar
           </button>
@@ -360,6 +378,78 @@ export default function RefinanciacionesPage() {
         <div className="mt-3">{paginationControls}</div>
       </div>
 
+      {vista === "creditos_nuevos" ? (
+        <div className="overflow-x-auto border-y bg-white/80">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b bg-stone-50 text-xs uppercase text-stone-500">
+              <tr>
+                {["Pensionado", "Historial", "Ultimo credito", "Ultimo monto", "Accion"].map((header) => (
+                  <th key={header} className="px-4 py-3">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {creditosNuevos.map((item) => (
+                <tr key={item.pensionado_id}>
+                  <td className="px-4 py-3">
+                    <Link
+                      className="font-semibold text-teal-800 hover:underline"
+                      href={`/pensionados/${item.pensionado_id}?vista=creditos`}
+                    >
+                      {item.pensionado_nombre ?? `Pensionado #${item.pensionado_id}`}
+                    </Link>
+                    <p className="text-xs text-stone-500">{item.documento}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-stone-800">
+                      {item.creditos_finalizados} credito{item.creditos_finalizados === 1 ? "" : "s"} finalizado{item.creditos_finalizados === 1 ? "" : "s"}
+                    </p>
+                    <p className="text-xs text-stone-500">Sin credito aprobado vigente</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {item.ultimo_credito_id ? (
+                      <Link
+                        className="font-semibold text-teal-800 hover:underline"
+                        href={`/creditos/${item.ultimo_credito_id}`}
+                      >
+                        #{item.ultimo_credito_id}
+                      </Link>
+                    ) : (
+                      <span className="text-stone-500">Sin credito</span>
+                    )}
+                    <p className="text-xs text-stone-500">
+                      {item.ultimo_credito_finalizado_en
+                        ? formatDate(item.ultimo_credito_finalizado_en)
+                        : "Sin fecha fin"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {formatCurrency(item.ultimo_monto_aprobado)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      className="button-primary px-2.5 py-1.5 text-xs"
+                      href={`/creditos?pensionado=${item.pensionado_id}`}
+                    >
+                      Crear credito
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+
+              {creditosNuevos.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
+                    No hay pensionados candidatos a credito nuevo en esta vista.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : (
       <div className="overflow-x-auto border-y bg-white/80">
         <table className="min-w-full text-left text-sm">
           <thead className="border-b bg-stone-50 text-xs uppercase text-stone-500">
@@ -490,6 +580,7 @@ export default function RefinanciacionesPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       <div className="rounded-lg border border-stone-800/10 bg-white px-3 py-3 shadow-sm">
         {paginationControls}

@@ -110,6 +110,17 @@ class RefinanciacionElegibleRead(BaseModel):
     credito_nuevo_id: int | None = None
 
 
+class CreditoNuevoOportunidadRead(BaseModel):
+    pensionado_id: int
+    pensionado_nombre: str | None = None
+    documento: str | None = None
+    oficina_id: int
+    ultimo_credito_id: int | None = None
+    ultimo_credito_finalizado_en: date | None = None
+    ultimo_monto_aprobado: float | None = None
+    creditos_finalizados: int
+
+
 class OportunidadEstadoUpdate(BaseModel):
     estado: str
     justificacion: str | None = None
