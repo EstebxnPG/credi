@@ -643,6 +643,11 @@ def listar_creditos_elegibles_paginados(
         db.commit()
 
     counts = _conteos_oportunidades(base_count_query, disponible_desde_expr, today)
+    counts["creditos_nuevos"] = contar_oportunidades_credito_nuevo(
+        db,
+        usuario_actual,
+        texto=texto,
+    )
 
     return {
         "items": page_items,
@@ -651,13 +656,11 @@ def listar_creditos_elegibles_paginados(
     }
 
 
-def listar_oportunidades_credito_nuevo(
+def _query_oportunidades_credito_nuevo(
     db: Session,
     usuario_actual: Usuario | None = None,
-    skip: int = 0,
-    limit: int = 15,
     texto: str | None = None,
-) -> dict:
+):
     term = (texto or "").strip()
 
     finalizados_subquery = (
@@ -716,6 +719,31 @@ def listar_oportunidades_credito_nuevo(
                 cast(Pensionado.id, String).ilike(like_term),
             )
         )
+
+    return query, finalizados_subquery
+
+
+def contar_oportunidades_credito_nuevo(
+    db: Session,
+    usuario_actual: Usuario | None = None,
+    texto: str | None = None,
+) -> int:
+    query, _ = _query_oportunidades_credito_nuevo(db, usuario_actual, texto)
+    return query.count()
+
+
+def listar_oportunidades_credito_nuevo(
+    db: Session,
+    usuario_actual: Usuario | None = None,
+    skip: int = 0,
+    limit: int = 15,
+    texto: str | None = None,
+) -> dict:
+    query, finalizados_subquery = _query_oportunidades_credito_nuevo(
+        db,
+        usuario_actual,
+        texto,
+    )
 
     total = query.count()
     rows = (

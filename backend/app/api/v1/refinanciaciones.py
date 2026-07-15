@@ -75,6 +75,9 @@ def listar_creditos_elegibles(
         response.headers["X-Count-Gestionados"] = "0"
         response.headers["X-Count-Convertidos"] = "0"
         response.headers["X-Count-Pospuestos"] = "0"
+        response.headers["X-Count-Creditos-Nuevos"] = str(
+            refinanciacion_service.contar_oportunidades_credito_nuevo(db, usuario)
+        )
         return items
 
     result = refinanciacion_service.listar_creditos_elegibles_paginados(
@@ -96,6 +99,7 @@ def listar_creditos_elegibles(
     response.headers["X-Count-Gestionados"] = str(result["counts"]["gestionados"])
     response.headers["X-Count-Convertidos"] = str(result["counts"]["convertidos"])
     response.headers["X-Count-Pospuestos"] = str(result["counts"]["pospuestos"])
+    response.headers["X-Count-Creditos-Nuevos"] = str(result["counts"]["creditos_nuevos"])
     return result["items"]
 
 
@@ -116,6 +120,7 @@ def listar_oportunidades_credito_nuevo(
         texto=texto,
     )
     response.headers["X-Total-Count"] = str(result["total"])
+    response.headers["X-Count-Creditos-Nuevos"] = str(result["total"])
     return result["items"]
 
 

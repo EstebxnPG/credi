@@ -57,7 +57,7 @@ const tabs: Array<{ key: Vista; label: string }> = [
   { key: "gestionados", label: "En gestion" },
   { key: "convertidos", label: "Convertidos" },
   { key: "pospuestos", label: "Pospuestos" },
-  { key: "creditos_nuevos", label: "Creditos nuevos" },
+  { key: "creditos_nuevos", label: "Posibles nuevos creditos" },
   { key: "todos", label: "Todos" },
 ];
 
@@ -85,6 +85,7 @@ export default function RefinanciacionesPage() {
     gestionados: 0,
     convertidos: 0,
     pospuestos: 0,
+    creditosNuevos: 0,
   });
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -123,6 +124,14 @@ export default function RefinanciacionesPage() {
         setCreditosNuevos(response.data);
         setItems([]);
         setTotal(Number(response.headers.get("X-Total-Count") ?? response.data.length));
+        setCounts((current) => ({
+          ...current,
+          creditosNuevos: Number(
+            response.headers.get("X-Count-Creditos-Nuevos") ??
+              response.headers.get("X-Total-Count") ??
+              response.data.length,
+          ),
+        }));
         if (cooperativasData) setCooperativas(cooperativasData);
         return;
       }
@@ -150,6 +159,7 @@ export default function RefinanciacionesPage() {
         gestionados: Number(response.headers.get("X-Count-Gestionados") ?? 0),
         convertidos: Number(response.headers.get("X-Count-Convertidos") ?? 0),
         pospuestos: Number(response.headers.get("X-Count-Pospuestos") ?? 0),
+        creditosNuevos: Number(response.headers.get("X-Count-Creditos-Nuevos") ?? 0),
       });
       if (cooperativasData) setCooperativas(cooperativasData);
     } catch (loadError) {
@@ -324,12 +334,13 @@ export default function RefinanciacionesPage() {
       {error ? <Message tone="error" text={error} /> : null}
       {success ? <Message tone="success" text={success} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <Metric label="Disponibles ahora" value={counts.hoy} />
         <Metric label="Proximos" value={counts.proximos} />
         <Metric label="En gestion" value={counts.gestionados} />
         <Metric label="Convertidos" value={counts.convertidos} />
         <Metric label="Pospuestos" value={counts.pospuestos} />
+        <Metric label="Creditos nuevos" value={counts.creditosNuevos} />
       </div>
 
       <div className="flex flex-wrap gap-2 border-b pb-3">
