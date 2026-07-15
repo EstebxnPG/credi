@@ -27,6 +27,15 @@ class RefinanciacionesTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             OportunidadEstadoUpdate(estado="convertido")
 
+    def test_estado_comercial_pospuesto_es_valido(self):
+        data = OportunidadEstadoUpdate(
+            estado="pospuesto",
+            justificacion="Cliente moroso",
+            reactivar_en=datetime.now(timezone.utc) + timedelta(days=365),
+        )
+
+        self.assertEqual(data.estado, "pospuesto")
+
     def test_credito_no_refinanciable_antes_de_regla_cooperativa(self):
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None

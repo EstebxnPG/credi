@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
-type Estado = "programado" | "disponible" | "contactado" | "aceptado" | "rechazado" | "convertido";
+type Estado = "programado" | "disponible" | "contactado" | "aceptado" | "rechazado" | "convertido" | "pospuesto";
 type Vista = "hoy" | "proximos" | "gestionados" | "convertidos" | "creditos_nuevos" | "todos";
 
 type Item = {
@@ -89,6 +89,7 @@ export default function RefinanciacionesPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<Item | null>(null);
+  const [postponing, setPostponing] = useState<Item | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canGoNext = page < totalPages;
@@ -251,7 +252,12 @@ export default function RefinanciacionesPage() {
     });
   }
 
-  async function change(item: Item, estado: Estado, justificacion?: string) {
+  async function change(
+    item: Item,
+    estado: Estado,
+    justificacion?: string,
+    reactivarEn?: string,
+  ) {
     setSavingId(item.oportunidad_id);
     setError(null);
     setSuccess(null);
@@ -261,7 +267,11 @@ export default function RefinanciacionesPage() {
         `/api/v1/refinanciaciones/oportunidades/${item.oportunidad_id}/estado`,
         {
           method: "PATCH",
-          body: JSON.stringify({ estado, justificacion }),
+          body: JSON.stringify({
+            estado,
+            justificacion,
+            reactivar_en: reactivarEn ? new Date(`${reactivarEn}T00:00:00`).toISOString() : null,
+          }),
         },
       );
 
@@ -550,6 +560,11 @@ export default function RefinanciacionesPage() {
                             />
                             <Action
                               disabled={savingId === item.oportunidad_id}
+                              text="Posponer"
+                              onClick={() => setPostponing(item)}
+                            />
+                            <Action
+                              disabled={savingId === item.oportunidad_id}
                               text="Rechazado"
                               onClick={() => setRejecting(item)}
                             />
@@ -597,6 +612,17 @@ export default function RefinanciacionesPage() {
           }}
         />
       ) : null}
+      {postponing ? (
+        <PostponeModal
+          item={postponing}
+          saving={savingId === postponing.oportunidad_id}
+          onClose={() => setPostponing(null)}
+          onConfirm={async (reason, reactivarEn) => {
+            await change(postponing, "pospuesto", reason, reactivarEn);
+            setPostponing(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -609,6 +635,7 @@ function Badge({ estado }: { estado: Estado }) {
     aceptado: "bg-teal-50 text-teal-700 border-teal-200",
     rechazado: "bg-rose-50 text-rose-700 border-rose-200",
     convertido: "bg-violet-50 text-violet-700 border-violet-200",
+    pospuesto: "bg-stone-100 text-stone-700 border-stone-300",
   };
 
   return (
@@ -710,6 +737,70 @@ function RejectModal({
       </div>
     </div>
   );
+}
+
+function PostponeModal({
+  item,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  item: Item;
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string, reactivarEn: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [reactivarEn, setReactivarEn] = useState(defaultPostponeDate());
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-semibold">Posponer oportunidad #{item.credito_id}</h2>
+        <p className="mt-2 text-sm text-stone-600">
+          La oportunidad saldra de disponibles y volvera a revisarse en la fecha programada.
+        </p>
+        <label className="mt-4 block text-sm font-medium">
+          Reactivar en
+          <input
+            className="input-base mt-1"
+            type="date"
+            value={reactivarEn}
+            onChange={(event) => setReactivarEn(event.target.value)}
+          />
+        </label>
+        <label className="mt-4 block text-sm font-medium">
+          Motivo
+          <textarea
+            autoFocus
+            className="input-base mt-1 min-h-28"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ej: Cliente moroso, revisar nuevamente en un año"
+          />
+        </label>
+        <div className="mt-3 flex justify-end gap-2">
+          <button type="button" className="button-muted" disabled={saving} onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="button-primary"
+            disabled={saving || !reason.trim() || !reactivarEn}
+            onClick={() => void onConfirm(reason.trim(), reactivarEn)}
+          >
+            {saving ? "Guardando..." : "Posponer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function defaultPostponeDate() {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() + 1);
+  return date.toISOString().slice(0, 10);
 }
 
 function Metric({ label, value }: { label: string; value: number }) {

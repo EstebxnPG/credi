@@ -124,10 +124,11 @@ class CreditoNuevoOportunidadRead(BaseModel):
 class OportunidadEstadoUpdate(BaseModel):
     estado: str
     justificacion: str | None = None
+    reactivar_en: datetime | None = None
 
     @field_validator("estado")
     @classmethod
     def estado_valido(cls, value):
-        if value not in {"disponible", "contactado", "aceptado", "rechazado"}:
+        if value not in {"disponible", "contactado", "aceptado", "rechazado", "pospuesto"}:
             raise ValueError("Estado comercial no válido")
         return value
