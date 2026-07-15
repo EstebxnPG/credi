@@ -510,6 +510,7 @@ def listar_creditos(
     usuario_actual: Usuario | None = None,
     skip: int = 0,
     limit: int = 15,
+    orden_registro: str = "desc",
 ) -> list[Credito]:
     scope_oficina = (
         usuario_actual.oficina_id
@@ -567,12 +568,13 @@ def listar_creditos(
 
     query = _filtrar_por_refinanciacion(db, query, refinanciacion)
 
-    return (
-        query.order_by(Credito.fecha_registro.desc(), Credito.id.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+    order_columns = (
+        [Credito.fecha_registro.asc(), Credito.id.asc()]
+        if orden_registro == "asc"
+        else [Credito.fecha_registro.desc(), Credito.id.desc()]
     )
+
+    return query.order_by(*order_columns).offset(skip).limit(limit).all()
 
 
 def contar_creditos(

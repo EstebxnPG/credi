@@ -497,6 +497,7 @@ def listar_creditos_elegibles_paginados(
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
     cooperativa_id: int | None = None,
+    orden_tentativa: str = "asc",
 ) -> dict:
     fecha_min = _parse_date_filter(fecha_desde, "fecha_desde")
     fecha_max = _parse_date_filter(fecha_hasta, "fecha_hasta")
@@ -597,9 +598,14 @@ def listar_creditos_elegibles_paginados(
         raise HTTPException(status_code=422, detail="Vista de refinanciacion no valida")
 
     total = query.with_entities(func.count(func.distinct(OportunidadRefinanciacion.id))).scalar() or 0
+    tentativa_order = (
+        [disponible_desde_expr.desc(), OportunidadRefinanciacion.id.desc()]
+        if orden_tentativa == "desc"
+        else [disponible_desde_expr.asc(), OportunidadRefinanciacion.id.asc()]
+    )
     order_columns = (
-        [disponible_desde_expr.asc(), OportunidadRefinanciacion.id.asc()]
-        if vista in {"hoy", "proximos", "todos"}
+        tentativa_order
+        if vista in {"hoy", "proximos", "todos", "gestionados", "convertidos", "pospuestos"}
         else [OportunidadRefinanciacion.updated_at.desc(), OportunidadRefinanciacion.id.desc()]
     )
     oportunidades = (

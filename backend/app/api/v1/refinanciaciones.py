@@ -55,6 +55,7 @@ def listar_creditos_elegibles(
     fecha_desde: Optional[str] = Query(None),
     fecha_hasta: Optional[str] = Query(None),
     cooperativa_id: Optional[int] = Query(None),
+    orden_tentativa: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
@@ -92,6 +93,7 @@ def listar_creditos_elegibles(
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
         cooperativa_id=cooperativa_id,
+        orden_tentativa=orden_tentativa,
     )
     response.headers["X-Total-Count"] = str(result["total"])
     response.headers["X-Count-Hoy"] = str(result["counts"]["hoy"])

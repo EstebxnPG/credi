@@ -181,6 +181,7 @@ export default function CreditosPage() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
+  const [registroOrder, setRegistroOrder] = useState<"asc" | "desc">("desc");
   const [totalCreditos, setTotalCreditos] = useState(0);
   const [filters, setFilters] = useState<FilterValues>(emptyFilters);
   const [loading, setLoading] = useState(true);
@@ -204,6 +205,7 @@ export default function CreditosPage() {
       const creditosParams = new URLSearchParams({
         limit: String(PAGE_SIZE),
         skip: String((page - 1) * PAGE_SIZE),
+        orden_registro: registroOrder,
       });
       if (filters.estado) {
         creditosParams.set("estado", filters.estado);
@@ -278,7 +280,7 @@ export default function CreditosPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.estado, filters.refinanciacion, filters.tipoCredito, page]);
+  }, [filters.estado, filters.refinanciacion, filters.tipoCredito, page, registroOrder]);
 
   useEffect(() => {
     void loadData();
@@ -383,6 +385,11 @@ export default function CreditosPage() {
   function updateFilters(nextFilters: FilterValues) {
     setPage(1);
     setFilters(nextFilters);
+  }
+
+  function toggleRegistroOrder() {
+    setPage(1);
+    setRegistroOrder((current) => (current === "desc" ? "asc" : "desc"));
   }
 
   function goToPage(value: string) {
@@ -876,7 +883,14 @@ export default function CreditosPage() {
             <span>Tipo</span>
             <span>Estado</span>
             <span>Solicitado</span>
-            <span>Registro</span>
+            <button
+              type="button"
+              className="w-fit text-left uppercase tracking-[0.16em] text-stone-500 transition hover:text-teal-700"
+              onClick={toggleRegistroOrder}
+              title={registroOrder === "desc" ? "Ver registros mas antiguos primero" : "Ver registros mas recientes primero"}
+            >
+              Registro {registroOrder === "desc" ? "recientes" : "antiguos"}
+            </button>
             <span className="text-right">Acciones</span>
           </div>
 

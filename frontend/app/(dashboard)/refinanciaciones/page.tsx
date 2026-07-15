@@ -71,6 +71,7 @@ export default function RefinanciacionesPage() {
   const [vista, setVista] = useState<Vista>("hoy");
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
+  const [tentativaOrder, setTentativaOrder] = useState<"asc" | "desc">("asc");
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState({
     montoMin: "",
@@ -137,6 +138,7 @@ export default function RefinanciacionesPage() {
       }
 
       params.set("vista", vista);
+      params.set("orden_tentativa", tentativaOrder);
       if (filters.montoMin) params.set("monto_min", filters.montoMin);
       if (filters.montoMax) params.set("monto_max", filters.montoMax);
       if (filters.fechaDesde) params.set("fecha_desde", filters.fechaDesde);
@@ -172,7 +174,7 @@ export default function RefinanciacionesPage() {
       setHasLoadedOnce(true);
       setLoading(false);
     }
-  }, [cooperativas.length, filters, page, query, vista]);
+  }, [cooperativas.length, filters, page, query, tentativaOrder, vista]);
 
   useEffect(() => {
     void load();
@@ -184,6 +186,11 @@ export default function RefinanciacionesPage() {
 
   function resetPage() {
     setPage(1);
+  }
+
+  function toggleTentativaOrder() {
+    setPage(1);
+    setTentativaOrder((current) => (current === "asc" ? "desc" : "asc"));
   }
 
   function goToPage(value: string) {
@@ -481,13 +488,21 @@ export default function RefinanciacionesPage() {
         <table className="min-w-full text-left text-sm">
           <thead className="border-b bg-stone-50 text-xs uppercase text-stone-500">
             <tr>
-              {["Credito base", "Pensionado", "Cooperativa", "Tentativa para refi", "Estado", "Gestion"].map(
-                (header) => (
-                  <th key={header} className="px-4 py-3">
-                    {header}
-                  </th>
-                ),
-              )}
+              <th className="px-4 py-3">Credito base</th>
+              <th className="px-4 py-3">Pensionado</th>
+              <th className="px-4 py-3">Cooperativa</th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  className="text-left uppercase transition hover:text-teal-700"
+                  onClick={toggleTentativaOrder}
+                  title={tentativaOrder === "asc" ? "Ver fechas mas lejanas primero" : "Ver fechas mas cercanas primero"}
+                >
+                  Tentativa para refi {tentativaOrder === "asc" ? "cercanas" : "lejanas"}
+                </button>
+              </th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3">Gestion</th>
             </tr>
           </thead>
           <tbody className="divide-y">

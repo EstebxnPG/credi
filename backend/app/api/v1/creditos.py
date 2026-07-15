@@ -42,6 +42,7 @@ def listar_creditos(
     fecha_desde: Optional[date] = Query(None),
     fecha_hasta: Optional[date] = Query(None),
     texto: Optional[str] = Query(None),
+    orden_registro: str = Query("desc", pattern="^(asc|desc)$"),
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
     response: Response = None,
@@ -78,6 +79,7 @@ def listar_creditos(
         usuario_actual,
         skip,
         limit,
+        orden_registro,
     )
 
 
