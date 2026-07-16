@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select, desc, func, or_
+from datetime import date
+
+from sqlalchemy import Date, select, desc, func, or_, cast
 from app.db.models.pensionado import Pensionado, PensionadoOficina
 from app.schemas.pensionado import PensionadoCreate, PensionadoUpdate
 from typing import Optional
@@ -37,6 +39,8 @@ class PensionadoRepository:
         oficina_id: int | None = None,
         texto: str | None = None,
         activo: bool | None = None,
+        fecha_desde: date | None = None,
+        fecha_hasta: date | None = None,
     ) -> list[Pensionado]:
         stmt = self._apply_filters(
             select(Pensionado),
@@ -44,6 +48,8 @@ class PensionadoRepository:
             oficina_id=oficina_id,
             texto=texto,
             activo=activo,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
         ).order_by(desc(Pensionado.is_active), Pensionado.id.desc()).offset(skip).limit(limit)
         return list(self.db.execute(stmt).scalars().all())
 
@@ -53,6 +59,8 @@ class PensionadoRepository:
         oficina_id: int | None = None,
         texto: str | None = None,
         activo: bool | None = None,
+        fecha_desde: date | None = None,
+        fecha_hasta: date | None = None,
     ) -> int:
         stmt = self._apply_filters(
             select(func.count(Pensionado.id)),
@@ -60,6 +68,8 @@ class PensionadoRepository:
             oficina_id=oficina_id,
             texto=texto,
             activo=activo,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
         )
         return int(self.db.execute(stmt).scalar_one())
 
@@ -70,6 +80,8 @@ class PensionadoRepository:
         oficina_id: int | None,
         texto: str | None,
         activo: bool | None,
+        fecha_desde: date | None,
+        fecha_hasta: date | None,
     ):
         if solo_activos:
             stmt = stmt.where(Pensionado.is_active == True)
@@ -94,6 +106,10 @@ class PensionadoRepository:
                     Pensionado.direccion.ilike(term),
                 )
             )
+        if fecha_desde is not None:
+            stmt = stmt.where(cast(Pensionado.created_at, Date) >= fecha_desde)
+        if fecha_hasta is not None:
+            stmt = stmt.where(cast(Pensionado.created_at, Date) <= fecha_hasta)
         return stmt
 
     def create(self, data: PensionadoCreate, oficina_id: int, usuario_id: int) -> Pensionado:

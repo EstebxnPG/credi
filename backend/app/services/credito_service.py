@@ -560,7 +560,9 @@ def listar_creditos(
                 cast(Credito.id, String).ilike(term),
                 Credito.estado.ilike(term),
                 Credito.tipo_credito.ilike(term),
-                Pensionado.nombre_completo.ilike(term),
+                Pensionado.nombre.ilike(term),
+                Pensionado.segundo_nombre.ilike(term),
+                Pensionado.apellidos.ilike(term),
                 Pensionado.documento.ilike(term),
                 Oficina.nombre.ilike(term),
             )
@@ -620,7 +622,9 @@ def contar_creditos(
                 cast(Credito.id, String).ilike(term),
                 Credito.estado.ilike(term),
                 Credito.tipo_credito.ilike(term),
-                Pensionado.nombre_completo.ilike(term),
+                Pensionado.nombre.ilike(term),
+                Pensionado.segundo_nombre.ilike(term),
+                Pensionado.apellidos.ilike(term),
                 Pensionado.documento.ilike(term),
                 Oficina.nombre.ilike(term),
             )

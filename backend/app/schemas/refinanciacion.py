@@ -91,6 +91,8 @@ class RefinanciacionElegibleRead(BaseModel):
     pensionado_id: int
     pensionado_nombre: str | None = None
     documento: str | None = None
+    oficina_id: int
+    oficina_nombre: str | None = None
     cooperativa_id: int
     cooperativa_nombre: str | None = None
     simulador_url: str | None = None

@@ -12,6 +12,7 @@ from app.db.models.pensionado import Pensionado
 from app.db.models.refinanciacion import OportunidadRefinanciacion, Refinanciacion
 from app.db.models.seguimiento import Seguimiento, SeguimientoSolucion
 from app.db.models.usuario import Usuario
+from app.services import refinanciacion_service
 
 
 ESTADOS_ACTIVOS = {
@@ -377,7 +378,9 @@ def obtener_resumen_creditos_reporte(
                 cast(Credito.id, String).ilike(term),
                 Credito.estado.ilike(term),
                 Credito.tipo_credito.ilike(term),
-                Pensionado.nombre_completo.ilike(term),
+                Pensionado.nombre.ilike(term),
+                Pensionado.segundo_nombre.ilike(term),
+                Pensionado.apellidos.ilike(term),
                 Pensionado.documento.ilike(term),
                 Oficina.nombre.ilike(term),
             )
@@ -452,7 +455,7 @@ def _metricas_pensionados(db, usuario_actual, oficina_id, desde, hasta, texto):
     query = _date_filter(query, Pensionado.created_at, desde, hasta)
     if texto:
         term = f"%{texto.strip()}%"
-        query = query.filter(or_(Pensionado.nombre_completo.ilike(term), Pensionado.documento.ilike(term), Pensionado.correo.ilike(term), Pensionado.telefono.ilike(term), Pensionado.celular.ilike(term)))
+        query = query.filter(or_(Pensionado.nombre.ilike(term), Pensionado.segundo_nombre.ilike(term), Pensionado.apellidos.ilike(term), Pensionado.documento.ilike(term), Pensionado.correo.ilike(term), Pensionado.telefono.ilike(term), Pensionado.celular.ilike(term)))
     total, oficinas, creadores = query.with_entities(func.count(Pensionado.id), func.count(func.distinct(Pensionado.oficina_id)), func.count(func.distinct(Pensionado.created_by))).one()
     inicio_mes = date.today().replace(day=1)
     mes = query.filter(cast(Pensionado.created_at, Date) >= inicio_mes).count()
@@ -466,7 +469,7 @@ def _metricas_seguimientos(db, usuario_actual, oficina_id, desde, hasta, texto):
     query = _date_filter(query, Seguimiento.created_at, desde, hasta)
     if texto:
         term = f"%{texto.strip()}%"
-        query = query.outerjoin(Pensionado, Pensionado.id == Seguimiento.pensionado_id).outerjoin(Usuario, Usuario.id == Seguimiento.usuario_id).outerjoin(Oficina, Oficina.id == Seguimiento.oficina_id).filter(or_(Pensionado.nombre_completo.ilike(term), Seguimiento.tipo.ilike(term), Seguimiento.comentario.ilike(term), Seguimiento.resultado.ilike(term), Usuario.nombre.ilike(term), Oficina.nombre.ilike(term)))
+        query = query.outerjoin(Pensionado, Pensionado.id == Seguimiento.pensionado_id).outerjoin(Usuario, Usuario.id == Seguimiento.usuario_id).outerjoin(Oficina, Oficina.id == Seguimiento.oficina_id).filter(or_(Pensionado.nombre.ilike(term), Pensionado.segundo_nombre.ilike(term), Pensionado.apellidos.ilike(term), Seguimiento.tipo.ilike(term), Seguimiento.comentario.ilike(term), Seguimiento.resultado.ilike(term), Usuario.nombre.ilike(term), Oficina.nombre.ilike(term)))
     total, programados, con_resultado = query.with_entities(func.count(Seguimiento.id), func.sum(case((Seguimiento.fecha_proximo_contacto.isnot(None), 1), else_=0)), func.sum(case((Seguimiento.resultado.isnot(None), 1), else_=0))).one()
     return {"seguimientos": total or 0, "programados": programados or 0, "conResultado": con_resultado or 0, "sinResultado": (total or 0) - (con_resultado or 0)}
 
@@ -480,7 +483,7 @@ def _metricas_documentos(db, usuario_actual, oficina_id, desde, hasta, texto):
     query = _date_filter(query, Documento.created_at, desde, hasta)
     if texto:
         term = f"%{texto.strip()}%"
-        query = query.outerjoin(Pensionado, Pensionado.id == Credito.pensionado_id).filter(or_(Documento.nombre.ilike(term), Documento.tipo.ilike(term), cast(Documento.credito_id, String).ilike(term), Pensionado.nombre_completo.ilike(term)))
+        query = query.outerjoin(Pensionado, Pensionado.id == Credito.pensionado_id).filter(or_(Documento.nombre.ilike(term), Documento.tipo.ilike(term), cast(Documento.credito_id, String).ilike(term), Pensionado.nombre.ilike(term), Pensionado.segundo_nombre.ilike(term), Pensionado.apellidos.ilike(term)))
     total, pdf, creditos = query.with_entities(func.count(Documento.id), func.sum(case((Documento.tipo == "PDF", 1), else_=0)), func.count(func.distinct(Documento.credito_id))).one()
     return {"documentos": total or 0, "pdf": pdf or 0, "imagenes": (total or 0) - (pdf or 0), "creditosConDocs": creditos or 0}
 
@@ -512,19 +515,33 @@ def _metricas_oficinas(db, usuario_actual, oficina_id):
 
 
 def _metricas_refinanciaciones(db, usuario_actual, oficina_id, desde, hasta, texto, estado_comercial):
-    query = db.query(OportunidadRefinanciacion).join(Credito, Credito.id == OportunidadRefinanciacion.credito_id)
-    if usuario_actual.rol != "administrador":
-        query = query.filter(OportunidadRefinanciacion.oficina_id == usuario_actual.oficina_id)
-    if oficina_id is not None:
-        query = query.filter(OportunidadRefinanciacion.oficina_id == oficina_id)
-    if estado_comercial:
-        query = query.filter(OportunidadRefinanciacion.estado == estado_comercial)
-    query = _date_filter(query, OportunidadRefinanciacion.reactivar_en, desde, hasta)
-    if texto:
-        term = f"%{texto.strip()}%"
-        query = query.outerjoin(Pensionado, Pensionado.id == Credito.pensionado_id).outerjoin(Cooperativa, Cooperativa.id == Credito.cooperativa_id).filter(or_(cast(Credito.id, String).ilike(term), Cooperativa.nombre.ilike(term), OportunidadRefinanciacion.estado.ilike(term), Pensionado.nombre_completo.ilike(term), Pensionado.documento.ilike(term)))
-    total, disponibles, programadas, convertidas = query.with_entities(func.count(OportunidadRefinanciacion.id), func.sum(case((OportunidadRefinanciacion.estado == "disponible", 1), else_=0)), func.sum(case((OportunidadRefinanciacion.estado == "programado", 1), else_=0)), func.sum(case((OportunidadRefinanciacion.estado == "convertido", 1), else_=0))).one()
-    return {"oportunidades": total or 0, "disponiblesAhora": disponibles or 0, "programadas": programadas or 0, "convertidas": convertidas or 0}
+    vista = "todos"
+    if estado_comercial == "pospuesto":
+        vista = "pospuestos"
+    elif estado_comercial == "convertido":
+        vista = "convertidos"
+
+    result = refinanciacion_service.listar_creditos_elegibles_paginados(
+        db,
+        usuario_actual,
+        skip=0,
+        limit=1,
+        vista=vista,
+        texto=texto,
+        fecha_desde=desde.isoformat() if desde else None,
+        fecha_hasta=hasta.isoformat() if hasta else None,
+        oficina_id=oficina_id,
+        estado_comercial=estado_comercial,
+    )
+    counts = result["counts"]
+    return {
+        "oportunidades": result["total"],
+        "disponiblesAhora": counts["hoy"],
+        "programadas": counts["proximos"],
+        "gestionadas": counts["gestionados"],
+        "convertidas": counts["convertidos"],
+        "pospuestas": counts["pospuestos"],
+    }
 
 
 def _metricas_asesoras(db, usuario_actual, oficina_id, texto):

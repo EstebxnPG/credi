@@ -317,10 +317,12 @@ def listar_creditos_elegibles(
             elegibles.append(
                 {
                     "credito_id": credito.id,
-                    "pensionado_id": credito.pensionado_id,
-                    "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
-                    "documento": credito.pensionado.documento if credito.pensionado else None,
-                    "cooperativa_id": credito.cooperativa_id,
+            "pensionado_id": credito.pensionado_id,
+            "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
+            "documento": credito.pensionado.documento if credito.pensionado else None,
+            "oficina_id": credito.oficina_id,
+            "oficina_nombre": credito.oficina.nombre if credito.oficina else None,
+            "cooperativa_id": credito.cooperativa_id,
                     "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
                     "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,
                     "monto_aprobado": credito.monto_aprobado,
@@ -359,6 +361,7 @@ def obtener_credito_elegible(
         db.query(Credito)
         .options(
             selectinload(Credito.pensionado),
+            selectinload(Credito.oficina),
             selectinload(Credito.cooperativa),
             selectinload(Credito.cooperativa).selectinload(Cooperativa.reglas_refinanciacion),
         )
@@ -429,6 +432,8 @@ def obtener_credito_elegible(
         "pensionado_id": credito.pensionado_id,
         "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
         "documento": credito.pensionado.documento if credito.pensionado else None,
+        "oficina_id": credito.oficina_id,
+        "oficina_nombre": credito.oficina.nombre if credito.oficina else None,
         "cooperativa_id": credito.cooperativa_id,
         "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
         "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,
@@ -496,7 +501,9 @@ def listar_creditos_elegibles_paginados(
     monto_max: float | None = None,
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
+    oficina_id: int | None = None,
     cooperativa_id: int | None = None,
+    estado_comercial: str | None = None,
     orden_tentativa: str = "asc",
 ) -> dict:
     fecha_min = _parse_date_filter(fecha_desde, "fecha_desde")
@@ -536,6 +543,7 @@ def listar_creditos_elegibles_paginados(
         .join(Credito.pensionado)
         .options(
             selectinload(OportunidadRefinanciacion.credito).selectinload(Credito.pensionado),
+            selectinload(OportunidadRefinanciacion.credito).selectinload(Credito.oficina),
             selectinload(OportunidadRefinanciacion.credito).selectinload(Credito.cooperativa),
             selectinload(OportunidadRefinanciacion.credito)
             .selectinload(Credito.cooperativa)
@@ -550,6 +558,8 @@ def listar_creditos_elegibles_paginados(
 
     if usuario_actual and usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+    elif oficina_id is not None:
+        query = query.filter(Credito.oficina_id == oficina_id)
     if cooperativa_id is not None:
         query = query.filter(Credito.cooperativa_id == cooperativa_id)
     if monto_min is not None:
@@ -572,6 +582,8 @@ def listar_creditos_elegibles_paginados(
                 Cooperativa.nombre.ilike(like_term),
             )
         )
+    if estado_comercial:
+        query = query.filter(OportunidadRefinanciacion.estado == estado_comercial)
 
     base_count_query = query
 
@@ -870,6 +882,8 @@ def _oportunidad_to_elegible_item(
         "pensionado_id": credito.pensionado_id,
         "pensionado_nombre": credito.pensionado.nombre_completo if credito.pensionado else None,
         "documento": credito.pensionado.documento if credito.pensionado else None,
+        "oficina_id": credito.oficina_id,
+        "oficina_nombre": credito.oficina.nombre if credito.oficina else None,
         "cooperativa_id": credito.cooperativa_id,
         "cooperativa_nombre": credito.cooperativa.nombre if credito.cooperativa else None,
         "simulador_url": credito.cooperativa.simulador_url if credito.cooperativa else None,

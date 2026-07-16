@@ -108,14 +108,24 @@ type Oficina = {
 
 type Refinanciacion = {
   credito_id: number;
+  pensionado_id: number;
   pensionado_nombre: string | null;
   documento: string | null;
+  oficina_id: number;
+  oficina_nombre: string | null;
   cooperativa_nombre: string | null;
   monto_aprobado: number | null;
+  fecha_base: string;
   disponible_desde: string;
+  meses_transcurridos: number;
+  meses_requeridos: number | null;
+  tipo_liberacion: string;
+  porcentaje_avance: number | null;
+  porcentaje_requerido: number | null;
   estado_comercial: string;
   estado_refinanciacion: string;
   reactivar_en: string | null;
+  credito_nuevo_id: number | null;
 };
 
 type Asesora = {
@@ -185,6 +195,7 @@ export default function ReportesPage() {
   const [pageInput, setPageInput] = useState("1");
   const [totalByReport, setTotalByReport] = useState<Record<ReportKey, number>>(emptyTotalState);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedReports, setHasLoadedReports] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const currentPage = pageByReport[active] ?? 1;
@@ -202,30 +213,53 @@ export default function ReportesPage() {
           limit: String(PAGE_SIZE),
           skip: String(skip),
         });
+        const pensionadosParams = new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          skip: String(skip),
+        });
+        const refinanciacionesParams = new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          skip: String(skip),
+          vista: "todos",
+        });
         const creditosSummaryParams = new URLSearchParams();
         const activeSummaryParams = new URLSearchParams();
         if (oficinaId) {
           creditosParams.set("oficina_id", oficinaId);
+          pensionadosParams.set("oficina_id", oficinaId);
+          refinanciacionesParams.set("oficina_id", oficinaId);
           creditosSummaryParams.set("oficina_id", oficinaId);
           activeSummaryParams.set("oficina_id", oficinaId);
         }
         if (desde) {
           creditosParams.set("fecha_desde", desde);
+          pensionadosParams.set("fecha_desde", desde);
+          refinanciacionesParams.set("fecha_desde", desde);
           creditosSummaryParams.set("desde", desde);
           activeSummaryParams.set("desde", desde);
         }
         if (hasta) {
           creditosParams.set("fecha_hasta", hasta);
+          pensionadosParams.set("fecha_hasta", hasta);
+          refinanciacionesParams.set("fecha_hasta", hasta);
           creditosSummaryParams.set("hasta", hasta);
           activeSummaryParams.set("hasta", hasta);
         }
         if (query.trim()) {
           creditosParams.set("texto", query.trim());
+          pensionadosParams.set("texto", query.trim());
+          refinanciacionesParams.set("texto", query.trim());
           creditosSummaryParams.set("texto", query.trim());
           activeSummaryParams.set("texto", query.trim());
         }
         if (active === "refinanciaciones" && estadoComercial) {
           activeSummaryParams.set("estado_comercial", estadoComercial);
+          refinanciacionesParams.set("estado_comercial", estadoComercial);
+          if (estadoComercial === "pospuesto") {
+            refinanciacionesParams.set("vista", "pospuestos");
+          } else if (estadoComercial === "convertido") {
+            refinanciacionesParams.set("vista", "convertidos");
+          }
         }
         const [
           creditosResponse,
@@ -247,12 +281,12 @@ export default function ReportesPage() {
             apiFetch<ReportSummary>(
               `/api/v1/reportes/${active}/metricas?${activeSummaryParams.toString()}`,
             ),
-            apiFetchWithMeta<Pensionado[]>(`/api/v1/pensionados/?${pageParams}`),
+            apiFetchWithMeta<Pensionado[]>(`/api/v1/pensionados/?${pensionadosParams.toString()}`),
             apiFetchWithMeta<Seguimiento[]>(`/api/v1/seguimientos/?${pageParams}`),
             apiFetchWithMeta<Documento[]>(`/api/v1/documentos/?${pageParams}`),
             apiFetchWithMeta<Pendiente[]>(`/api/v1/pendientes-credito/?${pageParams}`),
             apiFetch<Oficina[]>("/api/v1/oficinas/?solo_activas=false"),
-            apiFetchWithMeta<Refinanciacion[]>(`/api/v1/refinanciaciones/elegibles/?${pageParams}`),
+            apiFetchWithMeta<Refinanciacion[]>(`/api/v1/refinanciaciones/elegibles/?${refinanciacionesParams.toString()}`),
             apiFetchWithMeta<Asesora[]>(`/api/v1/usuarios/?${pageParams}`),
           ]);
 
@@ -278,10 +312,7 @@ export default function ReportesPage() {
             documentos: readTotal(documentosResponse.headers, documentosResponse.data.length),
             pendientes: readTotal(pendientesResponse.headers, pendientesResponse.data.length),
             oficinas: oficinasData.length,
-            refinanciaciones: readTotal(
-              refinanciacionesResponse.headers,
-              refinanciacionesResponse.data.length,
-            ),
+            refinanciaciones: readTotal(refinanciacionesResponse.headers, refinanciacionesResponse.data.length),
             asesoras: readTotal(usuariosResponse.headers, usuariosResponse.data.length),
           });
         }
@@ -296,6 +327,7 @@ export default function ReportesPage() {
       } finally {
         if (!ignore) {
           setLoading(false);
+          setHasLoadedReports(true);
         }
       }
     }
@@ -451,23 +483,20 @@ export default function ReportesPage() {
 
   const filteredRefinanciaciones = useMemo(
     () =>
-      refinanciaciones.filter((item) => {
-        const credito = creditos.find((creditoItem) => creditoItem.id === item.credito_id);
-        const pensionado = credito ? pensionadoById.get(credito.pensionado_id) : undefined;
-        return (
-          (!oficinaId || credito?.oficina_id === Number(oficinaId)) &&
-          inDateRange(item.disponible_desde, desde, hasta) &&
-          (!estadoComercial || item.estado_comercial === estadoComercial) &&
-          matchesQuery(query, [
-            item.credito_id,
-            item.cooperativa_nombre,
-            item.estado_comercial,
-            pensionado?.nombre_completo,
-            pensionado?.documento,
-          ])
-        );
-      }),
-    [creditos, desde, estadoComercial, hasta, oficinaId, pensionadoById, query, refinanciaciones],
+      refinanciaciones.filter((item) =>
+        (!oficinaId || item.oficina_id === Number(oficinaId)) &&
+        inDateRange(item.disponible_desde, desde, hasta) &&
+        (!estadoComercial || item.estado_comercial === estadoComercial) &&
+        matchesQuery(query, [
+          item.credito_id,
+          item.pensionado_nombre,
+          item.documento,
+          item.oficina_nombre,
+          item.cooperativa_nombre,
+          item.estado_comercial,
+        ]),
+      ),
+    [desde, estadoComercial, hasta, oficinaId, query, refinanciaciones],
   );
 
   const asesoraRows = useMemo(
@@ -547,7 +576,7 @@ export default function ReportesPage() {
     setHasta(today);
   }
 
-  if (loading) {
+  if (loading && !hasLoadedReports) {
     return <StateMessage text="Cargando reportes..." />;
   }
 
@@ -563,6 +592,7 @@ export default function ReportesPage() {
       </header>
 
       {error ? <StateMessage tone="error" text={error} /> : null}
+      {loading ? <StateMessage text="Actualizando reportes..." /> : null}
 
       <div className="flex flex-wrap gap-2 border-b border-stone-800/10 pb-3">
         {reports.map((report) => (
@@ -636,7 +666,7 @@ export default function ReportesPage() {
               resetActivePage();
               setEstadoComercial(event.target.value);
             }}>
-              <option value="">Todos</option><option value="programado">Programado</option><option value="disponible">Disponible</option><option value="contactado">Contactado</option><option value="aceptado">Aceptado</option><option value="rechazado">Rechazado</option><option value="convertido">Convertido</option>
+              <option value="">Todos</option><option value="programado">Programado</option><option value="disponible">Disponible</option><option value="contactado">Contactado</option><option value="aceptado">Aceptado</option><option value="rechazado">Rechazado</option><option value="pospuesto">Pospuesto</option><option value="convertido">Convertido</option>
             </select>
           </label>
         </div>
@@ -659,8 +689,6 @@ export default function ReportesPage() {
       {active === "refinanciaciones" ? (
         <RefinanciacionesReport
           items={filteredRefinanciaciones}
-          creditos={creditos}
-          pensionadoById={pensionadoById}
           summary={activeSummary}
         />
       ) : null}
@@ -723,7 +751,9 @@ function CreditosReport({
           <tr key={item.id}>
             <Cell><Link className="font-semibold text-teal-800" href={`/creditos/${item.id}`}>#{item.id}</Link></Cell>
             <Cell>
-              {item.pensionado_nombre ?? `Pensionado #${item.pensionado_id}`}
+              <Link className="font-semibold text-teal-800" href={`/pensionados/${item.pensionado_id}`}>
+                {item.pensionado_nombre ?? `Pensionado #${item.pensionado_id}`}
+              </Link>
               {item.pensionado_documento ? (
                 <p className="mt-1 text-xs text-stone-500">{item.pensionado_documento}</p>
               ) : null}
@@ -883,13 +913,9 @@ function OficinasReport({
 
 function RefinanciacionesReport({
   items,
-  creditos,
-  pensionadoById,
   summary,
 }: {
   items: Refinanciacion[];
-  creditos: Credito[];
-  pensionadoById: Map<number, Pensionado>;
   summary: ReportSummary;
 }) {
   return (
@@ -899,40 +925,66 @@ function RefinanciacionesReport({
           ["Oportunidades", String(summary.oportunidades ?? 0)],
           ["Disponibles ahora", String(summary.disponiblesAhora ?? 0)],
           ["Programadas", String(summary.programadas ?? 0)],
+          ["En gestion", String(summary.gestionadas ?? 0)],
           ["Convertidas", String(summary.convertidas ?? 0)],
+          ["Pospuestas", String(summary.pospuestas ?? 0)],
         ]}
       />
       <ReportTable
         headers={[
           "Credito",
           "Pensionado",
+          "Oficina",
           "Cooperativa",
           "Tentativa para refi",
           "Estado comercial",
           "Monto anterior",
         ]}
       >
-        {items.map((item) => {
-          const credito = creditos.find((creditoItem) => creditoItem.id === item.credito_id);
-          const pensionado = credito ? pensionadoById.get(credito.pensionado_id) : undefined;
-          return (
-            <tr key={item.credito_id}>
-              <Cell>
-                <Link
-                  className="font-semibold text-teal-800"
-                  href={`/creditos/${item.credito_id}`}
-                >
-                  #{item.credito_id}
-                </Link>
-              </Cell>
-              <Cell>{pensionado?.nombre_completo ?? "Sin pensionado"}</Cell>
-              <Cell>{item.cooperativa_nombre ?? "Sin cooperativa"}</Cell>
-              <Cell>{formatDate(item.disponible_desde)}</Cell>
-              <Cell><SoftStatus value={item.estado_comercial} /></Cell>
-              <Cell>{formatCurrency(item.monto_aprobado)}</Cell>
-            </tr>
-          );
-        })}
+        {items.map((item) => (
+          <tr key={item.credito_id}>
+            <Cell>
+              <Link
+                className="font-semibold text-teal-800"
+                href={`/creditos/${item.credito_id}`}
+              >
+                #{item.credito_id}
+              </Link>
+              {item.credito_nuevo_id ? (
+                <p className="mt-1 text-xs text-stone-500">
+                  Nuevo:{" "}
+                  <Link className="font-semibold text-teal-700" href={`/creditos/${item.credito_nuevo_id}`}>
+                    #{item.credito_nuevo_id}
+                  </Link>
+                </p>
+              ) : null}
+            </Cell>
+            <Cell>
+              <Link className="font-semibold text-teal-800" href={`/pensionados/${item.pensionado_id}`}>
+                {item.pensionado_nombre ?? `Pensionado #${item.pensionado_id}`}
+              </Link>
+              <p className="mt-1 text-xs text-stone-500">{item.documento ?? "Sin documento"}</p>
+            </Cell>
+            <Cell>{item.oficina_nombre ?? `Oficina #${item.oficina_id}`}</Cell>
+            <Cell>{item.cooperativa_nombre ?? "Sin cooperativa"}</Cell>
+            <Cell>
+              <p>{formatDate(item.disponible_desde)}</p>
+              <p className="mt-1 text-xs text-stone-500">
+                Base {formatDate(item.fecha_base)} -{" "}
+                {item.tipo_liberacion === "porcentaje"
+                  ? `${item.porcentaje_avance ?? 0}% / ${item.porcentaje_requerido ?? 0}%`
+                  : `${item.meses_transcurridos} / ${item.meses_requeridos ?? 0} meses`}
+              </p>
+            </Cell>
+            <Cell>
+              <SoftStatus value={item.estado_comercial} />
+              {item.reactivar_en ? (
+                <p className="mt-1 text-xs text-stone-500">{formatDateTime(item.reactivar_en)}</p>
+              ) : null}
+            </Cell>
+            <Cell>{formatCurrency(item.monto_aprobado)}</Cell>
+          </tr>
+        ))}
       </ReportTable>
     </>
   );
@@ -1021,8 +1073,15 @@ function SoftStatus({ value }: { value: string }) {
 }
 
 function Metrics({ values }: { values: Array<[string, string]> }) {
+  const columnsClass =
+    values.length >= 6
+      ? "xl:grid-cols-6"
+      : values.length === 5
+        ? "xl:grid-cols-5"
+        : "xl:grid-cols-4";
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className={`grid gap-3 sm:grid-cols-2 ${columnsClass}`}>
       {values.map(([label, value]) => (
         <div key={label} className="border-b border-stone-800/10 px-1 py-3">
           <p className="text-xs uppercase tracking-[0.16em] text-stone-500">{label}</p>

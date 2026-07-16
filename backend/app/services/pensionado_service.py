@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from fastapi.encoders import jsonable_encoder
@@ -93,8 +95,11 @@ class PensionadoService:
         solo_activos: bool = False,
         texto: str | None = None,
         activo: bool | None = None,
+        oficina_id: int | None = None,
+        fecha_desde: date | None = None,
+        fecha_hasta: date | None = None,
     ):
-        oficina_id = None if usuario.rol == "administrador" else usuario.oficina_id
+        oficina_id = oficina_id if usuario.rol == "administrador" else usuario.oficina_id
         return self.repo.get_all(
             skip=skip,
             limit=limit,
@@ -102,6 +107,8 @@ class PensionadoService:
             oficina_id=oficina_id,
             texto=texto,
             activo=activo,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
         )
 
     def contar(
@@ -110,13 +117,18 @@ class PensionadoService:
         solo_activos: bool = False,
         texto: str | None = None,
         activo: bool | None = None,
+        oficina_id: int | None = None,
+        fecha_desde: date | None = None,
+        fecha_hasta: date | None = None,
     ) -> int:
-        oficina_id = None if usuario.rol == "administrador" else usuario.oficina_id
+        oficina_id = oficina_id if usuario.rol == "administrador" else usuario.oficina_id
         return self.repo.count_all(
             solo_activos=solo_activos,
             oficina_id=oficina_id,
             texto=texto,
             activo=activo,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
         )
 
     def actualizar(self, pensionado_id: int, data: PensionadoUpdate, usuario: Usuario):

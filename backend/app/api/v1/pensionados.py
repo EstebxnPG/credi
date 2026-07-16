@@ -1,3 +1,4 @@
+from datetime import date
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -24,12 +25,23 @@ def listar_pensionados(
     solo_activos: bool = False,
     texto: str | None = None,
     activo: bool | None = None,
+    oficina_id: int | None = Query(None),
+    fecha_desde: date | None = Query(None),
+    fecha_hasta: date | None = Query(None),
     response: Response = None,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
     service = PensionadoService(db)
-    total = service.contar(usuario=usuario, solo_activos=solo_activos, texto=texto, activo=activo)
+    total = service.contar(
+        usuario=usuario,
+        solo_activos=solo_activos,
+        texto=texto,
+        activo=activo,
+        oficina_id=oficina_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+    )
     if response is not None:
         response.headers["X-Total-Count"] = str(total)
 
@@ -39,6 +51,9 @@ def listar_pensionados(
         solo_activos=solo_activos,
         texto=texto,
         activo=activo,
+        oficina_id=oficina_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
     )
 
 @router.get("/buscar/documento/{documento}", response_model=PensionadoLookup)
