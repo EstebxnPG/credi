@@ -4,13 +4,16 @@ Lógica de negocio para documentos de créditos con versionado y soft delete.
 """
 from pathlib import Path
 from uuid import uuid4
+from datetime import date, datetime, time
 
 from fastapi import HTTPException, status
 from fastapi.responses import FileResponse
+from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
 from app.db.models.credito import Credito
 from app.db.models.documento import Documento
+from app.db.models.pensionado import Pensionado
 from app.db.models.usuario import Usuario
 from app.schemas.documento import DocumentoReplaceResponse
 from app.services.log_service import registrar_log
@@ -173,16 +176,23 @@ def listar_documentos(
     usuario_actual: Usuario,
     credito_id: int | None = None,
     solo_activos: bool = True,
+    oficina_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
     skip: int = 0,
     limit: int = 15,
 ) -> list[Documento]:
-    query = db.query(Documento).join(Documento.credito)
-    if usuario_actual.rol != "administrador":
-        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
-    if credito_id is not None:
-        query = query.filter(Documento.credito_id == credito_id)
-    if solo_activos:
-        query = query.filter(Documento.is_active == True)  # noqa: E712
+    query = _documentos_query(
+        db,
+        usuario_actual,
+        credito_id=credito_id,
+        solo_activos=solo_activos,
+        oficina_id=oficina_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        texto=texto,
+    )
     return query.order_by(Documento.created_at.desc()).offset(skip).limit(limit).all()
 
 
@@ -191,15 +201,60 @@ def contar_documentos(
     usuario_actual: Usuario,
     credito_id: int | None = None,
     solo_activos: bool = True,
+    oficina_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
 ) -> int:
+    return _documentos_query(
+        db,
+        usuario_actual,
+        credito_id=credito_id,
+        solo_activos=solo_activos,
+        oficina_id=oficina_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        texto=texto,
+    ).count()
+
+
+def _documentos_query(
+    db: Session,
+    usuario_actual: Usuario,
+    credito_id: int | None = None,
+    solo_activos: bool = True,
+    oficina_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
+):
     query = db.query(Documento).join(Documento.credito)
     if usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+    elif oficina_id is not None:
+        query = query.filter(Credito.oficina_id == oficina_id)
     if credito_id is not None:
         query = query.filter(Documento.credito_id == credito_id)
     if solo_activos:
         query = query.filter(Documento.is_active == True)  # noqa: E712
-    return query.count()
+    if fecha_desde is not None:
+        query = query.filter(Documento.created_at >= datetime.combine(fecha_desde, time.min))
+    if fecha_hasta is not None:
+        query = query.filter(Documento.created_at <= datetime.combine(fecha_hasta, time.max))
+    if texto:
+        term = f"%{texto.strip()}%"
+        query = query.outerjoin(Pensionado, Pensionado.id == Credito.pensionado_id).filter(
+            or_(
+                Documento.nombre.ilike(term),
+                Documento.tipo.ilike(term),
+                cast(Documento.credito_id, String).ilike(term),
+                Pensionado.nombre.ilike(term),
+                Pensionado.segundo_nombre.ilike(term),
+                Pensionado.apellidos.ilike(term),
+                Pensionado.documento.ilike(term),
+            )
+        )
+    return query
 
 
 def obtener_documento(db: Session, documento_id: int, usuario_actual: Usuario) -> Documento:

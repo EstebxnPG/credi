@@ -216,6 +216,9 @@ export default function CreditosPage() {
       if (filters.refinanciacion) {
         creditosParams.set("refinanciacion", filters.refinanciacion);
       }
+      if (query.trim()) {
+        creditosParams.set("texto", query.trim());
+      }
 
       const usuariosRequest =
         session?.rol === "administrador"
@@ -280,7 +283,7 @@ export default function CreditosPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.estado, filters.refinanciacion, filters.tipoCredito, page, registroOrder]);
+  }, [filters.estado, filters.refinanciacion, filters.tipoCredito, page, query, registroOrder]);
 
   useEffect(() => {
     void loadData();
@@ -323,12 +326,10 @@ export default function CreditosPage() {
   }, [usuarios]);
 
   const filtered = useMemo(() => {
-    const term = query.trim().toLowerCase();
     const plazoMin = filters.plazoMin ? Number(filters.plazoMin) : null;
     const plazoMax = filters.plazoMax ? Number(filters.plazoMax) : null;
 
     return creditos.filter((credito) => {
-      const pensionado = pensionadoById.get(credito.pensionado_id);
       const pendientesAbiertos = pendientesByCreditoId.get(credito.id) ?? [];
 
       if (filters.estado && credito.estado !== filters.estado) {
@@ -352,28 +353,9 @@ export default function CreditosPage() {
       if (filters.pendientes === "sin" && pendientesAbiertos.length > 0) {
         return false;
       }
-      if (!term) {
-        return true;
-      }
-
-      return [
-        credito.id,
-        credito.estado,
-        credito.monto_solicitado,
-        credito.plazo,
-        credito.nro_libranza,
-        credito.tipo_credito,
-        credito.pensionado_nombre,
-        credito.pensionado_documento,
-        credito.cooperativa_nombre,
-        credito.documentos_pendientes,
-        pensionado?.nombre_completo,
-        pensionado?.documento,
-      ]
-        .filter((value) => value !== null && value !== undefined)
-        .some((value) => String(value).toLowerCase().includes(term));
+      return true;
     });
-  }, [creditos, filters, pendientesByCreditoId, pensionadoById, query]);
+  }, [creditos, filters, pendientesByCreditoId]);
 
   const estadosDisponibles = useMemo(() => {
     return estadosCredito;

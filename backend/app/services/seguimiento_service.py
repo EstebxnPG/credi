@@ -169,6 +169,8 @@ def listar_seguimientos(
     estado: str | None = None,
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
+    fecha_creacion_desde: str | None = None,
+    fecha_creacion_hasta: str | None = None,
     fecha_rapida: str | None = None,
     texto: str | None = None,
     solo_pendientes: bool = False,
@@ -185,6 +187,8 @@ def listar_seguimientos(
         estado=estado,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
+        fecha_creacion_desde=fecha_creacion_desde,
+        fecha_creacion_hasta=fecha_creacion_hasta,
         fecha_rapida=fecha_rapida,
         texto=texto,
         solo_pendientes=solo_pendientes,
@@ -215,6 +219,8 @@ def contar_seguimientos(
     estado: str | None = None,
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
+    fecha_creacion_desde: str | None = None,
+    fecha_creacion_hasta: str | None = None,
     fecha_rapida: str | None = None,
     texto: str | None = None,
     solo_pendientes: bool = False,
@@ -229,6 +235,8 @@ def contar_seguimientos(
         estado=estado,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
+        fecha_creacion_desde=fecha_creacion_desde,
+        fecha_creacion_hasta=fecha_creacion_hasta,
         fecha_rapida=fecha_rapida,
         texto=texto,
         solo_pendientes=solo_pendientes,
@@ -260,6 +268,8 @@ def _seguimientos_query(
     estado: str | None = None,
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
+    fecha_creacion_desde: str | None = None,
+    fecha_creacion_hasta: str | None = None,
     fecha_rapida: str | None = None,
     texto: str | None = None,
     solo_pendientes: bool = False,
@@ -302,6 +312,13 @@ def _seguimientos_query(
             query = query.filter(Seguimiento.fecha_proximo_contacto >= datetime.combine(desde, time.min))
         if hasta:
             query = query.filter(Seguimiento.fecha_proximo_contacto <= datetime.combine(hasta, time.max))
+
+    creacion_desde = _parse_date(fecha_creacion_desde, "fecha_creacion_desde")
+    creacion_hasta = _parse_date(fecha_creacion_hasta, "fecha_creacion_hasta")
+    if creacion_desde:
+        query = query.filter(Seguimiento.created_at >= datetime.combine(creacion_desde, time.min))
+    if creacion_hasta:
+        query = query.filter(Seguimiento.created_at <= datetime.combine(creacion_hasta, time.max))
 
     if texto:
         term = f"%{texto.strip()}%"

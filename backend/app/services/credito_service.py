@@ -555,16 +555,24 @@ def listar_creditos(
         term = f"%{texto.strip()}%"
         query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
         query = query.outerjoin(Oficina, Oficina.id == Credito.oficina_id)
+        query = query.outerjoin(Cooperativa, Cooperativa.id == Credito.cooperativa_id)
         query = query.filter(
             or_(
                 cast(Credito.id, String).ilike(term),
                 Credito.estado.ilike(term),
                 Credito.tipo_credito.ilike(term),
+                Credito.nro_libranza.ilike(term),
+                Credito.entidad_financiera_origen.ilike(term),
+                Credito.documentos_pendientes.ilike(term),
+                cast(Credito.monto_solicitado, String).ilike(term),
+                cast(Credito.monto_aprobado, String).ilike(term),
+                cast(Credito.plazo, String).ilike(term),
                 Pensionado.nombre.ilike(term),
                 Pensionado.segundo_nombre.ilike(term),
                 Pensionado.apellidos.ilike(term),
                 Pensionado.documento.ilike(term),
                 Oficina.nombre.ilike(term),
+                Cooperativa.nombre.ilike(term),
             )
         )
 
@@ -617,16 +625,24 @@ def contar_creditos(
         term = f"%{texto.strip()}%"
         query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
         query = query.outerjoin(Oficina, Oficina.id == Credito.oficina_id)
+        query = query.outerjoin(Cooperativa, Cooperativa.id == Credito.cooperativa_id)
         query = query.filter(
             or_(
                 cast(Credito.id, String).ilike(term),
                 Credito.estado.ilike(term),
                 Credito.tipo_credito.ilike(term),
+                Credito.nro_libranza.ilike(term),
+                Credito.entidad_financiera_origen.ilike(term),
+                Credito.documentos_pendientes.ilike(term),
+                cast(Credito.monto_solicitado, String).ilike(term),
+                cast(Credito.monto_aprobado, String).ilike(term),
+                cast(Credito.plazo, String).ilike(term),
                 Pensionado.nombre.ilike(term),
                 Pensionado.segundo_nombre.ilike(term),
                 Pensionado.apellidos.ilike(term),
                 Pensionado.documento.ilike(term),
                 Oficina.nombre.ilike(term),
+                Cooperativa.nombre.ilike(term),
             )
         )
 

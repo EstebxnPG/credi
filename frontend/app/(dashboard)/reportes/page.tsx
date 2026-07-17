@@ -217,6 +217,18 @@ export default function ReportesPage() {
           limit: String(PAGE_SIZE),
           skip: String(skip),
         });
+        const seguimientosParams = new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          skip: String(skip),
+        });
+        const documentosParams = new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          skip: String(skip),
+        });
+        const pendientesParams = new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          skip: String(skip),
+        });
         const refinanciacionesParams = new URLSearchParams({
           limit: String(PAGE_SIZE),
           skip: String(skip),
@@ -227,6 +239,9 @@ export default function ReportesPage() {
         if (oficinaId) {
           creditosParams.set("oficina_id", oficinaId);
           pensionadosParams.set("oficina_id", oficinaId);
+          seguimientosParams.set("oficina_id", oficinaId);
+          documentosParams.set("oficina_id", oficinaId);
+          pendientesParams.set("oficina_id", oficinaId);
           refinanciacionesParams.set("oficina_id", oficinaId);
           creditosSummaryParams.set("oficina_id", oficinaId);
           activeSummaryParams.set("oficina_id", oficinaId);
@@ -234,6 +249,9 @@ export default function ReportesPage() {
         if (desde) {
           creditosParams.set("fecha_desde", desde);
           pensionadosParams.set("fecha_desde", desde);
+          seguimientosParams.set("fecha_creacion_desde", desde);
+          documentosParams.set("fecha_desde", desde);
+          pendientesParams.set("fecha_desde", desde);
           refinanciacionesParams.set("fecha_desde", desde);
           creditosSummaryParams.set("desde", desde);
           activeSummaryParams.set("desde", desde);
@@ -241,6 +259,9 @@ export default function ReportesPage() {
         if (hasta) {
           creditosParams.set("fecha_hasta", hasta);
           pensionadosParams.set("fecha_hasta", hasta);
+          seguimientosParams.set("fecha_creacion_hasta", hasta);
+          documentosParams.set("fecha_hasta", hasta);
+          pendientesParams.set("fecha_hasta", hasta);
           refinanciacionesParams.set("fecha_hasta", hasta);
           creditosSummaryParams.set("hasta", hasta);
           activeSummaryParams.set("hasta", hasta);
@@ -248,6 +269,9 @@ export default function ReportesPage() {
         if (query.trim()) {
           creditosParams.set("texto", query.trim());
           pensionadosParams.set("texto", query.trim());
+          seguimientosParams.set("texto", query.trim());
+          documentosParams.set("texto", query.trim());
+          pendientesParams.set("texto", query.trim());
           refinanciacionesParams.set("texto", query.trim());
           creditosSummaryParams.set("texto", query.trim());
           activeSummaryParams.set("texto", query.trim());
@@ -286,9 +310,9 @@ export default function ReportesPage() {
               `/api/v1/reportes/${active}/metricas?${activeSummaryParams.toString()}`,
             ),
             apiFetchWithMeta<Pensionado[]>(`/api/v1/pensionados/?${pensionadosParams.toString()}`),
-            apiFetchWithMeta<Seguimiento[]>(`/api/v1/seguimientos/?${pageParams}`),
-            apiFetchWithMeta<Documento[]>(`/api/v1/documentos/?${pageParams}`),
-            apiFetchWithMeta<Pendiente[]>(`/api/v1/pendientes-credito/?${pageParams}`),
+            apiFetchWithMeta<Seguimiento[]>(`/api/v1/seguimientos/?${seguimientosParams.toString()}`),
+            apiFetchWithMeta<Documento[]>(`/api/v1/documentos/?${documentosParams.toString()}`),
+            apiFetchWithMeta<Pendiente[]>(`/api/v1/pendientes-credito/?${pendientesParams.toString()}`),
             apiFetch<Oficina[]>("/api/v1/oficinas/?solo_activas=false"),
             apiFetchWithMeta<Refinanciacion[]>(`/api/v1/refinanciaciones/elegibles/?${refinanciacionesParams.toString()}`),
             apiFetchWithMeta<Asesora[]>(`/api/v1/usuarios/?${pageParams}`),
@@ -342,10 +366,6 @@ export default function ReportesPage() {
     };
   }, [active, currentPage, desde, estadoComercial, hasta, oficinaId, query]);
 
-  const pensionadoById = useMemo(
-    () => new Map(pensionados.map((item) => [item.id, item])),
-    [pensionados],
-  );
   const oficinaById = useMemo(
     () => new Map(oficinas.map((item) => [item.id, item])),
     [oficinas],
@@ -393,23 +413,7 @@ export default function ReportesPage() {
     [desde, hasta, oficinaById, oficinaId, pensionados, query],
   );
 
-  const filteredSeguimientos = useMemo(
-    () =>
-      seguimientos.filter(
-        (item) =>
-          (!oficinaId || item.oficina_id === Number(oficinaId)) &&
-          inDateRange(item.created_at, desde, hasta) &&
-          matchesQuery(query, [
-            item.pensionado_nombre,
-            item.tipo,
-            item.comentario,
-            item.resultado,
-            item.usuario_nombre,
-            item.oficina_nombre,
-          ]),
-      ),
-    [desde, hasta, oficinaId, query, seguimientos],
-  );
+  const filteredSeguimientos = useMemo(() => seguimientos, [seguimientos]);
 
   const filteredSolucionesSeguimiento = useMemo(
     () =>
@@ -436,30 +440,9 @@ export default function ReportesPage() {
     [desde, hasta, oficinaId, query, seguimientos],
   );
 
-  const filteredDocumentos = useMemo(
-    () =>
-      documentos.filter((item) => {
-        const credito = creditos.find((creditoItem) => creditoItem.id === item.credito_id);
-        const pensionado = credito ? pensionadoById.get(credito.pensionado_id) : undefined;
-        return (!oficinaId || credito?.oficina_id === Number(oficinaId)) &&
-          inDateRange(item.created_at, desde, hasta) &&
-          matchesQuery(query, [item.nombre, item.tipo, item.credito_id, pensionado?.nombre_completo]);
-      }),
-    [creditos, desde, documentos, hasta, oficinaId, pensionadoById, query],
-  );
+  const filteredDocumentos = useMemo(() => documentos, [documentos]);
 
-  const filteredPendientes = useMemo(
-    () =>
-      pendientes.filter(
-        (item) => {
-          const credito = creditos.find((creditoItem) => creditoItem.id === item.credito_id);
-          return (!oficinaId || credito?.oficina_id === Number(oficinaId)) &&
-          inDateRange(item.created_at, desde, hasta) &&
-          matchesQuery(query, [item.credito_id, item.descripcion, item.estado, item.origen]);
-        },
-      ),
-    [creditos, desde, hasta, oficinaId, pendientes, query],
-  );
+  const filteredPendientes = useMemo(() => pendientes, [pendientes]);
 
   const oficinaRows = useMemo(
     () =>
@@ -929,12 +912,13 @@ function RefinanciacionesReport({
     <>
       <Metrics
         values={[
-          ["Oportunidades", String(summary.oportunidades ?? 0)],
+          ["Total refinanciaciones", String(summary.oportunidades ?? 0), "Refinanciaciones"],
           ["Disponibles ahora", String(summary.disponiblesAhora ?? 0)],
-          ["Programadas", String(summary.programadas ?? 0)],
+          ["Proximas", String(summary.programadas ?? 0)],
           ["En gestion", String(summary.gestionadas ?? 0)],
           ["Convertidas", String(summary.convertidas ?? 0)],
           ["Pospuestas", String(summary.pospuestas ?? 0)],
+          ["Candidatos", String(summary.creditosNuevos ?? 0), "Creditos nuevos"],
         ]}
       />
       <ReportTable
@@ -1079,18 +1063,21 @@ function SoftStatus({ value }: { value: string }) {
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${tones[value] ?? "border-stone-200 bg-stone-50 text-stone-600"}`}>{value}</span>;
 }
 
-function Metrics({ values }: { values: Array<[string, string]> }) {
+function Metrics({ values }: { values: Array<[string, string] | [string, string, string]> }) {
   const columnsClass =
-    values.length >= 6
-      ? "xl:grid-cols-6"
+    values.length >= 7
+      ? "xl:grid-cols-7"
+      : values.length === 6
+        ? "xl:grid-cols-6"
       : values.length === 5
         ? "xl:grid-cols-5"
         : "xl:grid-cols-4";
 
   return (
     <div className={`grid gap-3 sm:grid-cols-2 ${columnsClass}`}>
-      {values.map(([label, value]) => (
+      {values.map(([label, value, group]) => (
         <div key={label} className="border-b border-stone-800/10 px-1 py-3">
+          {group ? <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500">{group}</p> : null}
           <p className="text-xs uppercase tracking-[0.16em] text-stone-500">{label}</p>
           <p className="mt-2 text-xl font-semibold text-stone-950">{value}</p>
         </div>

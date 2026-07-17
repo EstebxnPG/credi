@@ -544,6 +544,7 @@ def _metricas_refinanciaciones(db, usuario_actual, oficina_id, desde, hasta, tex
         "gestionadas": counts["gestionados"],
         "convertidas": counts["convertidos"],
         "pospuestas": counts["pospuestos"],
+        "creditosNuevos": counts["creditos_nuevos"],
     }
 
 

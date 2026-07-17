@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
 from app.db.models.credito import Credito
@@ -79,16 +80,23 @@ def listar_pendientes(
     usuario_actual: Usuario,
     credito_id: int | None = None,
     estado: str | None = None,
+    oficina_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
     skip: int = 0,
     limit: int = 15,
 ) -> list[PendienteCredito]:
-    query = db.query(PendienteCredito).join(Credito)
-    if usuario_actual.rol != "administrador":
-        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
-    if credito_id is not None:
-        query = query.filter(PendienteCredito.credito_id == credito_id)
-    if estado is not None:
-        query = query.filter(PendienteCredito.estado == estado)
+    query = _pendientes_query(
+        db,
+        usuario_actual,
+        credito_id=credito_id,
+        estado=estado,
+        oficina_id=oficina_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        texto=texto,
+    )
     return (
         query.order_by(PendienteCredito.created_at.desc(), PendienteCredito.id.desc())
         .offset(skip)
@@ -102,15 +110,57 @@ def contar_pendientes(
     usuario_actual: Usuario,
     credito_id: int | None = None,
     estado: str | None = None,
+    oficina_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
 ) -> int:
+    return _pendientes_query(
+        db,
+        usuario_actual,
+        credito_id=credito_id,
+        estado=estado,
+        oficina_id=oficina_id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        texto=texto,
+    ).count()
+
+
+def _pendientes_query(
+    db: Session,
+    usuario_actual: Usuario,
+    credito_id: int | None = None,
+    estado: str | None = None,
+    oficina_id: int | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    texto: str | None = None,
+):
     query = db.query(PendienteCredito).join(Credito)
     if usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+    elif oficina_id is not None:
+        query = query.filter(Credito.oficina_id == oficina_id)
     if credito_id is not None:
         query = query.filter(PendienteCredito.credito_id == credito_id)
     if estado is not None:
         query = query.filter(PendienteCredito.estado == estado)
-    return query.count()
+    if fecha_desde is not None:
+        query = query.filter(PendienteCredito.created_at >= datetime.combine(fecha_desde, time.min))
+    if fecha_hasta is not None:
+        query = query.filter(PendienteCredito.created_at <= datetime.combine(fecha_hasta, time.max))
+    if texto:
+        term = f"%{texto.strip()}%"
+        query = query.filter(
+            or_(
+                cast(PendienteCredito.credito_id, String).ilike(term),
+                PendienteCredito.descripcion.ilike(term),
+                PendienteCredito.estado.ilike(term),
+                PendienteCredito.origen.ilike(term),
+            )
+        )
+    return query
 
 
 def crear_pendiente(

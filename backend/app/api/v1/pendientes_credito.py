@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -30,6 +31,10 @@ def crear_pendiente(
 def listar_pendientes(
     credito_id: Optional[int] = Query(None),
     estado: Optional[str] = Query(None),
+    oficina_id: Optional[int] = Query(None),
+    fecha_desde: Optional[date] = Query(None),
+    fecha_hasta: Optional[date] = Query(None),
+    texto: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(15, ge=1, le=100),
     response: Response = None,
@@ -41,6 +46,10 @@ def listar_pendientes(
         usuario_actual,
         credito_id,
         estado,
+        oficina_id,
+        fecha_desde,
+        fecha_hasta,
+        texto,
     )
     if response is not None:
         response.headers["X-Total-Count"] = str(total)
@@ -50,6 +59,10 @@ def listar_pendientes(
         usuario_actual,
         credito_id,
         estado,
+        oficina_id,
+        fecha_desde,
+        fecha_hasta,
+        texto,
         skip,
         limit,
     )

@@ -341,13 +341,14 @@ export default function RefinanciacionesPage() {
       {error ? <Message tone="error" text={error} /> : null}
       {success ? <Message tone="success" text={success} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+        <Metric group="Refinanciaciones" label="Total refinanciaciones" value={counts.hoy + counts.proximos + counts.gestionados + counts.convertidos + counts.pospuestos} />
         <Metric label="Disponibles ahora" value={counts.hoy} />
-        <Metric label="Proximos" value={counts.proximos} />
+        <Metric label="Proximas" value={counts.proximos} />
         <Metric label="En gestion" value={counts.gestionados} />
-        <Metric label="Convertidos" value={counts.convertidos} />
-        <Metric label="Pospuestos" value={counts.pospuestos} />
-        <Metric label="Creditos nuevos" value={counts.creditosNuevos} />
+        <Metric label="Convertidas" value={counts.convertidos} />
+        <Metric label="Pospuestas" value={counts.pospuestos} />
+        <Metric group="Creditos nuevos" label="Candidatos" value={counts.creditosNuevos} />
       </div>
 
       <div className="flex flex-wrap gap-2 border-b pb-3">
@@ -914,9 +915,10 @@ function defaultPostponeDate() {
   return date.toISOString().slice(0, 10);
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ group, label, value }: { group?: string; label: string; value: number }) {
   return (
     <div className="border-b px-1 py-3">
+      {group ? <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500">{group}</p> : null}
       <p className="text-xs uppercase tracking-wider text-stone-500">{label}</p>
       <p className="mt-2 text-xl font-semibold">{value}</p>
     </div>
