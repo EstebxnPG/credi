@@ -516,7 +516,10 @@ def _metricas_oficinas(db, usuario_actual, oficina_id):
 
 def _metricas_refinanciaciones(db, usuario_actual, oficina_id, desde, hasta, texto, estado_comercial):
     vista = "todos"
-    if estado_comercial == "pospuesto":
+    if estado_comercial == "programado":
+        vista = "proximos"
+        estado_comercial = None
+    elif estado_comercial == "pospuesto":
         vista = "pospuestos"
     elif estado_comercial == "convertido":
         vista = "convertidos"

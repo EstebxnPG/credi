@@ -10,6 +10,7 @@ from app.schemas.refinanciacion import OportunidadEstadoUpdate
 from app.services.refinanciacion_service import (
     cambiar_estado_oportunidad,
     validar_credito_refinanciable,
+    _criterio_refinanciacion,
     _meses_desde,
     _sumar_meses,
 )
@@ -121,6 +122,35 @@ class RefinanciacionesTests(unittest.TestCase):
         )
 
         validar_credito_refinanciable(db, credito)
+
+    def test_porcentaje_calcula_fecha_fija_desde_fecha_base(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        credito = SimpleNamespace(
+            id=1,
+            estado="Aprobado",
+            is_active=True,
+            plazo=12,
+            fecha_desembolso=date(2022, 1, 1),
+            cooperativa=SimpleNamespace(
+                is_active=True,
+                reglas_refinanciacion=[
+                    SimpleNamespace(
+                        plazo_minimo=1,
+                        plazo_maximo=120,
+                        tipo_liberacion="porcentaje",
+                        meses_para_refinanciar=None,
+                        porcentaje_credito=50,
+                    )
+                ],
+            ),
+        )
+
+        criterio = _criterio_refinanciacion(db, credito)
+
+        self.assertEqual(criterio["disponible_desde"], date(2022, 6, 1))
+        self.assertEqual(criterio["meses_requeridos"], 6)
+        self.assertTrue(criterio["esta_disponible"])
 
     def test_oportunidad_rechazada_no_cambia_antes_de_reactivacion(self):
         credito = SimpleNamespace(

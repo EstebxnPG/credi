@@ -3,9 +3,11 @@ refinanciacion_service.py
 Logica de negocio para refinanciaciones asociadas a creditos.
 """
 from datetime import date, datetime, timedelta, timezone
+from math import ceil
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
-from sqlalchemy import Date, String, cast, func, or_, text
+from sqlalchemy import Date, Integer, String, case, cast, func, or_, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models.cooperativa import Cooperativa, CooperativaRefinanciacionRegla
@@ -17,6 +19,13 @@ from app.db.models.usuario import Usuario
 from app.db.models.notificacion import Notificacion
 from app.schemas.refinanciacion import RefinanciacionCreate, RefinanciacionUpdate, OportunidadEstadoUpdate
 from app.services.log_service import registrar_log
+
+
+BUSINESS_TIMEZONE = ZoneInfo("America/Bogota")
+
+
+def _today() -> date:
+    return datetime.now(BUSINESS_TIMEZONE).date()
 
 
 def _get_credito_activo_or_404(db: Session, credito_id: int) -> Credito:
@@ -85,7 +94,7 @@ def listar_refinanciaciones(
 
 
 def _meses_desde(fecha_inicio: date, fecha_referencia: date | None = None) -> int:
-    fecha_referencia = fecha_referencia or date.today()
+    fecha_referencia = fecha_referencia or _today()
     meses = (fecha_referencia.year - fecha_inicio.year) * 12 + (
         fecha_referencia.month - fecha_inicio.month
     )
@@ -135,6 +144,12 @@ def _sumar_meses(fecha: date, meses: int) -> date:
     return date(year, month, day)
 
 
+def _mes_requerido_por_porcentaje(plazo: int, porcentaje_requerido: float) -> int:
+    if plazo <= 0 or porcentaje_requerido <= 0:
+        return 1
+    return max(1, ceil(plazo * porcentaje_requerido / 100))
+
+
 def _regla_refinanciacion_para_credito(credito: Credito):
     return next(
         (
@@ -162,15 +177,17 @@ def _criterio_refinanciacion(
 
     if tipo_liberacion == "porcentaje":
         porcentaje_requerido = float(regla.porcentaje_credito or 0)
+        meses_requeridos = _mes_requerido_por_porcentaje(credito.plazo, porcentaje_requerido)
+        disponible_desde = _sumar_meses(fecha_base, meses_requeridos - 1)
         return {
             "fecha_base": fecha_base,
-            "disponible_desde": date.today() if porcentaje_avance >= porcentaje_requerido else None,
+            "disponible_desde": disponible_desde,
             "meses_transcurridos": meses_transcurridos,
-            "meses_requeridos": None,
+            "meses_requeridos": meses_requeridos,
             "tipo_liberacion": "porcentaje",
             "porcentaje_avance": porcentaje_avance,
             "porcentaje_requerido": porcentaje_requerido,
-            "esta_disponible": porcentaje_avance >= porcentaje_requerido,
+            "esta_disponible": _today() >= disponible_desde,
         }
 
     meses_requeridos = int(regla.meses_para_refinanciar or 0)
@@ -183,7 +200,7 @@ def _criterio_refinanciacion(
         "tipo_liberacion": "meses",
         "porcentaje_avance": porcentaje_avance,
         "porcentaje_requerido": None,
-        "esta_disponible": date.today() >= disponible_desde,
+        "esta_disponible": _today() >= disponible_desde,
     }
 
 
@@ -328,7 +345,7 @@ def listar_creditos_elegibles(
                     "monto_aprobado": credito.monto_aprobado,
                     "plazo": credito.plazo,
                     "fecha_base": criterio["fecha_base"],
-                    "disponible_desde": criterio["disponible_desde"] or date.today(),
+                    "disponible_desde": criterio["disponible_desde"] or _today(),
                     "meses_transcurridos": criterio["meses_transcurridos"],
                     "meses_requeridos": criterio["meses_requeridos"],
                     "tipo_liberacion": criterio["tipo_liberacion"],
@@ -440,7 +457,7 @@ def obtener_credito_elegible(
         "monto_aprobado": credito.monto_aprobado,
         "plazo": credito.plazo,
         "fecha_base": criterio["fecha_base"],
-        "disponible_desde": criterio["disponible_desde"] or date.today(),
+        "disponible_desde": criterio["disponible_desde"] or _today(),
         "meses_transcurridos": criterio["meses_transcurridos"],
         "meses_requeridos": criterio["meses_requeridos"],
         "tipo_liberacion": criterio["tipo_liberacion"],
@@ -525,8 +542,25 @@ def listar_creditos_elegibles_paginados(
         cast(Credito.fecha_registro, Date),
         cast(Credito.created_at, Date),
     )
+    meses_por_porcentaje_expr = cast(
+        func.greatest(
+            func.ceil(
+                Credito.plazo * CooperativaRefinanciacionRegla.porcentaje_credito / 100
+            )
+            - 1,
+            0,
+        ),
+        Integer,
+    )
     disponible_desde_expr = fecha_base_expr + (
-        CooperativaRefinanciacionRegla.meses_para_refinanciar * text("interval '1 month'")
+        case(
+            (
+                CooperativaRefinanciacionRegla.tipo_liberacion == "porcentaje",
+                meses_por_porcentaje_expr,
+            ),
+            else_=func.coalesce(CooperativaRefinanciacionRegla.meses_para_refinanciar, 0),
+        )
+        * text("interval '1 month'")
     )
 
     query = (
@@ -587,7 +621,7 @@ def listar_creditos_elegibles_paginados(
 
     base_count_query = query
 
-    today = date.today()
+    today = _today()
     if vista == "gestionados":
         query = query.filter(OportunidadRefinanciacion.estado.in_(["contactado", "aceptado", "rechazado"]))
     elif vista == "convertidos":
@@ -890,7 +924,7 @@ def _oportunidad_to_elegible_item(
         "monto_aprobado": credito.monto_aprobado,
         "plazo": credito.plazo,
         "fecha_base": criterio["fecha_base"],
-        "disponible_desde": criterio["disponible_desde"] or date.today(),
+        "disponible_desde": criterio["disponible_desde"] or _today(),
         "meses_transcurridos": criterio["meses_transcurridos"],
         "meses_requeridos": criterio["meses_requeridos"],
         "tipo_liberacion": criterio["tipo_liberacion"],

@@ -253,8 +253,12 @@ export default function ReportesPage() {
           activeSummaryParams.set("texto", query.trim());
         }
         if (active === "refinanciaciones" && estadoComercial) {
-          activeSummaryParams.set("estado_comercial", estadoComercial);
-          refinanciacionesParams.set("estado_comercial", estadoComercial);
+          if (estadoComercial === "programado") {
+            refinanciacionesParams.set("vista", "proximos");
+          } else {
+            activeSummaryParams.set("estado_comercial", estadoComercial);
+            refinanciacionesParams.set("estado_comercial", estadoComercial);
+          }
           if (estadoComercial === "pospuesto") {
             refinanciacionesParams.set("vista", "pospuestos");
           } else if (estadoComercial === "convertido") {
@@ -486,7 +490,10 @@ export default function ReportesPage() {
       refinanciaciones.filter((item) =>
         (!oficinaId || item.oficina_id === Number(oficinaId)) &&
         inDateRange(item.disponible_desde, desde, hasta) &&
-        (!estadoComercial || item.estado_comercial === estadoComercial) &&
+        (!estadoComercial ||
+          (estadoComercial === "programado"
+            ? item.estado_refinanciacion === "Programado"
+            : item.estado_comercial === estadoComercial)) &&
         matchesQuery(query, [
           item.credito_id,
           item.pensionado_nombre,
