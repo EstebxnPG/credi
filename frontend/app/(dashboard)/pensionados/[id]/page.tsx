@@ -506,7 +506,7 @@ export default function PensionadoDetailPage() {
         </article>
 
         {selectedView === "creditos" ? (
-          <CreditosList creditos={creditos} pendientes={pendientes} />
+          <CreditosList creditos={creditos} pendientes={pendientes} pensionadoId={pensionado.id} />
         ) : null}
         {selectedView === "seguimientos" ? (
           <SeguimientosList seguimientos={seguimientos} onCreate={openSeguimientoModal} />
@@ -581,9 +581,11 @@ function normalizeText(value: string) {
 function CreditosList({
   creditos,
   pendientes,
+  pensionadoId,
 }: {
   creditos: Credito[];
   pendientes: PendienteCredito[];
+  pensionadoId: number;
 }) {
   const pendientesByCreditoId = useMemo(() => {
     const grouped = new Map<number, PendienteCredito[]>();
@@ -596,8 +598,11 @@ function CreditosList({
 
   return (
     <article className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
-      <div className="border-b border-stone-800/10 px-5 py-4">
+      <div className="flex flex-col gap-3 border-b border-stone-800/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-stone-950">Créditos del pensionado</h2>
+        <Link href={`/creditos?pensionado=${pensionadoId}`} className="button-primary">
+          Crear crédito
+        </Link>
       </div>
 
       <div className="hidden grid-cols-[0.7fr_1fr_1.2fr_1fr_1fr_0.8fr_1fr_88px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
