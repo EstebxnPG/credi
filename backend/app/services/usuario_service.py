@@ -5,6 +5,7 @@ from app.schemas.usuario import UsuarioCreate, UsuarioUpdate, LoginRequest, Toke
 from app.core.security import hash_password, verify_password, create_access_token
 
 MAX_INTENTOS = 5
+LOGIN_ERROR = "Credenciales inválidas"
 
 class UsuarioService:
 
@@ -82,7 +83,7 @@ class UsuarioService:
 
         # Verificamos que exista y esté activo
         if not usuario or not usuario.is_active:
-            raise HTTPException(status_code=401, detail="Credenciales inválidas")
+            raise HTTPException(status_code=401, detail=LOGIN_ERROR)
 
         # Verificamos bloqueo por intentos
         if usuario.intentos_fallidos >= MAX_INTENTOS:
@@ -94,10 +95,9 @@ class UsuarioService:
         # Verificamos la contraseña
         if not verify_password(data.contrasena, usuario.contrasena):
             self.repo.incrementar_intentos(usuario)
-            restantes = MAX_INTENTOS - usuario.intentos_fallidos
             raise HTTPException(
                 status_code=401,
-                detail=f"usuario o contraseña incorrects. Intentos restantes: {restantes}"
+                detail=LOGIN_ERROR
             )
 
         # Login exitoso — reseteamos intentos y generamos token
