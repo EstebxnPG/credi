@@ -313,7 +313,7 @@ export default function SeguimientosPage() {
               Seguimientos
             </p>
             <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">
-              Contactos y proximas gestiones
+              Contactos y próximas gestiones
             </h1>
             <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">
               Consulta la historia comercial, registra contactos y agenda nuevas gestiones.
@@ -470,7 +470,7 @@ export default function SeguimientosPage() {
 
             {seguimientos.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-stone-500">
-                No hay seguimientos para la busqueda actual.
+                No hay seguimientos para la búsqueda actual.
               </div>
             ) : null}
           </div>

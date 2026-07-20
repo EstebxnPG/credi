@@ -27,7 +27,7 @@ export default function PagaduriasPage() {
     try {
       setItems(await apiFetch<Pagaduria[]>("/api/v1/pagadurias/?solo_activas=false"));
     } catch (loadError) {
-      setError(loadError instanceof ApiError ? loadError.message : "No se pudo cargar pagadurias");
+      setError(loadError instanceof ApiError ? loadError.message : "No se pudo cargar pagadurías");
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function PagaduriasPage() {
   }
 
   async function handleDelete(item: Pagaduria) {
-    if (!window.confirm(`Vas a desactivar la pagaduria ${item.nombre}.`)) return;
+    if (!window.confirm(`Vas a desactivar la pagaduría ${item.nombre}.`)) return;
     setError(null);
     try {
       const deleted = await apiFetch<Pagaduria>(`/api/v1/pagadurias/${item.id}`, { method: "DELETE" });
@@ -111,7 +111,7 @@ export default function PagaduriasPage() {
   return (
     <section className="space-y-3">
       <Header query={query} onQuery={setQuery} onCreate={openCreate} />
-      {loading ? <StateMessage text="Cargando pagadurias..." /> : null}
+      {loading ? <StateMessage text="Cargando pagadurías..." /> : null}
       {error ? <StateMessage tone="error" text={error} /> : null}
       {!loading && !error ? (
         <div className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
@@ -128,12 +128,12 @@ export default function PagaduriasPage() {
                 <Actions onEdit={() => openEdit(item)} onDelete={() => void handleDelete(item)} deleteDisabled={!item.is_active} />
               </div>
             ))}
-            {filtered.length === 0 ? <EmptyState text="No hay pagadurias para la busqueda actual." /> : null}
+            {filtered.length === 0 ? <EmptyState text="No hay pagadurías para la búsqueda actual." /> : null}
           </div>
         </div>
       ) : null}
       {modalMode ? (
-        <Modal title={modalMode === "create" ? "Crear pagaduria" : "Editar pagaduria"} error={formError} saving={saving} submitLabel={modalMode === "create" ? "Crear pagaduria" : "Guardar cambios"} onClose={closeModal} onSubmit={handleSubmit}>
+        <Modal title={modalMode === "create" ? "Crear pagaduría" : "Editar pagaduría"} error={formError} saving={saving} submitLabel={modalMode === "create" ? "Crear pagaduría" : "Guardar cambios"} onClose={closeModal} onSubmit={handleSubmit}>
           <Field label="Nombre" value={nombre} onChange={setNombre} required />
         </Modal>
       ) : null}
@@ -146,13 +146,13 @@ function Header({ query, onQuery, onCreate }: { query: string; onQuery: (value: 
     <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">Configuracion</p>
-          <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">Pagadurias</h1>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">Entidades pagadoras usadas en creditos.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">Configuración</p>
+          <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">Pagadurías</h1>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">Entidades pagadoras usadas en créditos.</p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto lg:items-center">
           <input className="input-base min-w-0 sm:w-80" value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Buscar por nombre o estado" />
-          <button type="button" className="button-primary whitespace-nowrap" onClick={onCreate}>Crear pagaduria</button>
+          <button type="button" className="button-primary whitespace-nowrap" onClick={onCreate}>Crear pagaduría</button>
         </div>
       </div>
     </article>

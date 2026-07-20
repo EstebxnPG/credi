@@ -330,7 +330,7 @@ export default function RefinanciacionesPage() {
     <section className="space-y-3">
       <header className="rounded-lg border bg-white/85 p-5">
         <p className="text-xs font-semibold uppercase tracking-[.22em] text-stone-500">
-          Operacion comercial
+          Operación comercial
         </p>
         <h1 className="mt-2 text-xl font-semibold">Oportunidades comerciales</h1>
         <p className="mt-2 text-sm text-stone-600">
@@ -348,7 +348,7 @@ export default function RefinanciacionesPage() {
         <Metric label="En gestion" value={counts.gestionados} />
         <Metric label="Convertidas" value={counts.convertidos} />
         <Metric label="Pospuestas" value={counts.pospuestos} />
-        <Metric group="Creditos nuevos" label="Candidatos" value={counts.creditosNuevos} />
+        <Metric group="Créditos nuevos" label="Candidatos" value={counts.creditosNuevos} />
       </div>
 
       <div className="flex flex-wrap gap-2 border-b pb-3">
@@ -468,7 +468,7 @@ export default function RefinanciacionesPage() {
                       className="button-primary px-2.5 py-1.5 text-xs"
                       href={`/creditos?pensionado=${item.pensionado_id}`}
                     >
-                      Crear credito
+                      Crear crédito
                     </Link>
                   </td>
                 </tr>

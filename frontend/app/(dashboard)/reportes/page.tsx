@@ -139,7 +139,7 @@ type Asesora = {
 };
 
 const reports: Array<{ key: ReportKey; label: string }> = [
-  { key: "creditos", label: "Creditos" },
+  { key: "creditos", label: "Créditos" },
   { key: "pensionados", label: "Pensionados" },
   { key: "seguimientos", label: "Seguimientos" },
   { key: "documentos", label: "Documentos" },
@@ -731,7 +731,7 @@ function CreditosReport({
   return (
     <>
       <Metrics values={[
-        ["Creditos", String(summary.creditos)],
+        ["Créditos", String(summary.creditos)],
         ["Aprobados", String(summary.aprobados)],
         ["Solicitado", formatCurrency(summary.solicitado)],
         ["Aprobado", formatCurrency(summary.aprobado)],
@@ -816,7 +816,7 @@ function DocumentosReport({ items, summary }: { items: Documento[]; summary: Rep
         ["Documentos", String(summary.documentos ?? 0)],
         ["PDF", String(summary.pdf ?? 0)],
         ["Imagenes", String(summary.imagenes ?? 0)],
-        ["Creditos con docs", String(summary.creditosConDocs ?? 0)],
+        ["Créditos con docs", String(summary.creditosConDocs ?? 0)],
       ]} />
       {downloadError ? <StateMessage tone="error" text={downloadError} /> : null}
       <ReportTable headers={["Documento", "Credito", "Tipo", "Version", "Registro", "Archivo"]}>
@@ -851,7 +851,7 @@ function PendientesReport({ items, summary }: { items: Pendiente[]; summary: Rep
         ["Pendientes", String(summary.pendientes ?? 0)],
         ["Abiertos", String(summary.abiertos ?? 0)],
         ["Resueltos", String(summary.resueltos ?? 0)],
-        ["Creditos afectados", String(summary.creditosAfectados ?? 0)],
+        ["Créditos afectados", String(summary.creditosAfectados ?? 0)],
       ]} />
       <ReportTable headers={["Descripcion", "Credito", "Origen", "Estado", "Creado", "Resuelto"]}>
         {items.map((item) => (
@@ -881,10 +881,10 @@ function OficinasReport({
       <Metrics values={[
         ["Oficinas", String(summary.oficinas ?? 0)],
         ["Activas", String(summary.activas ?? 0)],
-        ["Creditos", String(summary.creditos ?? 0)],
+        ["Créditos", String(summary.creditos ?? 0)],
         ["Seguimientos", String(summary.seguimientos ?? 0)],
       ]} />
-      <ReportTable headers={["Oficina", "Direccion", "Estado", "Creditos", "Aprobados", "Monto aprobado", "Seguimientos"]}>
+      <ReportTable headers={["Oficina", "Dirección", "Estado", "Créditos", "Aprobados", "Monto aprobado", "Seguimientos"]}>
         {items.map((item) => (
           <tr key={item.id}>
             <Cell>{item.nombre}</Cell>
@@ -918,7 +918,7 @@ function RefinanciacionesReport({
           ["En gestion", String(summary.gestionadas ?? 0)],
           ["Convertidas", String(summary.convertidas ?? 0)],
           ["Pospuestas", String(summary.pospuestas ?? 0)],
-          ["Candidatos", String(summary.creditosNuevos ?? 0), "Creditos nuevos"],
+          ["Candidatos", String(summary.creditosNuevos ?? 0), "Créditos nuevos"],
         ]}
       />
       <ReportTable
@@ -1004,7 +1004,7 @@ function AsesorasReport({
         values={[
           ["Asesoras", String(summary.asesoras ?? 0)],
           ["Activas", String(summary.activas ?? 0)],
-          ["Creditos", String(summary.creditos ?? 0)],
+          ["Créditos", String(summary.creditos ?? 0)],
           ["Soluciones", String(summary.soluciones ?? 0)],
           [
             "Monto aprobado",
@@ -1017,7 +1017,7 @@ function AsesorasReport({
           "Asesora",
           "Oficina",
           "Estado",
-          "Creditos",
+          "Créditos",
           "Aprobados",
           "Tasa",
           "Monto aprobado",

@@ -253,8 +253,8 @@ export default function AsesoraReportPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Creditos asignados" value={String(assignedCredits.length)} />
-        <Metric label="Creditos creados" value={String(createdCreditIds.size)} />
+        <Metric label="Créditos asignados" value={String(assignedCredits.length)} />
+        <Metric label="Créditos creados" value={String(createdCreditIds.size)} />
         <Metric label="Aprobaciones ejecutadas" value={String(approvedCreditIds.size)} />
         <Metric label="Pendientes resueltos" value={String(resolvedPendientes.length)} />
         <Metric label="Seguimientos" value={String(filteredSeguimientos.length)} />
@@ -272,7 +272,7 @@ export default function AsesoraReportPage() {
       </div>
 
       <div className="grid gap-3 xl:grid-cols-2">
-        <ReportTable title="Creditos asignados" headers={["Credito", "Estado", "Solicitado", "Aprobado", "Registro"]}>
+        <ReportTable title="Créditos asignados" headers={["Crédito", "Estado", "Solicitado", "Aprobado", "Registro"]}>
           {assignedCredits.map((item) => (
             <tr key={item.id}>
               <Cell><Link className="font-semibold text-teal-800" href={`/creditos/${item.id}`}>#{item.id}</Link></Cell>
@@ -385,7 +385,7 @@ function DateField({
 
 function moduleLabel(value: string) {
   const labels: Record<string, string> = {
-    creditos: "Creditos",
+    creditos: "Créditos",
     documentos: "Documentos",
     pendientes_credito: "Pendientes",
     seguimientos: "Seguimientos",

@@ -31,7 +31,7 @@ export function AuthGuard({
             Crediconfiemos
           </p>
           <h1 className="mt-4 text-3xl font-semibold text-stone-900">
-            Cargando sesion...
+            Cargando sesión...
           </h1>
         </div>
       </div>

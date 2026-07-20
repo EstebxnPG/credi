@@ -9,27 +9,27 @@ export type NavItem = {
 };
 
 export const navSections: Array<{ key: NavSection; label: string }> = [
-  { key: "operacion", label: "Operacion" },
-  { key: "configuracion", label: "Configuracion" },
+  { key: "operacion", label: "Operación" },
+  { key: "configuracion", label: "Configuración" },
 ];
 
 export const navItems: NavItem[] = [
   {
     href: "/dashboard",
     label: "Inicio",
-    description: "Resumen operativo del dia",
+    description: "Resumen operativo del día",
     section: "operacion",
   },
   {
     href: "/creditos",
-    label: "Creditos",
-    description: "Gestion de solicitudes y estados",
+    label: "Créditos",
+    description: "Gestión de solicitudes y estados",
     section: "operacion",
   },
   {
     href: "/refinanciaciones",
     label: "Oportunidades",
-    description: "Refinanciaciones y creditos nuevos",
+    description: "Refinanciaciones y créditos nuevos",
     section: "operacion",
   },
   {
@@ -41,13 +41,13 @@ export const navItems: NavItem[] = [
   {
     href: "/seguimientos",
     label: "Seguimientos",
-    description: "Contactos realizados y proximas gestiones",
+    description: "Contactos realizados y próximas gestiones",
     section: "operacion",
   },
   {
     href: "/notificaciones",
     label: "Notificaciones",
-    description: "Alertas y eventos de la operacion",
+    description: "Alertas y eventos de la operación",
     section: "operacion",
   },
   {
@@ -60,7 +60,7 @@ export const navItems: NavItem[] = [
   {
     href: "/cooperativas",
     label: "Cooperativas",
-    description: "Reglas comerciales de aprobacion",
+    description: "Reglas comerciales de aprobación",
     section: "configuracion",
   },
   {
@@ -72,21 +72,21 @@ export const navItems: NavItem[] = [
   },
   {
     href: "/pagadurias",
-    label: "Pagadurias",
-    description: "Entidades pagadoras usadas en creditos",
+    label: "Pagadurías",
+    description: "Entidades pagadoras usadas en créditos",
     section: "configuracion",
     adminOnly: true,
   },
   {
     href: "/reportes",
     label: "Reportes",
-    description: "Indicadores de gestion",
+    description: "Indicadores de gestión",
     section: "configuracion",
     adminOnly: true,
   },
   {
     href: "/logs",
-    label: "Auditoria",
+    label: "Auditoría",
     description: "Registro de acciones del sistema",
     section: "configuracion",
     adminOnly: true,

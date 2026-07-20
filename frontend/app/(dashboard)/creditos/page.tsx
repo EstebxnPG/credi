@@ -389,7 +389,7 @@ export default function CreditosPage() {
   const paginationControls = (
     <div className="flex flex-col gap-3 text-xs text-stone-500 sm:flex-row sm:items-center sm:justify-between">
       <p>
-        Pagina {page} de {totalPages}. Mostrando {filtered.length} de {totalCreditos} creditos.
+        Página {page} de {totalPages}. Mostrando {filtered.length} de {totalCreditos} créditos.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -765,7 +765,7 @@ export default function CreditosPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">
-              Creditos
+              Créditos
             </p>
             <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">
               Solicitudes y estados
@@ -786,7 +786,7 @@ export default function CreditosPage() {
               placeholder="Buscar por credito, pensionado, documento, libranza, cooperativa o tipo"
             />
             <button type="button" className="button-primary whitespace-nowrap" onClick={openCreateModal}>
-              Crear credito
+              Crear crédito
             </button>
           </div>
         </div>
@@ -852,7 +852,7 @@ export default function CreditosPage() {
         <div className="mt-3">{paginationControls}</div>
       </article>
 
-      {loading ? <StateMessage text="Cargando creditos..." /> : null}
+      {loading ? <StateMessage text="Cargando créditos..." /> : null}
       {error ? <StateMessage tone="error" text={error} /> : null}
 
       {!loading && !error ? (
@@ -869,7 +869,7 @@ export default function CreditosPage() {
               type="button"
               className="w-fit text-left uppercase tracking-[0.16em] text-stone-500 transition hover:text-teal-700"
               onClick={toggleRegistroOrder}
-              title={registroOrder === "desc" ? "Ver registros mas antiguos primero" : "Ver registros mas recientes primero"}
+              title={registroOrder === "desc" ? "Ver registros más antiguos primero" : "Ver registros más recientes primero"}
             >
               Registro {registroOrder === "desc" ? "recientes" : "antiguos"}
             </button>
@@ -974,7 +974,7 @@ export default function CreditosPage() {
 
             {filtered.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-stone-500">
-                No hay creditos para la busqueda actual.
+                No hay créditos para la búsqueda actual.
               </div>
             ) : null}
           </div>
@@ -1085,7 +1085,7 @@ function CreditoModal({
         <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
-              {isCreate ? "Nuevo credito" : "Editar credito"}
+              {isCreate ? "Nuevo crédito" : "Editar crédito"}
             </p>
             <h2 className="mt-2 text-xl font-semibold text-stone-950">
               {isCreate ? "Crear solicitud" : `Credito #${credito?.id}`}
@@ -1272,7 +1272,7 @@ function CreditoModal({
             Cancelar
           </button>
           <button type="submit" className="button-primary" disabled={saving}>
-            {saving ? "Guardando..." : isCreate ? "Crear credito" : "Guardar cambios"}
+            {saving ? "Guardando..." : isCreate ? "Crear crédito" : "Guardar cambios"}
           </button>
         </div>
       </form>

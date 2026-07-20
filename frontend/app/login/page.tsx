@@ -26,6 +26,40 @@ type LoginResponse = {
   oficina_id: number;
 };
 
+type ValidationErrorItem = {
+  loc?: Array<string | number>;
+  msg?: string;
+};
+
+function normalizeLoginError(detail: unknown) {
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+
+        if (item && typeof item === "object") {
+          const validation = item as ValidationErrorItem;
+          return validation.msg ?? "Hay un dato inválido en el formulario.";
+        }
+
+        return null;
+      })
+      .filter((message): message is string => Boolean(message));
+
+    if (messages.length > 0) {
+      return messages.join(" ");
+    }
+  }
+
+  return "No se pudo iniciar sesión";
+}
+
 export default function LoginPage() {
   return (
     <Suspense fallback={null}>
@@ -65,8 +99,8 @@ function LoginContent() {
       });
 
       if (!response.ok) {
-        const payload = (await response.json()) as { detail?: string };
-        throw new Error(payload.detail ?? "No se pudo iniciar sesión");
+        const payload = (await response.json()) as { detail?: unknown };
+        throw new Error(normalizeLoginError(payload.detail));
       }
 
       const data = (await response.json()) as LoginResponse;

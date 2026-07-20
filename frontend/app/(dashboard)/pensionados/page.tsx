@@ -665,7 +665,7 @@ export default function PensionadosPage() {
 
             {filtered.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-stone-500">
-                No hay pensionados para la busqueda actual.
+                No hay pensionados para la búsqueda actual.
               </div>
             ) : null}
           </div>
@@ -901,7 +901,7 @@ function PensionadoModal({
               />
               <span>
                 <span className="block font-semibold text-stone-950">
-                  Crear credito para este pensionado
+                  Crear crédito para este pensionado
                 </span>
                 <span className="mt-1 block text-xs font-normal text-stone-500">
                   Guarda el pensionado y crea la solicitud de credito en el mismo flujo.

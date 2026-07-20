@@ -88,7 +88,7 @@ type LogPage = {
 };
 
 const views = [
-  { key: "creditos", label: "Creditos" },
+  { key: "creditos", label: "Créditos" },
   { key: "seguimientos", label: "Seguimientos" },
   { key: "actualizaciones", label: "Actualizaciones" },
 ] as const;
@@ -483,7 +483,7 @@ export default function PensionadoDetailPage() {
           </div>
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric label="Creditos" value={String(resumen.creditos)} />
+            <Metric label="Créditos" value={String(resumen.creditos)} />
             <Metric label="Activos" value={String(resumen.activos)} />
             <Metric label="Seguimientos" value={String(resumen.seguimientos)} />
             <Metric label="Solicitado" value={formatCurrency(resumen.montoSolicitado)} />
@@ -597,7 +597,7 @@ function CreditosList({
   return (
     <article className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
       <div className="border-b border-stone-800/10 px-5 py-4">
-        <h2 className="text-lg font-semibold text-stone-950">Creditos del pensionado</h2>
+        <h2 className="text-lg font-semibold text-stone-950">Créditos del pensionado</h2>
       </div>
 
       <div className="hidden grid-cols-[0.7fr_1fr_1.2fr_1fr_1fr_0.8fr_1fr_88px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">

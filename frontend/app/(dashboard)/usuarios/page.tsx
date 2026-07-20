@@ -203,7 +203,7 @@ export default function UsuariosPage() {
       <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">Configuracion</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-stone-500">Configuración</p>
             <h1 className="mt-3 text-xl font-semibold tracking-tight text-stone-950">Usuarios</h1>
             <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">Administra accesos, roles y oficina asignada.</p>
           </div>
@@ -233,7 +233,7 @@ export default function UsuariosPage() {
                 <Actions onEdit={() => openEdit(usuario)} onUnlock={() => void handleUnlock(usuario)} onDelete={() => void handleDelete(usuario)} deleteDisabled={!usuario.is_active} unlockVisible={usuario.is_active && usuario.intentos_fallidos >= MAX_FAILED_ATTEMPTS} />
               </div>
             ))}
-            {filtered.length === 0 ? <EmptyState text="No hay usuarios para la busqueda actual." /> : null}
+            {filtered.length === 0 ? <EmptyState text="No hay usuarios para la búsqueda actual." /> : null}
           </div>
         </div>
       ) : null}

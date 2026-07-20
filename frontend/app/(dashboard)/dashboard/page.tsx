@@ -243,7 +243,7 @@ function SuperAdminHome({
     ...frictionCredits.map((x) => ({
       id: `c-${x.id}`,
       officeId: x.oficina_id,
-      title: `Credito #${x.id}`,
+      title: `Crédito #${x.id}`,
       detail: x.documentos_pendientes ?? x.estado,
       meta: x.estado,
       href: `/creditos/${x.id}`,
@@ -256,24 +256,24 @@ function SuperAdminHome({
       <Hero
         eyebrow="Superadmin"
         title={`Control gerencial, ${session.nombre}`}
-        text="KPIs del mes, friccion operativa y productividad para decidir donde intervenir."
+        text="KPIs del mes, fricción operativa y productividad para decidir dónde intervenir."
         links={[
           ["Reportes", "/reportes"],
-          ["Auditoria", "/logs"],
+          ["Auditoría", "/logs"],
           ["Usuarios", "/usuarios"],
         ]}
       />  
 
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
-          label="Creditos del mes global"
+          label="Créditos del mes global"
           value={k?.creditos_mes ?? 0}
-          note={`${k?.creditos_total ?? 0} historicos`}
+          note={`${k?.creditos_total ?? 0} históricos`}
         />
         <Metric
           label="Aprobados del mes global"
           value={k?.creditos_aprobados_mes ?? 0}
-          note={`${approvalRate}% aprobacion global`}
+          note={`${approvalRate}% aprobación global`}
           tone={approvalRate >= 50 ? "teal" : "amber"}
         />
         <Metric
@@ -283,7 +283,7 @@ function SuperAdminHome({
           tone="teal"
         />
         <Metric
-          label="Pendientes criticos global"
+          label="Pendientes críticos global"
           value={overdue.length + frictionCredits.length + criticalNotifications.length}
           note="Vencidos, devueltos y alertas"
           tone="rose"
@@ -303,7 +303,7 @@ function SuperAdminHome({
       </Panel>
 
       <div className="grid gap-3 xl:grid-cols-[1.1fr_.9fr]">
-        <Panel title="Pendientes criticos por oficina" subtitle="Elementos que requieren decision o seguimiento">
+        <Panel title="Pendientes críticos por oficina" subtitle="Elementos que requieren decisión o seguimiento">
           <OfficeRiskList items={risks} offices={officeCards} />
         </Panel>
         <Panel title="Reporte corto del mes" subtitle="Resumen ejecutivo">
@@ -311,7 +311,7 @@ function SuperAdminHome({
             <MiniReport label="Solicitudes" value={creditSummary?.creditos ?? 0} href="/reportes" />
             <MiniReport label="Aprobadas" value={creditSummary?.aprobados ?? 0} href="/reportes" />
             <MiniReport label="Refinanciaciones listas" value={ready.length} href="/refinanciaciones" />
-            <MiniReport label="Cumpleanos hoy" value={summary?.cumpleanos_hoy?.length ?? 0} href="/pensionados" />
+            <MiniReport label="Cumpleaños hoy" value={summary?.cumpleanos_hoy?.length ?? 0} href="/pensionados" />
           </div>
         </Panel>
       </div>
@@ -319,7 +319,7 @@ function SuperAdminHome({
       <BirthdayPanel items={summary?.cumpleanos_hoy ?? []} />
 
       <div className="grid gap-3 lg:grid-cols-[1.15fr_.85fr]">
-        <Panel title="Estados del flujo" subtitle="Distribucion actual de creditos">
+        <Panel title="Estados del flujo" subtitle="Distribución actual de créditos">
           <div className="grid gap-2 sm:grid-cols-2">
             {summary?.creditos_por_estado.map((x) => (
               <div key={x.estado} className="rounded-md border border-stone-800/10 bg-stone-50 px-3 py-2">
@@ -329,7 +329,7 @@ function SuperAdminHome({
             ))}
           </div>
         </Panel>
-        <Panel title="Productividad por asesora" subtitle="Ranking de creacion de creditos">
+        <Panel title="Productividad por asesora" subtitle="Ranking de creación de créditos">
           {summary?.productividad_asesoras.length ? (
             summary.productividad_asesoras
               .slice(0, 8)
@@ -381,9 +381,9 @@ function AdvisorHome({
       <Hero
         eyebrow="Centro operativo"
         title={`Tu jornada, ${session.nombre}`}
-        text="Trabaja primero lo vencido, despues lo programado y luego las oportunidades comerciales."
+        text="Trabaja primero lo vencido, después lo programado y luego las oportunidades comerciales."
         links={[
-          ["Nuevo credito", "/creditos"],
+          ["Nuevo crédito", "/creditos"],
           ["Registrar seguimiento", "/seguimientos"],
           ["Refinanciaciones", "/refinanciaciones"],
         ]}
@@ -392,7 +392,7 @@ function AdvisorHome({
         <Metric label="Vencidos" value={overdue.length} note="Requieren contacto" tone="rose" />
         <Metric label="Hoy" value={todayItems.length} note="Agenda del dia" tone="amber" />
         <Metric label="Refinanciaciones" value={ready.length} note="Listas para gestionar" tone="teal" />
-        <Metric label="Cumpleanos hoy" value={summary?.cumpleanos_hoy?.length ?? 0} note="Clientes de tu oficina" tone="amber" />
+        <Metric label="Cumpleaños hoy" value={summary?.cumpleanos_hoy?.length ?? 0} note="Clientes de tu oficina" tone="amber" />
       </div>
       <BirthdayPanel items={summary?.cumpleanos_hoy ?? []} />
       <div className="grid gap-3 lg:grid-cols-[1.1fr_.9fr]">
@@ -414,7 +414,7 @@ function AdvisorHome({
             items={ready.slice(0, 8).map((x) => ({
               id: x.credito_id,
               officeId: 0,
-              title: x.pensionado_nombre ?? `Credito #${x.credito_id}`,
+              title: x.pensionado_nombre ?? `Crédito #${x.credito_id}`,
               detail: x.cooperativa_nombre ?? "Sin cooperativa",
               meta: x.disponible_desde ? formatDate(x.disponible_desde) : x.estado_comercial,
               href: `/creditos/${x.credito_id}`,
@@ -424,13 +424,13 @@ function AdvisorHome({
         </Panel>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        <Panel title="Creditos con friccion" subtitle="Correcciones y documentacion pendiente">
+        <Panel title="Créditos con fricción" subtitle="Correcciones y documentación pendiente">
           <TaskList
             items={[
               ...returned.map((x) => ({
                 id: `returned-${x.id}`,
                 officeId: x.oficina_id,
-                title: `Credito #${x.id} devuelto`,
+                title: `Crédito #${x.id} devuelto`,
                 detail: x.estado,
                 href: `/creditos/${x.id}`,
                 tone: "rose" as const,
@@ -438,15 +438,15 @@ function AdvisorHome({
               ...docs.map((x) => ({
                 id: `docs-${x.id}`,
                 officeId: x.oficina_id,
-                title: `Credito #${x.id} - documentos`,
-                detail: x.documentos_pendientes ?? "Documentacion pendiente",
+                title: `Crédito #${x.id} - documentos`,
+                detail: x.documentos_pendientes ?? "Documentación pendiente",
                 href: `/creditos/${x.id}`,
                 tone: "amber" as const,
               })),
             ].slice(0, 8)}
           />
         </Panel>
-        <Panel title="Proximas tareas" subtitle="Seguimientos programados despues de hoy">
+        <Panel title="Próximas tareas" subtitle="Seguimientos programados después de hoy">
           <TaskList
             items={upcoming.slice(0, 8).map((x) => ({
               id: x.id,
@@ -593,7 +593,7 @@ function OfficeCard({ office, max }: { office: OfficeSummary; max: number }) {
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-4">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.12em] text-stone-500">Creditos mes</p>
+          <p className="text-[10px] uppercase tracking-[0.12em] text-stone-500">Créditos mes</p>
           <p className="mt-1 text-xl font-semibold text-stone-950">{office.creditos_mes}</p>
         </div>
         <div>
@@ -601,7 +601,7 @@ function OfficeCard({ office, max }: { office: OfficeSummary; max: number }) {
           <p className="mt-1 text-xl font-semibold text-teal-800">{office.aprobados_mes}</p>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-[0.12em] text-stone-500">Criticos</p>
+          <p className="text-[10px] uppercase tracking-[0.12em] text-stone-500">Críticos</p>
           <p className={["mt-1 text-xl font-semibold", critical > 0 ? "text-rose-700" : "text-stone-950"].join(" ")}>
             {critical}
           </p>
@@ -624,7 +624,7 @@ function OfficeCard({ office, max }: { office: OfficeSummary; max: number }) {
           <strong className="text-stone-700">{office.refinanciaciones_listas}</strong>
         </p>
         <p className="flex justify-between gap-2">
-          <span>Cumpleanos hoy</span>
+          <span>Cumpleaños hoy</span>
           <strong className={office.cumpleanos_hoy > 0 ? "text-amber-700" : "text-stone-700"}>
             {office.cumpleanos_hoy}
           </strong>
@@ -652,7 +652,7 @@ function MiniReport({ label, value, href }: { label: string; value: number; href
 
 function BirthdayPanel({ items }: { items: BirthdayToday[] }) {
   return (
-    <Panel title="Cumpleanos hoy" subtitle="Clientes que conviene contactar hoy">
+    <Panel title="Cumpleaños hoy" subtitle="Clientes que conviene contactar hoy">
       {items.length ? (
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => (
@@ -667,7 +667,7 @@ function BirthdayPanel({ items }: { items: BirthdayToday[] }) {
           ))}
         </div>
       ) : (
-        <Empty text="No hay cumpleanos registrados para hoy" />
+        <Empty text="No hay cumpleaños registrados para hoy" />
       )}
     </Panel>
   );
@@ -675,7 +675,7 @@ function BirthdayPanel({ items }: { items: BirthdayToday[] }) {
 
 function Attention({ items }: { items: Notificacion[] }) {
   return (
-    <Panel title="Notificaciones" subtitle="Alertas pendientes mas recientes">
+    <Panel title="Notificaciones" subtitle="Alertas pendientes más recientes">
       <TaskList
         items={items.map((x) => ({
           id: x.id,
@@ -712,7 +712,7 @@ function OfficeRiskList({ items, offices }: { items: TaskItem[]; offices: Office
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-stone-950">{office.nombre}</p>
                 <p className="text-xs text-stone-500">
-                  {officeItems.length} pendiente{officeItems.length === 1 ? "" : "s"} critico
+                  {officeItems.length} pendiente{officeItems.length === 1 ? "" : "s"} crítico
                   {officeItems.length === 1 ? "" : "s"}
                 </p>
               </div>
@@ -730,7 +730,7 @@ function OfficeRiskList({ items, offices }: { items: TaskItem[]; offices: Office
                 <TaskList items={officeItems.slice(0, 5)} />
               ) : (
                 <p className="rounded-md bg-white px-3 py-2 text-sm text-stone-500">
-                  Sin pendientes criticos.
+                  Sin pendientes críticos.
                 </p>
               )}
             </div>
@@ -771,7 +771,7 @@ function TaskList({ items }: { items: TaskItem[] }) {
       ))}
     </div>
   ) : (
-    <Empty text="Nada pendiente por aqui" />
+    <Empty text="Nada pendiente por aquí" />
   );
 }
 
