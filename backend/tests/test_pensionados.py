@@ -18,6 +18,21 @@ class PensionadosTests(unittest.TestCase):
         stmt = db.execute.call_args.args[0]
         self.assertIn("pensionados.is_active = true", str(stmt))
 
+    def test_busqueda_por_nombre_compuesto_tokeniza_texto(self):
+        db = MagicMock()
+        repo = PensionadoRepository(db)
+
+        repo.get_all(texto="damian es")
+
+        stmt = db.execute.call_args.args[0]
+        compiled = stmt.compile(compile_kwargs={"literal_binds": True})
+        sql = str(compiled).lower()
+
+        self.assertIn("%damian%", sql)
+        self.assertIn("%es%", sql)
+        self.assertNotIn("%damian es%", sql)
+        self.assertIn("concat", sql)
+
     def test_obtener_o_404_no_devuelve_pensionado_inactivo(self):
         service = PensionadoService(MagicMock())
         service.repo.get_by_id = MagicMock(return_value=None)

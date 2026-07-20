@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from datetime import date
 
-from sqlalchemy import Date, select, desc, func, or_, cast
+from sqlalchemy import Date, select, desc, func, or_, and_, cast
 from app.db.models.pensionado import Pensionado, PensionadoOficina
 from app.schemas.pensionado import PensionadoCreate, PensionadoUpdate
 from typing import Optional
@@ -93,17 +93,31 @@ class PensionadoRepository:
                 PensionadoOficina.is_active == True,
             )
         if texto:
-            term = f"%{texto.strip()}%"
+            tokens = [token for token in texto.strip().split() if token]
+            full_name = func.concat(
+                Pensionado.nombre,
+                " ",
+                func.coalesce(Pensionado.segundo_nombre, ""),
+                " ",
+                func.coalesce(Pensionado.apellidos, ""),
+            )
+            searchable_fields = (
+                Pensionado.nombre,
+                Pensionado.segundo_nombre,
+                Pensionado.apellidos,
+                Pensionado.documento,
+                Pensionado.correo,
+                Pensionado.telefono,
+                Pensionado.celular,
+                Pensionado.direccion,
+                full_name,
+            )
             stmt = stmt.where(
-                or_(
-                    Pensionado.nombre.ilike(term),
-                    Pensionado.segundo_nombre.ilike(term),
-                    Pensionado.apellidos.ilike(term),
-                    Pensionado.documento.ilike(term),
-                    Pensionado.correo.ilike(term),
-                    Pensionado.telefono.ilike(term),
-                    Pensionado.celular.ilike(term),
-                    Pensionado.direccion.ilike(term),
+                and_(
+                    *[
+                        or_(*(field.ilike(f"%{token}%") for field in searchable_fields))
+                        for token in tokens
+                    ]
                 )
             )
         if fecha_desde is not None:
