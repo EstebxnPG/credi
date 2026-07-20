@@ -124,6 +124,7 @@ type FormMode = "create" | "edit";
 type EstadoFilter = "" | "activos" | "inactivos";
 
 const PAGE_SIZE = 15;
+const USER_CATALOG_LIMIT = 1000;
 
 const emptyForm: FormValues = {
   nombre: "",
@@ -211,7 +212,7 @@ export default function PensionadosPage() {
 
       let usuariosData: Usuario[] = [];
       if (session?.rol === "administrador") {
-        usuariosData = await apiFetch<Usuario[]>("/api/v1/usuarios/?limit=15");
+        usuariosData = await apiFetch<Usuario[]>(`/api/v1/usuarios/?limit=${USER_CATALOG_LIMIT}`);
       } else if (session && userId) {
         usuariosData = [
           {

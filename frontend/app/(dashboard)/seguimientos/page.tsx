@@ -85,7 +85,8 @@ const emptyForm: FormValues = {
 };
 
 const PAGE_SIZE = 15;
-const CATALOG_LIMIT = 200;
+const CATALOG_LIMIT = 50;
+const SEARCH_LIMIT = 20;
 
 export default function SeguimientosPage() {
   const router = useRouter();
@@ -107,6 +108,25 @@ export default function SeguimientosPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState<FormValues>(emptyForm);
+
+  const searchPensionados = useCallback(async (term: string) => {
+    const params = new URLSearchParams({
+      solo_activos: "true",
+      limit: String(SEARCH_LIMIT),
+      texto: term,
+    });
+    const results = await apiFetch<Pensionado[]>(`/api/v1/pensionados/?${params.toString()}`);
+    setPensionados((current) => {
+      const merged = new Map(current.map((pensionado) => [pensionado.id, pensionado]));
+      results.forEach((pensionado) => merged.set(pensionado.id, pensionado));
+      return Array.from(merged.values());
+    });
+    return results.map((pensionado) => ({
+      value: String(pensionado.id),
+      label: pensionado.nombre_completo,
+      description: `Documento ${pensionado.documento}`,
+    }));
+  }, []);
 
   const loadData = useCallback(async function loadData() {
     setLoading(true);
@@ -467,6 +487,7 @@ export default function SeguimientosPage() {
           saving={saving}
           pensionados={pensionados}
           oficinas={oficinas}
+          onSearchPensionados={searchPensionados}
           onChange={setForm}
           onClose={closeModal}
           onSubmit={handleSubmit}
@@ -482,6 +503,7 @@ function SeguimientoModal({
   saving,
   pensionados,
   oficinas,
+  onSearchPensionados,
   onChange,
   onClose,
   onSubmit,
@@ -491,6 +513,7 @@ function SeguimientoModal({
   saving: boolean;
   pensionados: Pensionado[];
   oficinas: Oficina[];
+  onSearchPensionados: (term: string) => Promise<SearchOption[]>;
   onChange: (form: FormValues) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -532,6 +555,7 @@ function SeguimientoModal({
                 description: `Documento ${pensionado.documento}`,
               }))}
               onChange={(value) => updateField("pensionado_id", value)}
+              onSearch={onSearchPensionados}
               placeholder="Buscar pensionado por nombre o documento"
               required
             />
@@ -611,6 +635,7 @@ function SearchSelectField({
   value,
   options,
   onChange,
+  onSearch,
   placeholder,
   required = false,
 }: {
@@ -618,12 +643,16 @@ function SearchSelectField({
   value: string;
   options: SearchOption[];
   onChange: (value: string) => void;
+  onSearch?: (term: string) => Promise<SearchOption[]>;
   placeholder: string;
   required?: boolean;
 }) {
   const selected = options.find((option) => option.value === value);
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [remoteOptions, setRemoteOptions] = useState<SearchOption[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (selected) {
@@ -631,8 +660,58 @@ function SearchSelectField({
     }
   }, [selected]);
 
+  useEffect(() => {
+    if (!onSearch) {
+      return;
+    }
+
+    const term = search.trim();
+    if (selected && search === `${selected.label} - ${selected.description}`) {
+      setRemoteOptions([]);
+      setSearchError(null);
+      return;
+    }
+    if (term.length < 2) {
+      setRemoteOptions([]);
+      setSearchError(null);
+      setSearching(false);
+      return;
+    }
+
+    let ignore = false;
+    setSearching(true);
+    setSearchError(null);
+    const timeoutId = window.setTimeout(() => {
+      onSearch(term)
+        .then((items) => {
+          if (!ignore) {
+            setRemoteOptions(items);
+          }
+        })
+        .catch(() => {
+          if (!ignore) {
+            setRemoteOptions([]);
+            setSearchError("No se pudo buscar pensionados.");
+          }
+        })
+        .finally(() => {
+          if (!ignore) {
+            setSearching(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [onSearch, search, selected]);
+
   const filteredOptions = useMemo(() => {
     const term = search.trim().toLowerCase();
+    if (remoteOptions.length > 0) {
+      return remoteOptions;
+    }
     if (!term) {
       return options.slice(0, 20);
     }
@@ -642,7 +721,7 @@ function SearchSelectField({
         [option.label, option.description].some((item) => item.toLowerCase().includes(term)),
       )
       .slice(0, 20);
-  }, [options, search]);
+  }, [options, remoteOptions, search]);
 
   return (
     <div className="block text-sm font-medium text-stone-700">
@@ -684,7 +763,9 @@ function SearchSelectField({
             </button>
           ))}
           {filteredOptions.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-stone-500">No hay resultados.</p>
+            <p className="px-3 py-2 text-sm text-stone-500">
+              {searching ? "Buscando..." : searchError ?? "No hay resultados."}
+            </p>
           ) : null}
         </div>
       ) : null}
