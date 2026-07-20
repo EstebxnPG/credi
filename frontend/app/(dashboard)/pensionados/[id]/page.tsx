@@ -857,9 +857,6 @@ function ActualizacionesList({
   isAdmin: boolean;
 }) {
   if (!isAdmin) {
-    return (
-      <StateMessage text="Las actualizaciones de auditoria solo estan disponibles para administradores. Para trabajadores, la historia comercial vive en Seguimientos." />
-    );
   }
 
   if (logsError) {

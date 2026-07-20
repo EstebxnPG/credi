@@ -1481,6 +1481,11 @@ function Field({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onWheel={(event) => {
+          if (type === "number") {
+            event.currentTarget.blur();
+          }
+        }}
         required={required}
       />
     </label>
