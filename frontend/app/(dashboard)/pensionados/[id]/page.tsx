@@ -10,6 +10,7 @@ import { readSession } from "@/lib/session";
 
 type Pensionado = {
   id: number;
+  oficina_id: number;
   nombre: string;
   segundo_nombre: string | null;
   apellidos: string | null;
@@ -171,6 +172,11 @@ export default function PensionadoDetailPage() {
   const [seguimientoForm, setSeguimientoForm] = useState<SeguimientoFormValues | null>(null);
   const [seguimientoError, setSeguimientoError] = useState<string | null>(null);
   const [savingSeguimiento, setSavingSeguimiento] = useState(false);
+
+  const oficinaPrincipal = useMemo(
+    () => oficinas.find((oficina) => oficina.id === pensionado?.oficina_id),
+    [oficinas, pensionado?.oficina_id],
+  );
 
   const loadLogs = useCallback(async () => {
     if (session?.rol !== "administrador") {
@@ -495,6 +501,10 @@ export default function PensionadoDetailPage() {
             <Detail label="Apellidos" value={pensionado.apellidos ?? "Sin registrar"} />
             <Detail label="Genero" value={pensionado.genero ?? "Sin registrar"} />
             <Detail label="Correo" value={pensionado.correo ?? "Sin correo registrado"} />
+            <Detail
+              label="Oficina"
+              value={oficinaPrincipal?.nombre ?? `Oficina #${pensionado.oficina_id}`}
+            />
             <Detail
               label="Telefono"
               value={pensionado.telefono ?? "Sin telefono fijo"}
