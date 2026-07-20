@@ -10,6 +10,7 @@ from app.services.credito_service import (
     _validar_regla_refinanciacion_configurada,
     _validar_contexto_creacion,
     _validar_credito_editable,
+    _normalizar_pendientes_documentales,
     _validar_tipo_credito,
 )
 
@@ -130,6 +131,66 @@ class CreditosTests(unittest.TestCase):
 
         with self.assertRaises(HTTPException):
             _validar_regla_refinanciacion_configurada(credito)
+
+    def test_documentos_pendientes_exigen_descripcion_visible_en_ui(self):
+        with self.assertRaises(HTTPException):
+            _normalizar_pendientes_documentales(True, "   \n  ")
+
+    def test_documentos_pendientes_limpia_lineas_vacias_para_notificacion(self):
+        tiene_pendientes, documentos = _normalizar_pendientes_documentales(
+            True,
+            " Cedula ampliada \n\n  Libranza firmada  ",
+        )
+
+        self.assertTrue(tiene_pendientes)
+        self.assertEqual(documentos, "Cedula ampliada\nLibranza firmada")
+
+    def test_documentos_pendientes_se_resuelven_al_desactivar_flag(self):
+        tiene_pendientes, documentos = _normalizar_pendientes_documentales(
+            False,
+            "Cedula ampliada",
+        )
+
+        self.assertFalse(tiene_pendientes)
+        self.assertIsNone(documentos)
+
+    def test_credito_nuevo_rechaza_datos_de_refinanciacion_o_compra_cartera(self):
+        with self.assertRaises(HTTPException):
+            _validar_tipo_credito(
+                MagicMock(),
+                pensionado_id=1,
+                tipo_credito="NUEVO",
+                credito_refinanciado_id=10,
+                entidad_financiera_origen=None,
+            )
+
+        with self.assertRaises(HTTPException):
+            _validar_tipo_credito(
+                MagicMock(),
+                pensionado_id=1,
+                tipo_credito="NUEVO",
+                credito_refinanciado_id=None,
+                entidad_financiera_origen="Banco externo",
+            )
+
+    def test_compra_cartera_exige_entidad_externa_y_no_credito_interno(self):
+        with self.assertRaises(HTTPException):
+            _validar_tipo_credito(
+                MagicMock(),
+                pensionado_id=1,
+                tipo_credito="COMPRA CARTERA",
+                credito_refinanciado_id=None,
+                entidad_financiera_origen=None,
+            )
+
+        with self.assertRaises(HTTPException):
+            _validar_tipo_credito(
+                MagicMock(),
+                pensionado_id=1,
+                tipo_credito="COMPRA CARTERA",
+                credito_refinanciado_id=10,
+                entidad_financiera_origen="Banco externo",
+            )
 
 
 if __name__ == "__main__":

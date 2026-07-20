@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
+
 from app.db.models.notificacion import Notificacion
 from app.db.models.usuario import Usuario
 from app.schemas.notificacion import NotificacionEstadoUpdate
@@ -11,6 +13,7 @@ from app.services.notificacion_service import (
     _alcance,
     _aplicar_lectura_usuario,
     _crear_si_falta,
+    _datos_seguimiento,
     _reactivar,
     cambiar_estado,
 )
@@ -210,6 +213,113 @@ class NotificacionesTests(unittest.TestCase):
 
         self.assertTrue(item.leida)
         self.assertEqual(item.leida_en, leida_en)
+
+    def test_regla_seguimiento_manana_genera_alerta_media(self):
+        hoy = datetime(2026, 7, 20, tzinfo=timezone.utc).date()
+        fecha_contacto = datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            _datos_seguimiento(fecha_contacto, hoy),
+            ("antes", "Seguimiento mañana", "media"),
+        )
+
+    def test_regla_seguimiento_hoy_genera_alerta_alta(self):
+        hoy = datetime(2026, 7, 20, tzinfo=timezone.utc).date()
+        fecha_contacto = datetime(2026, 7, 20, 8, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            _datos_seguimiento(fecha_contacto, hoy),
+            ("hoy", "Seguimiento para hoy", "alta"),
+        )
+
+    def test_regla_seguimiento_vencido_genera_alerta_alta(self):
+        hoy = datetime(2026, 7, 20, tzinfo=timezone.utc).date()
+        fecha_contacto = datetime(2026, 7, 19, 8, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            _datos_seguimiento(fecha_contacto, hoy),
+            ("vencido", "Seguimiento vencido", "alta"),
+        )
+
+    def test_notificacion_informativa_no_puede_pasarse_a_en_progreso(self):
+        db = MagicMock()
+        item = SimpleNamespace(
+            id=13,
+            clase="informativa",
+            estado="pendiente",
+            responsable_id=None,
+            justificacion=None,
+            pospuesta_hasta=None,
+            resuelta_en=None,
+            resuelta_por=None,
+        )
+        usuario = SimpleNamespace(id=3, rol="asesora", oficina_id=1)
+
+        with patch("app.services.notificacion_service._get", return_value=item):
+            with self.assertRaises(HTTPException):
+                cambiar_estado(db, usuario, 13, NotificacionEstadoUpdate(estado="en_progreso"))
+
+    def test_descartar_exige_justificacion_para_evitar_cierres_silenciosos(self):
+        db = MagicMock()
+        item = SimpleNamespace(
+            id=13,
+            clase="accion",
+            estado="pendiente",
+            responsable_id=None,
+            justificacion=None,
+            pospuesta_hasta=None,
+            resuelta_en=None,
+            resuelta_por=None,
+        )
+        usuario = SimpleNamespace(id=3, rol="asesora", oficina_id=1)
+
+        with patch("app.services.notificacion_service._get", return_value=item):
+            with self.assertRaises(HTTPException):
+                cambiar_estado(db, usuario, 13, NotificacionEstadoUpdate(estado="descartada"))
+
+    def test_posponer_exige_fecha_futura(self):
+        db = MagicMock()
+        item = SimpleNamespace(
+            id=13,
+            clase="accion",
+            estado="pendiente",
+            responsable_id=None,
+            justificacion=None,
+            pospuesta_hasta=None,
+            resuelta_en=None,
+            resuelta_por=None,
+        )
+        usuario = SimpleNamespace(id=3, rol="asesora", oficina_id=1)
+
+        with patch("app.services.notificacion_service._get", return_value=item):
+            with self.assertRaises(HTTPException):
+                cambiar_estado(
+                    db,
+                    usuario,
+                    13,
+                    NotificacionEstadoUpdate(
+                        estado="pospuesta",
+                        pospuesta_hasta=datetime.now(timezone.utc) - timedelta(minutes=1),
+                    ),
+                )
+
+    def test_asesora_no_reabre_notificacion_descartada(self):
+        db = MagicMock()
+        item = SimpleNamespace(
+            id=13,
+            clase="accion",
+            estado="descartada",
+            responsable_id=None,
+            justificacion="No aplica",
+            pospuesta_hasta=None,
+            resuelta_en=datetime.now(timezone.utc),
+            resuelta_por=1,
+        )
+        usuario = SimpleNamespace(id=3, rol="asesora", oficina_id=1)
+
+        with patch("app.services.notificacion_service._get", return_value=item):
+            with self.assertRaises(HTTPException):
+                cambiar_estado(db, usuario, 13, NotificacionEstadoUpdate(estado="pendiente"))
 
 
 if __name__ == "__main__":
