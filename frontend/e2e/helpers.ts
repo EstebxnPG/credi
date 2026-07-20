@@ -17,3 +17,13 @@ export async function expectShell(page: Page, userName: string) {
   await expect(page.getByRole("heading", { name: "Centro operativo" })).toBeVisible();
   await expect(page.getByText(userName)).toBeVisible();
 }
+
+export async function selectSearchOption(page: Page, label: string, searchText: string, optionText: string) {
+  const placeholders: Record<string, RegExp> = {
+    Pensionado: /Buscar pensionado/i,
+    Cooperativa: /Buscar cooperativa/i,
+    Pagaduria: /Buscar pagaduria/i,
+  };
+  await page.getByPlaceholder(placeholders[label] ?? new RegExp(label, "i")).fill(searchText);
+  await page.getByRole("button", { name: new RegExp(optionText, "i") }).first().click();
+}

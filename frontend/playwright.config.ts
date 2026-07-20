@@ -23,6 +23,11 @@ export default defineConfig({
       testMatch: /admin\.spec\.ts/,
     },
     {
+      name: "auth-desktop",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /auth\.spec\.ts/,
+    },
+    {
       name: "asesora-desktop",
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/asesora.json" },
       testMatch: /asesora\.spec\.ts/,

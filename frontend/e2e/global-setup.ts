@@ -61,12 +61,34 @@ async function globalSetup(config: FullConfig) {
 
   dockerExecPython(`
 from datetime import datetime, timezone
+from datetime import date
 from app.db.session import SessionLocal
+from app.db.models.oficina import Oficina
 from app.db.models.usuario import Usuario
+from app.db.models.pensionado import Pensionado, PensionadoOficina
+from app.db.models.cooperativa import Cooperativa
+from app.db.models.pagaduria import Pagaduria
+from app.db.models.credito import Credito
 from app.db.models.notificacion import Notificacion, NotificacionLectura
 from app.core.security import hash_password
 
 db = SessionLocal()
+
+def upsert_office(office_id, nombre, color):
+    office = db.get(Oficina, office_id)
+    if not office:
+        office = Oficina(id=office_id, nombre=nombre, direccion=f"Direccion {nombre}", color=color)
+        db.add(office)
+    else:
+        office.nombre = nombre
+        office.direccion = f"Direccion {nombre}"
+        office.color = color
+        office.is_active = True
+    db.flush()
+    return office
+
+office_one = upsert_office(1, "E2E oficina principal", "teal")
+office_two = upsert_office(2, "E2E oficina dos", "blue")
 
 def upsert_user(correo, password, nombre, documento, rol, oficina_id):
     user = db.query(Usuario).filter(Usuario.correo == correo).first()
@@ -94,6 +116,93 @@ def upsert_user(correo, password, nombre, documento, rol, oficina_id):
 
 admin = upsert_user("${ADMIN.correo}", "${ADMIN.contrasena}", "Admin E2E", "990000001", "administrador", 1)
 asesora = upsert_user("${ASESORA.correo}", "${ASESORA.contrasena}", "Asesora E2E", "990000002", "asesora", 1)
+
+def upsert_cooperativa():
+    item = db.query(Cooperativa).filter(Cooperativa.nombre == "Cooperativa E2E").first()
+    if not item:
+        item = Cooperativa(nombre="Cooperativa E2E")
+        db.add(item)
+    item.edad_minima = 18
+    item.edad_maxima = 95
+    item.monto_minimo = 100000
+    item.monto_maximo = 50000000
+    item.plazo_minimo = 6
+    item.plazo_maximo = 84
+    item.simulador_url = "https://example.com/simulador-e2e"
+    item.is_active = True
+    db.flush()
+    return item
+
+def upsert_pagaduria():
+    item = db.query(Pagaduria).filter(Pagaduria.nombre == "Pagaduria E2E").first()
+    if not item:
+        item = Pagaduria(nombre="Pagaduria E2E")
+        db.add(item)
+    item.is_active = True
+    db.flush()
+    return item
+
+cooperativa = upsert_cooperativa()
+pagaduria = upsert_pagaduria()
+
+def upsert_pensionado(documento, nombre, oficina_id):
+    item = db.query(Pensionado).filter(Pensionado.documento == documento).first()
+    if not item:
+        item = Pensionado(documento=documento)
+        db.add(item)
+    item.oficina_id = oficina_id
+    item.created_by = admin.id
+    item.nombre = nombre
+    item.segundo_nombre = None
+    item.apellidos = "Prueba QA"
+    item.genero = "No especificado"
+    item.fecha_nacimiento = date(1962, 5, 20)
+    item.correo = f"{documento}@e2e.test"
+    item.telefono = "6015550101"
+    item.celular = "3005550101"
+    item.direccion = "Direccion E2E"
+    item.is_active = True
+    db.flush()
+    link = db.query(PensionadoOficina).filter(
+        PensionadoOficina.pensionado_id == item.id,
+        PensionadoOficina.oficina_id == oficina_id,
+    ).first()
+    if not link:
+        db.add(PensionadoOficina(pensionado_id=item.id, oficina_id=oficina_id, created_by=admin.id))
+    return item
+
+pensionado_main = upsert_pensionado("880001001", "Alfa E2E", 1)
+pensionado_other = upsert_pensionado("880001002", "Beta E2E", 2)
+
+def upsert_credito(nro_libranza, pensionado, asesor, oficina_id, estado="Prospecto"):
+    item = db.query(Credito).filter(Credito.nro_libranza == nro_libranza).first()
+    if not item:
+        item = Credito(nro_libranza=nro_libranza)
+        db.add(item)
+    item.pensionado_id = pensionado.id
+    item.asesor_id = asesor.id
+    item.oficina_id = oficina_id
+    item.cooperativa_id = cooperativa.id
+    item.pagaduria_id = pagaduria.id
+    item.credito_refinanciado_id = None
+    item.tipo_credito = "NUEVO"
+    item.entidad_financiera_origen = None
+    item.monto_solicitado = 2500000
+    item.monto_aprobado = 2500000 if estado == "Aprobado" else None
+    item.plazo = 24
+    item.estado = estado
+    item.valor_cuota = 125000 if estado == "Aprobado" else None
+    item.fecha_desembolso = date(2026, 1, 15) if estado == "Aprobado" else None
+    item.fecha_fin_estimada = date(2028, 1, 15) if estado == "Aprobado" else None
+    item.observaciones = "Credito semilla E2E"
+    item.tiene_documentos_pendientes = False
+    item.documentos_pendientes = None
+    item.is_active = True
+    db.flush()
+    return item
+
+upsert_credito("E2E-LIB-001", pensionado_main, asesora, 1)
+upsert_credito("E2E-LIB-002", pensionado_other, admin, 2)
 
 def upsert_notification(clave, oficina_id, titulo, mensaje, responsable_id=None):
     item = db.query(Notificacion).filter(Notificacion.clave == clave).first()

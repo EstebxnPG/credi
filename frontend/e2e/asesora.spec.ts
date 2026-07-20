@@ -16,6 +16,7 @@ test.describe("asesora", () => {
   test("solo ve notificaciones de su oficina", async ({ page }) => {
     await page.goto("/notificaciones");
     await expect(page.getByRole("heading", { name: "Alertas y notificaciones" })).toBeVisible();
+    await page.getByRole("textbox", { name: "Buscar" }).fill("E2E oficina");
     await expect(page.getByText("E2E oficina principal")).toBeVisible();
     await expect(page.getByText("E2E oficina dos")).toHaveCount(0);
     await expectNoClientErrors(page);
