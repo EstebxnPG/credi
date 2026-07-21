@@ -75,7 +75,7 @@ type BirthdayToday = {
   id: number;
   nombre: string;
   documento: string;
-  oficina_id: number;
+  oficina_id?: number;
   fecha_nacimiento: string | null;
 };
 
@@ -94,6 +94,7 @@ type Summary = {
   productividad_asesoras: Array<{ nombre: string; creditos: number }>;
   oficinas_resumen?: OfficeSummary[];
   cumpleanos_hoy?: BirthdayToday[];
+  cumpleanos_proximos?: BirthdayToday[];
 };
 
 type CreditSummary = {
@@ -316,7 +317,10 @@ function SuperAdminHome({
         </Panel>
       </div>
 
-      <BirthdayPanel items={summary?.cumpleanos_hoy ?? []} />
+      <BirthdayPanel
+        items={summary?.cumpleanos_hoy ?? []}
+        upcomingItems={summary?.cumpleanos_proximos ?? []}
+      />
 
       <div className="grid gap-3 lg:grid-cols-[1.15fr_.85fr]">
         <Panel title="Estados del flujo" subtitle="Distribución actual de créditos">
@@ -394,7 +398,10 @@ function AdvisorHome({
         <Metric label="Refinanciaciones" value={ready.length} note="Listas para gestionar" tone="teal" />
         <Metric label="Cumpleaños hoy" value={summary?.cumpleanos_hoy?.length ?? 0} note="Clientes de tu oficina" tone="amber" />
       </div>
-      <BirthdayPanel items={summary?.cumpleanos_hoy ?? []} />
+      <BirthdayPanel
+        items={summary?.cumpleanos_hoy ?? []}
+        upcomingItems={summary?.cumpleanos_proximos ?? []}
+      />
       <div className="grid gap-3 lg:grid-cols-[1.1fr_.9fr]">
         <Panel title="Prioridad de trabajo" subtitle="Seguimientos vencidos y de hoy">
           <TaskList
@@ -650,7 +657,20 @@ function MiniReport({ label, value, href }: { label: string; value: number; href
   );
 }
 
-function BirthdayPanel({ items }: { items: BirthdayToday[] }) {
+function BirthdayPanel({
+  items,
+  upcomingItems,
+}: {
+  items: BirthdayToday[];
+  upcomingItems: BirthdayToday[];
+}) {
+  const [showUpcoming, setShowUpcoming] = useState(false);
+  const upcoming = upcomingItems
+    .map((item) => ({ item, days: daysUntilBirthday(item.fecha_nacimiento) }))
+    .filter(({ days }) => days > 0)
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 8);
+
   return (
     <Panel title="Cumpleaños hoy" subtitle="Clientes que conviene contactar hoy">
       {items.length ? (
@@ -669,8 +689,70 @@ function BirthdayPanel({ items }: { items: BirthdayToday[] }) {
       ) : (
         <Empty text="No hay cumpleaños registrados para hoy" />
       )}
+      <button
+        type="button"
+        className="mt-1 flex w-full items-center justify-between gap-3 rounded-md border border-stone-800/10 bg-stone-50 px-3 py-2 text-left text-sm font-medium text-stone-700 transition hover:border-amber-700/30 hover:bg-amber-50"
+        onClick={() => setShowUpcoming((current) => !current)}
+      >
+        <span className="min-w-0">
+          Próximos cumpleaños
+          <span className="ml-2 text-xs font-normal text-stone-500">
+            {upcoming.length ? `${upcoming.length} en los próximos 30 días` : "Sin registros próximos"}
+          </span>
+        </span>
+        <span
+          aria-hidden="true"
+          className={[
+            "h-2 w-2 shrink-0 border-b-2 border-r-2 border-amber-700 transition-transform",
+            showUpcoming ? "rotate-45" : "-rotate-45",
+          ].join(" ")}
+        />
+      </button>
+      {showUpcoming ? (
+        upcoming.length ? (
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {upcoming.map(({ item, days }) => (
+              <Link
+                key={item.id}
+                href={`/pensionados/${item.id}`}
+                className="rounded-md border border-stone-800/10 bg-white px-3 py-2 transition hover:border-amber-700/30 hover:bg-amber-50"
+              >
+                <p className="truncate text-sm font-semibold text-stone-950">{item.nombre}</p>
+                <p className="mt-1 text-xs text-stone-500">Documento {item.documento}</p>
+                <p className="mt-1 text-xs font-medium text-amber-800">
+                  {formatBirthday(item.fecha_nacimiento)} - en {days} día{days === 1 ? "" : "s"}
+                </p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <Empty text="No hay cumpleaños próximos en los siguientes 30 días" />
+        )
+      ) : null}
     </Panel>
   );
+}
+
+function daysUntilBirthday(fechaNacimiento: string | null) {
+  if (!fechaNacimiento) return Number.POSITIVE_INFINITY;
+  const [year, month, day] = fechaNacimiento.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return Number.POSITIVE_INFINITY;
+
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  let nextBirthday = new Date(start.getFullYear(), month - 1, day);
+  if (nextBirthday < start) {
+    nextBirthday = new Date(start.getFullYear() + 1, month - 1, day);
+  }
+
+  return Math.round((nextBirthday.getTime() - start.getTime()) / 86400000);
+}
+
+function formatBirthday(fechaNacimiento: string | null) {
+  if (!fechaNacimiento) return "Sin fecha";
+  const [, month, day] = fechaNacimiento.slice(0, 10).split("-").map(Number);
+  if (!month || !day) return "Sin fecha";
+  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
 }
 
 function Attention({ items }: { items: Notificacion[] }) {

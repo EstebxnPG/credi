@@ -15,6 +15,7 @@ from app.services.notificacion_service import (
     _crear_si_falta,
     _datos_seguimiento,
     _reactivar,
+    sincronizar_reglas,
     cambiar_estado,
 )
 
@@ -240,6 +241,30 @@ class NotificacionesTests(unittest.TestCase):
             _datos_seguimiento(fecha_contacto, hoy),
             ("vencido", "Seguimiento vencido", "alta"),
         )
+
+    def test_cumpleanos_usa_fecha_de_negocio_colombia(self):
+        pensionado = SimpleNamespace(
+            id=99,
+            oficina_id=1,
+            fecha_nacimiento=datetime(2001, 7, 20, tzinfo=timezone.utc).date(),
+            nombre_completo="CLIENTE PRUEBA",
+        )
+        query = MagicMock()
+        query.filter.return_value.all.side_effect = [[pensionado], [], []]
+        query.filter.return_value.first.return_value = None
+        query.all.return_value = []
+        db = MagicMock()
+        db.query.return_value = query
+
+        with patch("app.services.notificacion_service.listar_creditos_elegibles", return_value=[]):
+            cambios = sincronizar_reglas(
+                db,
+                referencia=datetime(2026, 7, 21, 4, 57, tzinfo=timezone.utc),
+                commit=False,
+            )
+
+        self.assertEqual(cambios, 1)
+        self.assertEqual(db.add.call_args.args[0].clave, "cumpleanos-99-2026-07-20")
 
     def test_notificacion_informativa_no_puede_pasarse_a_en_progreso(self):
         db = MagicMock()

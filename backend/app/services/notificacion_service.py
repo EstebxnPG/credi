@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_
@@ -10,6 +10,7 @@ from app.db.models.pendiente_credito import PendienteCredito
 from app.db.models.pensionado import Pensionado
 from app.db.models.seguimiento import Seguimiento
 from app.db.models.usuario import Usuario
+from app.core.time import business_date, now_utc
 from app.schemas.notificacion import NotificacionAsignar, NotificacionEstadoUpdate
 from app.services.log_service import registrar_log
 from app.services.refinanciacion_service import listar_creditos_elegibles
@@ -28,7 +29,7 @@ TRANSICIONES = {
 
 
 def _ahora() -> datetime:
-    return datetime.now(timezone.utc)
+    return now_utc()
 
 
 def _reactivar(item: Notificacion, data: dict, forzar_reapertura: bool) -> bool:
@@ -117,7 +118,7 @@ def _datos_seguimiento(fecha_contacto: datetime, hoy) -> tuple[str, str, str]:
 def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: bool = True) -> int:
     """Materializa alertas de negocio sin depender de lecturas GET."""
     ahora = referencia or _ahora()
-    hoy = ahora.date()
+    hoy = business_date(ahora)
     cambios = 0
 
     cumple_key_hoy = hoy.month * 100 + hoy.day

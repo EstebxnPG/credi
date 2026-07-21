@@ -12,6 +12,7 @@ from app.db.models.pensionado import Pensionado
 from app.db.models.refinanciacion import OportunidadRefinanciacion, Refinanciacion
 from app.db.models.seguimiento import Seguimiento, SeguimientoSolucion
 from app.db.models.usuario import Usuario
+from app.core.time import now_business, today_business
 from app.services import refinanciacion_service
 
 
@@ -99,7 +100,7 @@ def _resumen_oficinas_dashboard(db: Session, usuario_actual: Usuario, inicio_mes
             Seguimiento.oficina_id.in_(oficina_ids),
             Seguimiento.estado.in_(["abierto", "pendiente"]),
             Seguimiento.fecha_proximo_contacto.isnot(None),
-            Seguimiento.fecha_proximo_contacto < datetime.now(),
+            Seguimiento.fecha_proximo_contacto < now_business(),
         )
         .group_by(Seguimiento.oficina_id)
         .all()
@@ -122,7 +123,8 @@ def _resumen_oficinas_dashboard(db: Session, usuario_actual: Usuario, inicio_mes
         .group_by(Notificacion.oficina_id)
         .all()
     )
-    cumple_key_hoy = datetime.now().month * 100 + datetime.now().day
+    hoy = today_business()
+    cumple_key_hoy = hoy.month * 100 + hoy.day
     cumple_key = (
         func.extract("month", Pensionado.fecha_nacimiento) * 100
         + func.extract("day", Pensionado.fecha_nacimiento)
@@ -203,7 +205,7 @@ def _cumpleanos_hoy_dashboard(db: Session, usuario_actual: Usuario, hoy: date) -
 
 
 def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
-    hoy = date.today()
+    hoy = today_business()
     inicio_mes = datetime(hoy.year, hoy.month, 1)
 
     creditos_query = _base_creditos_query(db, usuario_actual)
@@ -320,7 +322,7 @@ def obtener_resumen_reportes(db: Session, usuario_actual: Usuario) -> dict:
     refinanciaciones = refinanciaciones_query.count()
 
     return {
-        "generado_en": datetime.now().isoformat(),
+        "generado_en": now_business().isoformat(),
         "alcance": "global" if usuario_actual.rol == "administrador" else "asesora",
         "kpis": {
             "creditos_total": total,
@@ -457,7 +459,7 @@ def _metricas_pensionados(db, usuario_actual, oficina_id, desde, hasta, texto):
         term = f"%{texto.strip()}%"
         query = query.filter(or_(Pensionado.nombre.ilike(term), Pensionado.segundo_nombre.ilike(term), Pensionado.apellidos.ilike(term), Pensionado.documento.ilike(term), Pensionado.correo.ilike(term), Pensionado.telefono.ilike(term), Pensionado.celular.ilike(term)))
     total, oficinas, creadores = query.with_entities(func.count(Pensionado.id), func.count(func.distinct(Pensionado.oficina_id)), func.count(func.distinct(Pensionado.created_by))).one()
-    inicio_mes = date.today().replace(day=1)
+    inicio_mes = today_business().replace(day=1)
     mes = query.filter(cast(Pensionado.created_at, Date) >= inicio_mes).count()
     return {"pensionados": total or 0, "registradosMes": mes, "oficinas": oficinas or 0, "usuariosRegistradores": creadores or 0}
 
