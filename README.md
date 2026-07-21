@@ -1,6 +1,6 @@
-# Crediconfiemos
+# Credi
 
-Crediconfiemos is a full-stack credit intermediation management system designed for teams that handle pensioner loan applications, operational follow-up, document tracking, reporting, and administrative catalogs.
+Credi is a full-stack credit intermediation management system designed for teams that handle pensioner loan applications, operational follow-up, document tracking, reporting, and administrative catalogs.
 
 The project combines a FastAPI backend, a Next.js dashboard, PostgreSQL persistence, Alembic migrations, and containerized local infrastructure with Docker Compose.
 
