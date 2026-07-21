@@ -18,9 +18,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "creditos",
-        sa.Column("entidad_financiera_origen", sa.String(length=150), nullable=True),
+    op.execute(
+        "ALTER TABLE creditos "
+        "ADD COLUMN IF NOT EXISTS entidad_financiera_origen varchar(150)"
     )
     op.execute(
         """
@@ -34,4 +34,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("creditos", "entidad_financiera_origen")
+    op.execute("ALTER TABLE creditos DROP COLUMN IF EXISTS entidad_financiera_origen")
