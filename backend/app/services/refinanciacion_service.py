@@ -949,7 +949,8 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
         raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
     credito = oportunidad.credito
     validar_credito_refinanciable(db, credito)
-    reactivacion_manual = oportunidad.estado == "pospuesto" and data.estado == "disponible"
+    reactivacion_manual = oportunidad.estado in {"rechazado", "pospuesto"} and data.estado == "disponible"
+    correccion_aceptada = oportunidad.estado == "aceptado" and data.estado == "disponible"
     if (
         oportunidad.estado in {"rechazado", "pospuesto"}
         and oportunidad.reactivar_en
@@ -959,8 +960,12 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
         raise HTTPException(status_code=409, detail="La oportunidad se reactivara en la fecha programada")
     if oportunidad.estado == "convertido":
         raise HTTPException(status_code=400, detail="Una oportunidad convertida no puede modificarse")
-    if reactivacion_manual and not data.justificacion:
+    if oportunidad.estado == "rechazado" and data.estado == "disponible":
+        data.justificacion = data.justificacion or "Reapertura manual de oportunidad rechazada"
+    if (oportunidad.estado == "pospuesto" and data.estado == "disponible") and not data.justificacion:
         raise HTTPException(status_code=422, detail="Quitar pospuesto exige justificacion")
+    if correccion_aceptada and not data.justificacion:
+        raise HTTPException(status_code=422, detail="Volver a disponible exige justificacion")
     if data.estado == "rechazado" and not data.justificacion:
         raise HTTPException(status_code=422, detail="Rechazar exige justificacion")
     reactivar_en = data.reactivar_en

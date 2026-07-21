@@ -96,6 +96,7 @@ export default function RefinanciacionesPage() {
   const [rejecting, setRejecting] = useState<Item | null>(null);
   const [postponing, setPostponing] = useState<Item | null>(null);
   const [unpostponing, setUnpostponing] = useState<Item | null>(null);
+  const [returning, setReturning] = useState<Item | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canGoNext = page < totalPages;
@@ -617,14 +618,28 @@ export default function RefinanciacionesPage() {
                           </>
                         ) : null}
                         {item.estado_comercial === "aceptado" ? (
-                          <Link
-                            className="button-primary px-2.5 py-1.5 text-xs"
-                            href={`/creditos?refinanciar=${item.credito_id}`}
-                          >
-                            Refinanciar
-                          </Link>
+                          <>
+                            <Link
+                              className="button-primary px-2.5 py-1.5 text-xs"
+                              href={`/creditos?refinanciar=${item.credito_id}`}
+                            >
+                              Refinanciar
+                            </Link>
+                            <Action
+                              disabled={savingId === item.oportunidad_id}
+                              text="Volver a disponible"
+                              onClick={() => setReturning(item)}
+                            />
+                          </>
                         ) : null}
                       </>
+                    ) : null}
+                    {item.estado_comercial === "rechazado" ? (
+                      <Action
+                        disabled={savingId === item.oportunidad_id}
+                        text="Reabrir"
+                        onClick={() => void change(item, "disponible")}
+                      />
                     ) : null}
                     {item.estado_comercial === "pospuesto" ? (
                       <Action
@@ -684,6 +699,17 @@ export default function RefinanciacionesPage() {
           onConfirm={async (reason) => {
             await change(unpostponing, "disponible", reason);
             setUnpostponing(null);
+          }}
+        />
+      ) : null}
+      {returning ? (
+        <ReturnAvailableModal
+          item={returning}
+          saving={savingId === returning.oportunidad_id}
+          onClose={() => setReturning(null)}
+          onConfirm={async (reason) => {
+            await change(returning, "disponible", reason);
+            setReturning(null);
           }}
         />
       ) : null}
@@ -902,6 +928,54 @@ function UnpostponeModal({
             onClick={() => void onConfirm(reason.trim())}
           >
             {saving ? "Guardando..." : "Quitar pospuesto"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReturnAvailableModal({
+  item,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  item: Item;
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-semibold">Volver a disponible #{item.credito_id}</h2>
+        <p className="mt-2 text-sm text-stone-600">
+          Usa esta accion si el cliente se arrepintio o si la oportunidad se marco como aceptada por error.
+        </p>
+        <label className="mt-4 block text-sm font-medium">
+          Motivo
+          <textarea
+            autoFocus
+            className="input-base mt-1 min-h-24"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ej: Cliente se arrepintio o se marco la oportunidad equivocada"
+          />
+        </label>
+        <div className="mt-3 flex justify-end gap-2">
+          <button type="button" className="button-muted" disabled={saving} onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="button-primary"
+            disabled={saving || !reason.trim()}
+            onClick={() => void onConfirm(reason.trim())}
+          >
+            {saving ? "Guardando..." : "Volver a disponible"}
           </button>
         </div>
       </div>
