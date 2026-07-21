@@ -106,6 +106,33 @@ def _resolver_por_clave(db: Session, clave: str) -> None:
     )
 
 
+def sincronizar_documentos_credito(db: Session, credito: Credito, ahora: datetime | None = None) -> bool:
+    ahora = ahora or _ahora()
+    clave = f"documentos-credito-{credito.id}"
+    if credito.tiene_documentos_pendientes:
+        return _crear_o_actualizar(
+            db,
+            clave=clave,
+            oficina_id=credito.oficina_id,
+            responsable_id=None,
+            tipo="documento_pendiente",
+            clase="accion",
+            estado="pendiente",
+            titulo="Documentos pendientes",
+            mensaje=credito.documentos_pendientes or f"Credito #{credito.id}",
+            prioridad="alta",
+            href=f"/creditos/{credito.id}",
+            entidad_tipo="credito",
+            entidad_id=credito.id,
+            pensionado_id=credito.pensionado_id,
+            fecha=ahora,
+            leida=False,
+        )
+
+    _resolver_por_clave(db, clave)
+    return False
+
+
 def _datos_seguimiento(fecha_contacto: datetime, hoy) -> tuple[str, str, str]:
     fecha = fecha_contacto.date()
     if fecha > hoy:

@@ -488,9 +488,9 @@ def crear_credito(db: Session, data: CreditoCreate, usuario_actual: Usuario) -> 
         valores_despues={**payload, "estado": "Prospecto"},
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_documentos_credito
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_documentos_credito(db, credito)
     db.commit()
     db.refresh(credito)
     return credito
@@ -885,9 +885,9 @@ def actualizar_credito(
         valores_despues=cambios,
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_documentos_credito
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_documentos_credito(db, credito)
     db.commit()
     db.refresh(credito)
     return credito

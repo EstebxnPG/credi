@@ -20,6 +20,7 @@ node_modules/
 # Base de datos local
 *.sqlite
 *.db
+*.dump
 
 # Archivos cargados por usuarios / datos sensibles
 backend/data/uploads/
