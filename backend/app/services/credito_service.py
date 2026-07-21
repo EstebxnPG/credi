@@ -210,7 +210,11 @@ def _validar_reglas_credito(
     pensionado = _get_pensionado_activo_or_404(db, pensionado_id)
     cooperativa = _get_cooperativa_activa_or_404(db, cooperativa_id)
 
-    edad = _calcular_edad(pensionado.fecha_nacimiento)
+    edad = (
+        _calcular_edad(pensionado.fecha_nacimiento)
+        if pensionado.fecha_nacimiento is not None
+        else None
+    )
     errores = validar_credito_contra_cooperativa(
         cooperativa=cooperativa,
         edad_pensionado=edad,

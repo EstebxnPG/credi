@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from fastapi import HTTPException
 
 from app.schemas.cooperativa import CooperativaUpdate
-from app.services.cooperativa_service import actualizar_cooperativa
+from app.services.cooperativa_service import actualizar_cooperativa, validar_credito_contra_cooperativa
 
 
 class CooperativasTests(unittest.TestCase):
@@ -63,6 +63,44 @@ class CooperativasTests(unittest.TestCase):
         self.assertEqual(regla.tipo_liberacion, "porcentaje")
         self.assertIsNone(regla.meses_para_refinanciar)
         self.assertEqual(regla.porcentaje_credito, 40)
+
+    def test_validacion_credito_permite_fecha_nacimiento_no_registrada(self):
+        cooperativa = SimpleNamespace(
+            edad_minima=18,
+            edad_maxima=79,
+            monto_minimo=1,
+            monto_maximo=9_999_999_999,
+            plazo_minimo=36,
+            plazo_maximo=96,
+        )
+
+        errores = validar_credito_contra_cooperativa(
+            cooperativa=cooperativa,
+            edad_pensionado=None,
+            monto=3_000_000,
+            plazo=63,
+        )
+
+        self.assertEqual(errores, [])
+
+    def test_validacion_credito_sigue_validando_edad_si_existe(self):
+        cooperativa = SimpleNamespace(
+            edad_minima=18,
+            edad_maxima=79,
+            monto_minimo=1,
+            monto_maximo=9_999_999_999,
+            plazo_minimo=36,
+            plazo_maximo=96,
+        )
+
+        errores = validar_credito_contra_cooperativa(
+            cooperativa=cooperativa,
+            edad_pensionado=80,
+            monto=3_000_000,
+            plazo=63,
+        )
+
+        self.assertIn("maximo permitido: 79", errores[0])
 
 
 if __name__ == "__main__":

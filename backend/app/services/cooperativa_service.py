@@ -135,22 +135,23 @@ def desactivar_cooperativa(db: Session, cooperativa_id: int) -> Cooperativa:
 
 def validar_credito_contra_cooperativa(
     cooperativa: Cooperativa,
-    edad_pensionado: int,
+    edad_pensionado: int | None,
     monto: float,
     plazo: int,
 ) -> list[str]:
     errores = []
 
-    if edad_pensionado < cooperativa.edad_minima:
-        errores.append(
-            f"El pensionado tiene {edad_pensionado} anos; "
-            f"minimo requerido: {cooperativa.edad_minima}"
-        )
-    if edad_pensionado > cooperativa.edad_maxima:
-        errores.append(
-            f"El pensionado tiene {edad_pensionado} anos; "
-            f"maximo permitido: {cooperativa.edad_maxima}"
-        )
+    if edad_pensionado is not None:
+        if edad_pensionado < cooperativa.edad_minima:
+            errores.append(
+                f"El pensionado tiene {edad_pensionado} anos; "
+                f"minimo requerido: {cooperativa.edad_minima}"
+            )
+        if edad_pensionado > cooperativa.edad_maxima:
+            errores.append(
+                f"El pensionado tiene {edad_pensionado} anos; "
+                f"maximo permitido: {cooperativa.edad_maxima}"
+            )
     if monto < cooperativa.monto_minimo:
         errores.append(
             f"Monto ${monto:,.0f} inferior al minimo ${cooperativa.monto_minimo:,.0f}"
