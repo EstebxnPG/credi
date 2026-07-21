@@ -16,6 +16,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "cooperativa_refinanciacion_reglas" in inspector.get_table_names():
+        return
+
     op.create_table(
         "cooperativa_refinanciacion_reglas",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -29,4 +34,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("cooperativa_refinanciacion_reglas")
+    op.execute("DROP TABLE IF EXISTS cooperativa_refinanciacion_reglas")
