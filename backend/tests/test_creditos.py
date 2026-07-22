@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.schemas.credito import CreditoCambioEstado
 from app.services.credito_service import (
     _validar_regla_refinanciacion_configurada,
+    _validar_campos_editables,
     _validar_contexto_creacion,
     _validar_credito_editable,
     _normalizar_pendientes_documentales,
@@ -16,11 +17,38 @@ from app.services.credito_service import (
 
 
 class CreditosTests(unittest.TestCase):
-    def test_credito_aprobado_no_es_editable_aunque_este_activo(self):
+    def test_credito_aprobado_es_editable_para_correcciones_operativas(self):
+        credito = SimpleNamespace(is_active=True, estado="Aprobado")
+
+        _validar_credito_editable(credito)
+        _validar_campos_editables(
+            credito,
+            {
+                "monto_solicitado": 10_000_000,
+                "monto_aprobado": 10_000_000,
+                "plazo": 84,
+                "valor_cuota": 145_000,
+                "cooperativa_id": 2,
+                "tipo_credito": "NUEVO",
+                "motivo_finalizacion": "REFINANCIADO",
+                "nro_libranza": "000",
+                "observaciones": "0000",
+            },
+        )
+
+    def test_credito_aprobado_rechaza_campos_fuera_de_correccion_operativa(self):
         credito = SimpleNamespace(is_active=True, estado="Aprobado")
 
         with self.assertRaises(HTTPException):
-            _validar_credito_editable(credito)
+            _validar_campos_editables(credito, {"pagaduria_id": 1})
+
+    def test_credito_finalizado_o_rechazado_no_es_editable(self):
+        for estado in ["Finalizado", "Rechazado"]:
+            with self.subTest(estado=estado):
+                credito = SimpleNamespace(is_active=True, estado=estado)
+
+                with self.assertRaises(HTTPException):
+                    _validar_credito_editable(credito)
 
     def test_credito_no_aprobado_es_editable(self):
         credito = SimpleNamespace(is_active=True, estado="Enviado a cooperativa")

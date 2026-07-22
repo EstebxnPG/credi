@@ -124,9 +124,12 @@ type EditForm = {
   cooperativa_id: string;
   pagaduria_id: string;
   monto_solicitado: string;
+  monto_aprobado: string;
   plazo: string;
+  valor_cuota: string;
   nro_libranza: string;
   tipo_credito: string;
+  motivo_finalizacion: string;
   credito_refinanciado_id: string;
   entidad_financiera_origen: string;
   observaciones: string;
@@ -300,9 +303,12 @@ export default function CreditoDetailPage() {
       cooperativa_id: String(credito.cooperativa_id),
       pagaduria_id: String(credito.pagaduria_id),
       monto_solicitado: String(credito.monto_solicitado),
+      monto_aprobado: credito.monto_aprobado ? String(credito.monto_aprobado) : "",
       plazo: String(credito.plazo),
+      valor_cuota: credito.valor_cuota ? String(credito.valor_cuota) : "",
       nro_libranza: credito.nro_libranza ?? "",
       tipo_credito: credito.tipo_credito ?? "NUEVO",
+      motivo_finalizacion: credito.motivo_finalizacion ?? "",
       credito_refinanciado_id: credito.credito_refinanciado_id
         ? String(credito.credito_refinanciado_id)
         : "",
@@ -352,29 +358,46 @@ export default function CreditoDetailPage() {
     setEditError(null);
 
     try {
+      const updatePayload =
+        normalizeStatus(credito.estado).toLowerCase() === "aprobado"
+          ? {
+              cooperativa_id: Number(editForm.cooperativa_id),
+              monto_solicitado: parseMoneyInput(editForm.monto_solicitado),
+              monto_aprobado: parseNullableMoneyInput(editForm.monto_aprobado),
+              plazo: Number(editForm.plazo),
+              valor_cuota: parseNullableMoneyInput(editForm.valor_cuota),
+              nro_libranza: nullableText(editForm.nro_libranza),
+              tipo_credito: editForm.tipo_credito,
+              motivo_finalizacion: nullableText(editForm.motivo_finalizacion),
+              observaciones: nullableText(editForm.observaciones),
+            }
+          : {
+              cooperativa_id: Number(editForm.cooperativa_id),
+              pagaduria_id: Number(editForm.pagaduria_id),
+              monto_solicitado: parseMoneyInput(editForm.monto_solicitado),
+              monto_aprobado: parseNullableMoneyInput(editForm.monto_aprobado),
+              plazo: Number(editForm.plazo),
+              valor_cuota: parseNullableMoneyInput(editForm.valor_cuota),
+              nro_libranza: nullableText(editForm.nro_libranza),
+              tipo_credito: editForm.tipo_credito,
+              motivo_finalizacion: nullableText(editForm.motivo_finalizacion),
+              credito_refinanciado_id:
+                editForm.tipo_credito === "REFINANCIACION"
+                  ? Number(editForm.credito_refinanciado_id)
+                  : null,
+              entidad_financiera_origen:
+                editForm.tipo_credito === "COMPRA CARTERA"
+                  ? nullableText(editForm.entidad_financiera_origen)
+                  : null,
+              observaciones: nullableText(editForm.observaciones),
+              tiene_documentos_pendientes: editForm.tiene_documentos_pendientes,
+              documentos_pendientes: editForm.tiene_documentos_pendientes
+                ? nullableText(editForm.documentos_pendientes)
+                : null,
+            };
       const updated = await apiFetch<Credito>(`/api/v1/creditos/${credito.id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          cooperativa_id: Number(editForm.cooperativa_id),
-          pagaduria_id: Number(editForm.pagaduria_id),
-          monto_solicitado: parseMoneyInput(editForm.monto_solicitado),
-          plazo: Number(editForm.plazo),
-          nro_libranza: nullableText(editForm.nro_libranza),
-          tipo_credito: editForm.tipo_credito,
-          credito_refinanciado_id:
-            editForm.tipo_credito === "REFINANCIACION"
-              ? Number(editForm.credito_refinanciado_id)
-              : null,
-          entidad_financiera_origen:
-            editForm.tipo_credito === "COMPRA CARTERA"
-              ? nullableText(editForm.entidad_financiera_origen)
-              : null,
-          observaciones: nullableText(editForm.observaciones),
-          tiene_documentos_pendientes: editForm.tiene_documentos_pendientes,
-          documentos_pendientes: editForm.tiene_documentos_pendientes
-            ? nullableText(editForm.documentos_pendientes)
-            : null,
-        }),
+        body: JSON.stringify(updatePayload),
       });
 
       setCredito(updated);
@@ -698,7 +721,7 @@ export default function CreditoDetailPage() {
               title={
                 credito.is_active && isCreditoEditable(credito)
                   ? "Editar credito"
-                  : "Solo se pueden editar creditos que no esten aprobados, finalizados o rechazados"
+                  : "Solo se bloquean creditos finalizados o rechazados"
               }
             >
               Editar
@@ -857,7 +880,7 @@ export default function CreditoDetailPage() {
             <Detail label="Cooperativa" value={cooperativaActual?.nombre ?? "Sin cooperativa"} />
             {cooperativaActual?.simulador_url ? <a href={cooperativaActual.simulador_url} target="_blank" rel="noopener noreferrer" className="self-end pb-3 text-sm font-semibold text-teal-700 hover:underline">Abrir simuladora ↗</a> : null}
             <Detail label="Tipo" value={credito.tipo_credito ?? "Sin tipo"} />
-            {credito.estado === "Finalizado" ? (
+            {credito.estado === "Finalizado" || credito.motivo_finalizacion ? (
               <Detail
                 label="Motivo finalizacion"
                 value={formatFinalizationReason(credito.motivo_finalizacion)}
@@ -1134,6 +1157,8 @@ function EditCreditoModal({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const isApprovedEdit = normalizeStatus(credito.estado).toLowerCase() === "aprobado";
+
   function updateField(field: keyof EditForm, value: string | boolean) {
     if (field === "tipo_credito") {
       onChange({
@@ -1182,18 +1207,22 @@ function EditCreditoModal({
             }))}
             required
           />
-          <SelectField
-            label="Pagaduria"
-            value={form.pagaduria_id}
-            onChange={(value) => updateField("pagaduria_id", value)}
-            options={pagadurias.map((pagaduria) => ({
-              value: String(pagaduria.id),
-              label: pagaduria.nombre,
-            }))}
-            required
-          />
+          {!isApprovedEdit ? (
+            <SelectField
+              label="Pagaduria"
+              value={form.pagaduria_id}
+              onChange={(value) => updateField("pagaduria_id", value)}
+              options={pagadurias.map((pagaduria) => ({
+                value: String(pagaduria.id),
+                label: pagaduria.nombre,
+              }))}
+              required
+            />
+          ) : null}
           <MoneyField label="Monto solicitado" value={form.monto_solicitado} onChange={(value) => updateField("monto_solicitado", value)} required />
+          <MoneyField label="Monto aprobado" value={form.monto_aprobado} onChange={(value) => updateField("monto_aprobado", value)} />
           <Field label="Plazo" type="number" value={form.plazo} onChange={(value) => updateField("plazo", value)} required />
+          <MoneyField label="Valor cuota" value={form.valor_cuota} onChange={(value) => updateField("valor_cuota", value)} />
           <Field label="Nro libranza" value={form.nro_libranza} onChange={(value) => updateField("nro_libranza", value)} />
           <SelectField
             label="Tipo de credito"
@@ -1205,6 +1234,18 @@ function EditCreditoModal({
               { value: "COMPRA CARTERA", label: "COMPRA CARTERA" },
             ]}
             required
+          />
+          <SelectField
+            label="Motivo finalizacion"
+            value={form.motivo_finalizacion}
+            onChange={(value) => updateField("motivo_finalizacion", value)}
+            options={[
+              { value: "PAGO_NORMAL", label: "Pago normal" },
+              { value: "REFINANCIADO", label: "Refinanciado" },
+              { value: "AJUSTE_MIGRACION", label: "Ajuste migracion" },
+              { value: "ANULADO", label: "Anulado" },
+              { value: "OTRO", label: "Otro" },
+            ]}
           />
           {form.tipo_credito === "REFINANCIACION" ? (
             <SelectField
@@ -1228,29 +1269,34 @@ function EditCreditoModal({
               required
             />
           ) : null}
-          <label className="flex items-center gap-3 rounded-lg border border-stone-800/10 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700">
-            <input
-              type="checkbox"
-              checked={form.tiene_documentos_pendientes}
-              onChange={(event) => updateField("tiene_documentos_pendientes", event.target.checked)}
-            />
-            Documentos pendientes
-          </label>
-          <div className="sm:col-span-2">
-            <TextareaField
-              label="Documentos pendientes"
-              value={form.documentos_pendientes}
-              onChange={(value) => updateField("documentos_pendientes", value)}
-              disabled={!form.tiene_documentos_pendientes}
-            />
-          </div>
+          {!isApprovedEdit ? (
+            <>
+              <label className="flex items-center gap-3 rounded-lg border border-stone-800/10 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={form.tiene_documentos_pendientes}
+                  onChange={(event) => updateField("tiene_documentos_pendientes", event.target.checked)}
+                />
+                Documentos pendientes
+              </label>
+              <div className="sm:col-span-2">
+                <TextareaField
+                  label="Documentos pendientes"
+                  value={form.documentos_pendientes}
+                  onChange={(value) => updateField("documentos_pendientes", value)}
+                  disabled={!form.tiene_documentos_pendientes}
+                />
+              </div>
+            </>
+          ) : null}
           <div className="sm:col-span-2">
             <TextareaField label="Observaciones" value={form.observaciones} onChange={(value) => updateField("observaciones", value)} />
           </div>
         </div>
 
         <p className="mt-4 text-xs text-stone-500">
-          Puedes editar creditos mientras no esten aprobados, finalizados o rechazados.
+          Puedes corregir creditos aprobados en campos operativos. Los creditos finalizados o
+          rechazados permanecen cerrados.
         </p>
 
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -1486,7 +1532,7 @@ function getAvailableTransitions(estado: string) {
 }
 
 function isCreditoEditable(credito: Credito) {
-  return !["aprobado", "finalizado", "rechazado"].includes(
+  return !["finalizado", "rechazado"].includes(
     normalizeStatus(credito.estado).toLowerCase(),
   );
 }

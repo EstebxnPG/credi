@@ -33,8 +33,17 @@ from app.services.log_service import registrar_log
 from app.services.pendiente_credito_service import credito_tiene_pendientes_abiertos
 
 
-ESTADOS_EDITABLES = {"Prospecto", "Devuelto por corrección"}
-ESTADOS_FINALES = {"Aprobado", "Rechazado", "Finalizado"}
+CAMPOS_CORRECCION_APROBADO = {
+    "monto_solicitado",
+    "monto_aprobado",
+    "plazo",
+    "valor_cuota",
+    "cooperativa_id",
+    "tipo_credito",
+    "motivo_finalizacion",
+    "nro_libranza",
+    "observaciones",
+}
 
 
 def _calcular_edad(fecha_nacimiento: date, fecha_referencia: date | None = None) -> int:
@@ -351,19 +360,6 @@ def _validar_tipo_credito(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Este credito ya tiene una refinanciacion asociada",
-        )
-
-
-def _validar_credito_editable(credito: Credito) -> None:
-    if credito.estado in ESTADOS_FINALES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Un crédito aprobado o rechazado no puede editarse",
-        )
-    if credito.estado not in ESTADOS_EDITABLES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Solo se pueden editar créditos en Prospecto o Devuelto por corrección",
         )
 
 
@@ -800,10 +796,23 @@ def _validar_fecha_fin_por_plazo(
 
 
 def _validar_credito_editable(credito: Credito) -> None:
-    if credito.estado in ESTADOS_FINALES:
+    if credito.estado in {"Finalizado", "Rechazado"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Un credito aprobado, finalizado o rechazado no puede editarse",
+            detail="Un credito finalizado o rechazado no puede editarse",
+        )
+
+
+def _validar_campos_editables(credito: Credito, cambios: dict) -> None:
+    if credito.estado != "Aprobado":
+        return
+
+    campos_no_permitidos = set(cambios) - CAMPOS_CORRECCION_APROBADO
+    if campos_no_permitidos:
+        campos = ", ".join(sorted(campos_no_permitidos))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"En creditos aprobados no se pueden editar estos campos: {campos}",
         )
 
 
@@ -819,6 +828,7 @@ def actualizar_credito(
     cambios = data.model_dump(exclude_unset=True)
     if not cambios:
         return credito
+    _validar_campos_editables(credito, cambios)
 
     valores_antes = {
         campo: getattr(credito, campo)

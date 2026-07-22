@@ -119,13 +119,15 @@ class CreditoCreate(BaseModel):
 # ─── Update (campos editables por asesora) ───────────────────────────────────
 class CreditoUpdate(BaseModel):
     """
-    Solo se pueden editar créditos en estado Prospecto o Devuelto por corrección.
-    El servicio valida eso. Aquí solo definimos qué campos son modificables.
+    El servicio valida cuales campos son modificables segun el estado del credito.
     """
     monto_solicitado: Optional[float] = None
+    monto_aprobado: Optional[float] = None
     plazo: Optional[int] = None
+    valor_cuota: Optional[float] = None
     nro_libranza: Optional[str] = None
     tipo_credito: Optional[str] = None
+    motivo_finalizacion: Optional[str] = None
     entidad_financiera_origen: Optional[str] = None
     observaciones: Optional[str] = None
     pagaduria_id: Optional[int] = None
@@ -139,6 +141,20 @@ class CreditoUpdate(BaseModel):
     def monto_positivo(cls, v):
         if v is not None and v <= 0:
             raise ValueError("El monto solicitado debe ser mayor a 0")
+        return v
+
+    @field_validator("monto_aprobado")
+    @classmethod
+    def monto_aprobado_positivo(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError("El monto aprobado debe ser mayor a 0")
+        return v
+
+    @field_validator("valor_cuota")
+    @classmethod
+    def valor_cuota_no_negativo(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("El valor de la cuota no puede ser negativo")
         return v
 
     @field_validator("plazo")
@@ -165,6 +181,21 @@ class CreditoUpdate(BaseModel):
             return None
         v = v.strip()
         return v or None
+
+    @field_validator("motivo_finalizacion")
+    @classmethod
+    def motivo_finalizacion_limpio(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip().upper()
+        if not v:
+            return None
+        if v not in MOTIVOS_FINALIZACION_VALIDOS:
+            raise ValueError(
+                "motivo_finalizacion debe ser PAGO_NORMAL, REFINANCIADO, "
+                "AJUSTE_MIGRACION, ANULADO u OTRO"
+            )
+        return v
 
 
 class CreditoObservacionesUpdate(BaseModel):

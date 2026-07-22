@@ -9,6 +9,7 @@ import {
   formatCurrency,
   formatDate,
   formatMoneyInput,
+  parseNullableMoneyInput,
   parseMoneyInput,
   sanitizeMoneyInput,
 } from "@/lib/format";
@@ -105,9 +106,12 @@ type FormValues = {
   asesor_id: string;
   oficina_id: string;
   monto_solicitado: string;
+  monto_aprobado: string;
   plazo: string;
+  valor_cuota: string;
   nro_libranza: string;
   tipo_credito: string;
+  motivo_finalizacion: string;
   entidad_financiera_origen: string;
   observaciones: string;
   tiene_documentos_pendientes: boolean;
@@ -122,9 +126,12 @@ const emptyForm: FormValues = {
   asesor_id: "",
   oficina_id: "",
   monto_solicitado: "",
+  monto_aprobado: "",
   plazo: "",
+  valor_cuota: "",
   nro_libranza: "",
   tipo_credito: "NUEVO",
+  motivo_finalizacion: "",
   entidad_financiera_origen: "",
   observaciones: "",
   tiene_documentos_pendientes: false,
@@ -585,9 +592,12 @@ export default function CreditosPage() {
       asesor_id: String(credito.asesor_id),
       oficina_id: String(credito.oficina_id),
       monto_solicitado: String(credito.monto_solicitado),
+      monto_aprobado: credito.monto_aprobado ? String(credito.monto_aprobado) : "",
       plazo: String(credito.plazo),
+      valor_cuota: credito.valor_cuota ? String(credito.valor_cuota) : "",
       nro_libranza: credito.nro_libranza ?? "",
       tipo_credito: credito.tipo_credito ?? "NUEVO",
+      motivo_finalizacion: credito.motivo_finalizacion ?? "",
       entidad_financiera_origen: credito.entidad_financiera_origen ?? "",
       observaciones: credito.observaciones ?? "",
       tiene_documentos_pendientes: credito.tiene_documentos_pendientes,
@@ -685,26 +695,46 @@ export default function CreditosPage() {
 
         setCreditos((current) => [created, ...current]);
       } else if (selected) {
+        const updatePayload =
+          normalizeText(selected.estado) === "aprobado"
+            ? {
+                cooperativa_id: Number(form.cooperativa_id),
+                monto_solicitado: parseMoneyInput(form.monto_solicitado),
+                monto_aprobado: parseNullableMoneyInput(form.monto_aprobado),
+                plazo: Number(form.plazo),
+                valor_cuota: parseNullableMoneyInput(form.valor_cuota),
+                nro_libranza: nullableText(form.nro_libranza),
+                tipo_credito: form.tipo_credito,
+                motivo_finalizacion: nullableText(form.motivo_finalizacion),
+                observaciones: nullableText(form.observaciones),
+              }
+            : {
+                cooperativa_id: Number(form.cooperativa_id),
+                credito_refinanciado_id:
+                  form.tipo_credito === "REFINANCIACION"
+                    ? Number(form.credito_refinanciado_id)
+                    : null,
+                pagaduria_id: Number(form.pagaduria_id),
+                monto_solicitado: parseMoneyInput(form.monto_solicitado),
+                monto_aprobado: parseNullableMoneyInput(form.monto_aprobado),
+                plazo: Number(form.plazo),
+                valor_cuota: parseNullableMoneyInput(form.valor_cuota),
+                nro_libranza: nullableText(form.nro_libranza),
+                tipo_credito: form.tipo_credito,
+                motivo_finalizacion: nullableText(form.motivo_finalizacion),
+                entidad_financiera_origen:
+                  form.tipo_credito === "COMPRA CARTERA"
+                    ? nullableText(form.entidad_financiera_origen)
+                    : null,
+                observaciones: nullableText(form.observaciones),
+                tiene_documentos_pendientes: form.tiene_documentos_pendientes,
+                documentos_pendientes: form.tiene_documentos_pendientes
+                  ? nullableText(form.documentos_pendientes)
+                  : null,
+              };
         const updated = await apiFetch<Credito>(`/api/v1/creditos/${selected.id}`, {
           method: "PATCH",
-          body: JSON.stringify({
-            cooperativa_id: Number(form.cooperativa_id),
-            credito_refinanciado_id: form.tipo_credito === "REFINANCIACION" ? Number(form.credito_refinanciado_id) : null,
-            pagaduria_id: Number(form.pagaduria_id),
-          monto_solicitado: parseMoneyInput(form.monto_solicitado),
-          plazo: Number(form.plazo),
-          nro_libranza: nullableText(form.nro_libranza),
-          tipo_credito: form.tipo_credito,
-          entidad_financiera_origen:
-            form.tipo_credito === "COMPRA CARTERA"
-              ? nullableText(form.entidad_financiera_origen)
-              : null,
-          observaciones: nullableText(form.observaciones),
-          tiene_documentos_pendientes: form.tiene_documentos_pendientes,
-          documentos_pendientes: form.tiene_documentos_pendientes
-            ? nullableText(form.documentos_pendientes)
-            : null,
-          }),
+          body: JSON.stringify(updatePayload),
         });
 
         setCreditos((current) =>
@@ -1047,6 +1077,7 @@ function CreditoModal({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const isCreate = mode === "create";
+  const isApprovedEdit = !isCreate && normalizeText(credito?.estado ?? "") === "aprobado";
   const selectedAsesor = asesores.find((asesor) => String(asesor.id) === form.asesor_id);
   const selectedCooperativa = cooperativaById.get(Number(form.cooperativa_id));
   const creditosRefinanciables = creditos.filter(
@@ -1140,18 +1171,20 @@ function CreditoModal({
               <p className="mt-2 text-xs text-stone-400">Esta cooperativa no tiene simuladora configurada.</p>
             ) : null}
           </div>
-          <SearchSelectField
-            label="Pagaduria"
-            value={form.pagaduria_id}
-            options={pagadurias.map((pagaduria) => ({
-              value: String(pagaduria.id),
-              label: pagaduria.nombre,
-              description: "Entidad pagadora asignada",
-            }))}
-            onChange={(value) => updateField("pagaduria_id", value)}
-            placeholder="Buscar pagaduria"
-            required
-          />
+          {!isApprovedEdit ? (
+            <SearchSelectField
+              label="Pagaduria"
+              value={form.pagaduria_id}
+              options={pagadurias.map((pagaduria) => ({
+                value: String(pagaduria.id),
+                label: pagaduria.nombre,
+                description: "Entidad pagadora asignada",
+              }))}
+              onChange={(value) => updateField("pagaduria_id", value)}
+              placeholder="Buscar pagaduria"
+              required
+            />
+          ) : null}
           {isCreate && asesores.length > 1 ? (
             <SelectField
               label="Asesor"
@@ -1181,6 +1214,13 @@ function CreditoModal({
             onChange={(value) => updateField("monto_solicitado", value)}
             required
           />
+          {!isCreate ? (
+            <MoneyField
+              label="Monto aprobado"
+              value={form.monto_aprobado}
+              onChange={(value) => updateField("monto_aprobado", value)}
+            />
+          ) : null}
           <Field
             label="Plazo"
             type="number"
@@ -1188,6 +1228,13 @@ function CreditoModal({
             onChange={(value) => updateField("plazo", value)}
             required
           />
+          {!isCreate ? (
+            <MoneyField
+              label="Valor cuota"
+              value={form.valor_cuota}
+              onChange={(value) => updateField("valor_cuota", value)}
+            />
+          ) : null}
           <Field
             label="Nro libranza"
             value={form.nro_libranza}
@@ -1204,6 +1251,20 @@ function CreditoModal({
             ]}
             required
           />
+          {!isCreate ? (
+            <SelectField
+              label="Motivo finalizacion"
+              value={form.motivo_finalizacion}
+              onChange={(value) => updateField("motivo_finalizacion", value)}
+              options={[
+                { value: "PAGO_NORMAL", label: "Pago normal" },
+                { value: "REFINANCIADO", label: "Refinanciado" },
+                { value: "AJUSTE_MIGRACION", label: "Ajuste migracion" },
+                { value: "ANULADO", label: "Anulado" },
+                { value: "OTRO", label: "Otro" },
+              ]}
+            />
+          ) : null}
           {form.tipo_credito === "REFINANCIACION" ? (
             <SelectField
               label="Credito que refinancia"
@@ -1224,24 +1285,28 @@ function CreditoModal({
               required
             />
           ) : null}
-          <label className="flex items-center gap-3 rounded-lg border border-stone-800/10 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700">
-            <input
-              type="checkbox"
-              checked={form.tiene_documentos_pendientes}
-              onChange={(event) =>
-                updateField("tiene_documentos_pendientes", event.target.checked)
-              }
-            />
-            Documentos pendientes
-          </label>
-          <div className="sm:col-span-2">
-            <TextareaField
-              label="Documentos pendientes"
-              value={form.documentos_pendientes}
-              onChange={(value) => updateField("documentos_pendientes", value)}
-              disabled={!form.tiene_documentos_pendientes}
-            />
-          </div>
+          {!isApprovedEdit ? (
+            <>
+              <label className="flex items-center gap-3 rounded-lg border border-stone-800/10 bg-white/70 px-3 py-2 text-sm font-medium text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={form.tiene_documentos_pendientes}
+                  onChange={(event) =>
+                    updateField("tiene_documentos_pendientes", event.target.checked)
+                  }
+                />
+                Documentos pendientes
+              </label>
+              <div className="sm:col-span-2">
+                <TextareaField
+                  label="Documentos pendientes"
+                  value={form.documentos_pendientes}
+                  onChange={(value) => updateField("documentos_pendientes", value)}
+                  disabled={!form.tiene_documentos_pendientes}
+                />
+              </div>
+            </>
+          ) : null}
           <div className="sm:col-span-2">
             <TextareaField
               label="Observaciones"
@@ -1262,8 +1327,8 @@ function CreditoModal({
 
         {!isCreate ? (
           <p className="mt-4 text-xs text-stone-500">
-            Puedes editar creditos mientras no esten aprobados, finalizados o rechazados. Los
-            cambios de estado se gestionan desde la ficha del credito.
+            Puedes corregir creditos aprobados en campos operativos. Los creditos finalizados o
+            rechazados permanecen cerrados.
           </p>
         ) : null}
 
@@ -1662,7 +1727,7 @@ function getCreditoStatusTone(estado: string) {
 }
 
 function isCreditoEditable(credito: Credito) {
-  return !["aprobado", "finalizado", "rechazado"].includes(normalizeText(credito.estado));
+  return !["finalizado", "rechazado"].includes(normalizeText(credito.estado));
 }
 
 function isCreditoRefinanciable(credito: Credito) {
