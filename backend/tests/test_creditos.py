@@ -42,6 +42,11 @@ class CreditosTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             _validar_campos_editables(credito, {"pagaduria_id": 1})
 
+    def test_credito_aprobado_permite_compra_cartera_sin_entidad_en_correccion(self):
+        credito = SimpleNamespace(is_active=True, estado="Aprobado")
+
+        _validar_campos_editables(credito, {"tipo_credito": "COMPRA CARTERA"})
+
     def test_credito_finalizado_o_rechazado_no_es_editable(self):
         for estado in ["Finalizado", "Rechazado"]:
             with self.subTest(estado=estado):

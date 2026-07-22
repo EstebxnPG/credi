@@ -368,6 +368,10 @@ export default function CreditoDetailPage() {
               valor_cuota: parseNullableMoneyInput(editForm.valor_cuota),
               nro_libranza: nullableText(editForm.nro_libranza),
               tipo_credito: editForm.tipo_credito,
+              entidad_financiera_origen:
+                editForm.tipo_credito === "COMPRA CARTERA"
+                  ? nullableText(editForm.entidad_financiera_origen)
+                  : null,
               motivo_finalizacion: nullableText(editForm.motivo_finalizacion),
               observaciones: nullableText(editForm.observaciones),
             }
@@ -1266,7 +1270,7 @@ function EditCreditoModal({
               label="Entidad financiera de origen"
               value={form.entidad_financiera_origen}
               onChange={(value) => updateField("entidad_financiera_origen", value)}
-              required
+              required={!isApprovedEdit}
             />
           ) : null}
           {!isApprovedEdit ? (

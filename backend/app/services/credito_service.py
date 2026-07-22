@@ -40,6 +40,7 @@ CAMPOS_CORRECCION_APROBADO = {
     "valor_cuota",
     "cooperativa_id",
     "tipo_credito",
+    "entidad_financiera_origen",
     "motivo_finalizacion",
     "nro_libranza",
     "observaciones",
@@ -853,17 +854,18 @@ def actualizar_credito(
         elif tipo_credito == "COMPRA CARTERA":
             cambios["credito_refinanciado_id"] = None
 
-        _validar_tipo_credito(
-            db,
-            credito.pensionado_id,
-            tipo_credito,
-            cambios.get("credito_refinanciado_id", credito.credito_refinanciado_id),
-            cambios.get(
-                "entidad_financiera_origen",
-                credito.entidad_financiera_origen,
-            ),
-            credito_actual_id=credito.id,
-        )
+        if credito.estado != "Aprobado":
+            _validar_tipo_credito(
+                db,
+                credito.pensionado_id,
+                tipo_credito,
+                cambios.get("credito_refinanciado_id", credito.credito_refinanciado_id),
+                cambios.get(
+                    "entidad_financiera_origen",
+                    credito.entidad_financiera_origen,
+                ),
+                credito_actual_id=credito.id,
+            )
 
     if "tiene_documentos_pendientes" in cambios or "documentos_pendientes" in cambios:
         tiene_documentos_pendientes, documentos_pendientes = _normalizar_pendientes_documentales(
