@@ -40,6 +40,22 @@ type Cooperativa = {
   is_active: boolean;
 };
 
+type Filters = {
+  montoMin: string;
+  montoMax: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  cooperativaId: string;
+};
+
+type SavedViewState = {
+  query?: string;
+  vista?: Vista;
+  page?: number;
+  tentativaOrder?: "asc" | "desc";
+  filters?: Partial<Filters>;
+};
+
 type CreditoNuevoItem = {
   pensionado_id: number;
   pensionado_nombre: string | null;
@@ -62,6 +78,48 @@ const tabs: Array<{ key: Vista; label: string }> = [
 ];
 
 const PAGE_SIZE = 15;
+const STORAGE_KEY = "credi.refinanciaciones.filters";
+const emptyFilters: Filters = {
+  montoMin: "",
+  montoMax: "",
+  fechaDesde: "",
+  fechaHasta: "",
+  cooperativaId: "",
+};
+
+function isVista(value: unknown): value is Vista {
+  return typeof value === "string" && tabs.some((tab) => tab.key === value);
+}
+
+function readSavedViewState(): SavedViewState {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw) as SavedViewState;
+    return {
+      query: typeof parsed.query === "string" ? parsed.query : "",
+      vista: isVista(parsed.vista) ? parsed.vista : "hoy",
+      page:
+        typeof parsed.page === "number" && Number.isFinite(parsed.page) && parsed.page > 0
+          ? Math.floor(parsed.page)
+          : 1,
+      tentativaOrder: parsed.tentativaOrder === "desc" ? "desc" : "asc",
+      filters: {
+        ...emptyFilters,
+        ...(parsed.filters ?? {}),
+      },
+    };
+  } catch {
+    return {};
+  }
+}
 
 export default function RefinanciacionesPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -73,13 +131,7 @@ export default function RefinanciacionesPage() {
   const [pageInput, setPageInput] = useState("1");
   const [tentativaOrder, setTentativaOrder] = useState<"asc" | "desc">("asc");
   const [total, setTotal] = useState(0);
-  const [filters, setFilters] = useState({
-    montoMin: "",
-    montoMax: "",
-    fechaDesde: "",
-    fechaHasta: "",
-    cooperativaId: "",
-  });
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [counts, setCounts] = useState({
     hoy: 0,
     proximos: 0,
@@ -97,6 +149,7 @@ export default function RefinanciacionesPage() {
   const [postponing, setPostponing] = useState<Item | null>(null);
   const [unpostponing, setUnpostponing] = useState<Item | null>(null);
   const [returning, setReturning] = useState<Item | null>(null);
+  const [restoredFilters, setRestoredFilters] = useState(false);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canGoNext = page < totalPages;
@@ -178,8 +231,42 @@ export default function RefinanciacionesPage() {
   }, [cooperativas.length, filters, page, query, tentativaOrder, vista]);
 
   useEffect(() => {
+    if (!restoredFilters) {
+      return;
+    }
+
     void load();
-  }, [load]);
+  }, [load, restoredFilters]);
+
+  useEffect(() => {
+    const savedViewState = readSavedViewState();
+    setQuery(savedViewState.query ?? "");
+    setVista(savedViewState.vista ?? "hoy");
+    setPage(savedViewState.page ?? 1);
+    setTentativaOrder(savedViewState.tentativaOrder ?? "asc");
+    setFilters({
+      ...emptyFilters,
+      ...(savedViewState.filters ?? {}),
+    });
+    setRestoredFilters(true);
+  }, []);
+
+  useEffect(() => {
+    if (!restoredFilters) {
+      return;
+    }
+
+    window.sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        query,
+        vista,
+        page,
+        tentativaOrder,
+        filters,
+      }),
+    );
+  }, [filters, page, query, restoredFilters, tentativaOrder, vista]);
 
   useEffect(() => {
     setPageInput(String(page));
@@ -266,13 +353,7 @@ export default function RefinanciacionesPage() {
   function clearFilters() {
     resetPage();
     setQuery("");
-    setFilters({
-      montoMin: "",
-      montoMax: "",
-      fechaDesde: "",
-      fechaHasta: "",
-      cooperativaId: "",
-    });
+    setFilters(emptyFilters);
   }
 
   async function change(
