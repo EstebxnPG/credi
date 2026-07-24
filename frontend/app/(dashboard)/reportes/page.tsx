@@ -690,19 +690,65 @@ export default function ReportesPage() {
 }
 
 const exportColumns = [
-  ["tipo_credito","Tipo de crédito"],["fecha_registro","Fecha de registro"],["nro_libranza","Número de libranza"],["monto","Monto"],["meses","Meses"],["pensionado","Nombre del pensionado"],["cedula","Cédula"],["telefono","Teléfono"],["correo","Correo"],["celular","Celular"],["pagaduria","Pagaduría"],["cooperativa","Cooperativa"],["cedula_asesor","Cédula asesor"],["direccion","Dirección"],
-  ["credito_id","ID crédito"],["estado","Estado"],["pensionado","Pensionado"],["asesor","Asesor"],["oficina","Oficina"],["monto_solicitado","Monto solicitado"],["monto_aprobado","Monto aprobado"],["plazo","Plazo"],
+  ["tipo_credito","TIPO CREDITO"],["fecha_registro","FECHA_RAD"],["nro_libranza","No.Lib"],["pensionado","APELLIDOS Y NOMBRES DEL CLIENTE"],["monto","MONTO"],["meses","MESES"],["cedula","Cedula"],["telefono","TELEFONO"],["celular","CELULAR"],["pagaduria","PAGADURIA"],["cooperativa","COOPERATIVA"],["cedula_asesor","Cedula_Asesor"],["direccion","DIRECCION"],["barrio","BARRIO"],
+  ["correo","Correo"],["credito_id","ID credito"],["estado","Estado"],["asesor","Asesor"],["oficina","Oficina"],["monto_solicitado","Monto solicitado"],["monto_aprobado","Monto aprobado"],["plazo","Plazo"],
 ] as const;
 const defaultExportColumns = exportColumns.slice(0,14).map(([key])=>key);
 
 function ExportCreditsModal({oficinas,initialDesde,initialHasta,initialOficina,onClose}:{oficinas:Oficina[];initialDesde:string;initialHasta:string;initialOficina:string;onClose:()=>void}){
   const [columns,setColumns]=useState<string[]>(defaultExportColumns),[desdeExport,setDesdeExport]=useState(initialDesde),[hastaExport,setHastaExport]=useState(initialHasta),[office,setOffice]=useState(initialOficina),[min,setMin]=useState(""),[max,setMax]=useState(""),[saving,setSaving]=useState(false),[exportError,setExportError]=useState<string|null>(null);
+  function filterExportToday(){const today=localDateValue(new Date());setDesdeExport(today);setHastaExport(today)}
+  function clearExportFilters(){setDesdeExport("");setHastaExport("");setOffice("");setMin("");setMax("")}
   function toggle(key:string){setColumns(c=>c.includes(key)?c.filter(x=>x!==key):[...c,key])}
   function move(key:string,delta:number){setColumns(c=>{const i=c.indexOf(key),j=i+delta;if(i<0||j<0||j>=c.length)return c;const n=[...c];[n[i],n[j]]=[n[j],n[i]];return n})}
   async function download(selected:string[]){setSaving(true);setExportError(null);try{const q=new URLSearchParams({columnas:selected.join(",")});if(desdeExport)q.set("desde",desdeExport);if(hastaExport)q.set("hasta",hastaExport);if(office)q.set("oficina_id",office);if(min)q.set("monto_desde",min);if(max)q.set("monto_hasta",max);const blob=await apiDownload(`/api/v1/reportes/creditos/exportar.xlsx?${q}`);const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`creditos_${new Date().toISOString().slice(0,10)}.xlsx`;a.click();URL.revokeObjectURL(url);onClose()}catch(e){setExportError(e instanceof ApiError?e.message:"No se pudo generar el Excel")}finally{setSaving(false)}}
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4"><div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg bg-white p-5 shadow-xl"><div className="flex justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Excel</p><h2 className="mt-1 text-xl font-semibold">Exportar créditos</h2><p className="mt-1 text-sm text-stone-600">Usa el formato estándar o arma las columnas en el orden requerido.</p></div><button className="button-muted h-fit" onClick={onClose}>Cerrar</button></div>{exportError?<p className="mt-4 border border-red-200 bg-red-50 p-3 text-sm text-red-700">{exportError}</p>:null}<div className="mt-3 grid gap-3 sm:grid-cols-3"><DateField label="Desde" value={desdeExport} onChange={setDesdeExport}/><DateField label="Hasta" value={hastaExport} onChange={setHastaExport}/><label className="text-xs font-medium text-stone-600">Oficina<select className="input-base mt-1" value={office} onChange={e=>setOffice(e.target.value)}><option value="">Todas</option>{oficinas.map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select></label><label className="text-xs font-medium text-stone-600">Monto mínimo<input className="input-base mt-1" type="number" min="0" value={min} onChange={e=>setMin(e.target.value)}/></label><label className="text-xs font-medium text-stone-600">Monto máximo<input className="input-base mt-1" type="number" min="0" value={max} onChange={e=>setMax(e.target.value)}/></label></div><div className="mt-3 grid gap-5 md:grid-cols-2"><div><h3 className="text-sm font-semibold">Columnas disponibles</h3><div className="mt-2 space-y-1">{exportColumns.map(([key,label])=><label key={key} className="flex gap-2 rounded-lg border px-3 py-2 text-sm"><input type="checkbox" checked={columns.includes(key)} onChange={()=>toggle(key)}/>{label}</label>)}</div></div><div><h3 className="text-sm font-semibold">Orden del Excel</h3><div className="mt-2 space-y-1">{columns.map((key,index)=><div key={key} className="flex items-center justify-between rounded-lg bg-stone-50 px-3 py-2 text-sm"><span>{index+1}. {exportColumns.find(([k])=>k===key)?.[1]}</span><span className="flex gap-1"><button disabled={index===0} onClick={()=>move(key,-1)} className="rounded border px-2 disabled:opacity-30">↑</button><button disabled={index===columns.length-1} onClick={()=>move(key,1)} className="rounded border px-2 disabled:opacity-30">↓</button></span></div>)}</div></div></div><div className="mt-6 flex flex-wrap justify-end gap-2"><button disabled={saving} className="button-muted" onClick={()=>void download(defaultExportColumns)}>Exportar formato estándar</button><button disabled={saving||!columns.length} className="button-primary" onClick={()=>void download(columns)}>{saving?"Generando...":"Exportar personalizado"}</button></div></div></div>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg bg-white shadow-xl ring-1 ring-stone-900/10">
+        <div className="border-b border-stone-200 px-6 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-teal-700">Excel</p>
+              <h2 className="mt-1 text-xl font-semibold text-stone-950">Exportar creditos</h2>
+              <p className="mt-1 text-sm text-stone-600">Usa el formato estandar o arma las columnas en el orden requerido.</p>
+            </div>
+            <button className="rounded-md px-3 py-2 text-sm font-medium text-stone-600 transition hover:bg-stone-100 hover:text-stone-950" onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+        <div className="px-6 py-5">
+          {exportError?<p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{exportError}</p>:null}
+          <div className="rounded-md border border-stone-200 bg-stone-50/70 p-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(150px,0.9fr)_auto] md:items-end">
+              <DateField label="Desde" value={desdeExport} onChange={setDesdeExport}/>
+              <DateField label="Hasta" value={hastaExport} onChange={setHastaExport}/>
+              <label className="text-xs font-medium text-stone-600">Oficina<select className="input-base mt-1" value={office} onChange={e=>setOffice(e.target.value)}><option value="">Todas</option>{oficinas.map(o=><option key={o.id} value={o.id}>{o.nombre}</option>)}</select></label>
+              <button type="button" className="h-10 rounded-md px-3 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 disabled:opacity-40" onClick={filterExportToday}>Hoy</button>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+              <label className="text-xs font-medium text-stone-600">Monto minimo<input className="input-base mt-1" type="number" min="0" value={min} onChange={e=>setMin(e.target.value)}/></label>
+              <label className="text-xs font-medium text-stone-600">Monto maximo<input className="input-base mt-1" type="number" min="0" value={max} onChange={e=>setMax(e.target.value)}/></label>
+              <button type="button" className="h-10 rounded-md px-3 text-sm font-medium text-stone-500 transition hover:bg-stone-200/70 hover:text-stone-800 disabled:opacity-40" onClick={clearExportFilters} disabled={!desdeExport&&!hastaExport&&!office&&!min&&!max}>Limpiar filtros</button>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-semibold text-stone-900">Columnas disponibles</h3>
+              <div className="mt-2 space-y-1">{exportColumns.map(([key,label])=><label key={key} className="flex gap-2 rounded-md border border-stone-200 px-3 py-2 text-sm transition hover:bg-stone-50"><input type="checkbox" checked={columns.includes(key)} onChange={()=>toggle(key)}/>{label}</label>)}</div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-stone-900">Orden del Excel</h3>
+              <div className="mt-2 space-y-1">{columns.map((key,index)=><div key={key} className="flex items-center justify-between rounded-md bg-stone-50 px-3 py-2 text-sm"><span>{index+1}. {exportColumns.find(([k])=>k===key)?.[1]}</span><span className="flex gap-1"><button disabled={index===0} onClick={()=>move(key,-1)} className="rounded border px-2 disabled:opacity-30">↑</button><button disabled={index===columns.length-1} onClick={()=>move(key,1)} className="rounded border px-2 disabled:opacity-30">↓</button></span></div>)}</div>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-stone-200 px-6 py-4">
+          <button disabled={saving} className="rounded-md px-4 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 disabled:opacity-40" onClick={()=>void download(defaultExportColumns)}>Exportar formato estandar</button>
+          <button disabled={saving||!columns.length} className="button-primary" onClick={()=>void download(columns)}>{saving?"Generando...":"Exportar personalizado"}</button>
+        </div>
+      </div>
+    </div>
+  )
 }
-
 function PensionadosReport({ items, oficinaById, summary }: { items: Pensionado[]; oficinaById: Map<number, Oficina>; summary: ReportSummary }) {
   return <>
     <Metrics values={[["Pensionados", String(summary.pensionados ?? 0)],["Registrados este mes", String(summary.registradosMes ?? 0)],["Oficinas", String(summary.oficinas ?? 0)],["Usuarios registradores", String(summary.usuariosRegistradores ?? 0)]]}/>
