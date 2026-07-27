@@ -139,6 +139,15 @@ export default function RefinanciacionesPage() {
     convertidos: 0,
     pospuestos: 0,
     creditosNuevos: 0,
+    personas: {
+      totalRefinanciaciones: 0,
+      hoy: 0,
+      proximos: 0,
+      gestionados: 0,
+      convertidos: 0,
+      pospuestos: 0,
+      creditosNuevos: 0,
+    },
   });
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -186,6 +195,15 @@ export default function RefinanciacionesPage() {
               response.headers.get("X-Total-Count") ??
               response.data.length,
           ),
+          personas: {
+            ...current.personas,
+            creditosNuevos: Number(
+              response.headers.get("X-Count-Personas-Creditos-Nuevos") ??
+                response.headers.get("X-Count-Creditos-Nuevos") ??
+                response.headers.get("X-Total-Count") ??
+                response.data.length,
+            ),
+          },
         }));
         if (cooperativasData) setCooperativas(cooperativasData);
         return;
@@ -216,6 +234,17 @@ export default function RefinanciacionesPage() {
         convertidos: Number(response.headers.get("X-Count-Convertidos") ?? 0),
         pospuestos: Number(response.headers.get("X-Count-Pospuestos") ?? 0),
         creditosNuevos: Number(response.headers.get("X-Count-Creditos-Nuevos") ?? 0),
+        personas: {
+          totalRefinanciaciones: Number(
+            response.headers.get("X-Count-Personas-Total-Refinanciaciones") ?? 0,
+          ),
+          hoy: Number(response.headers.get("X-Count-Personas-Hoy") ?? 0),
+          proximos: Number(response.headers.get("X-Count-Personas-Proximos") ?? 0),
+          gestionados: Number(response.headers.get("X-Count-Personas-Gestionados") ?? 0),
+          convertidos: Number(response.headers.get("X-Count-Personas-Convertidos") ?? 0),
+          pospuestos: Number(response.headers.get("X-Count-Personas-Pospuestos") ?? 0),
+          creditosNuevos: Number(response.headers.get("X-Count-Personas-Creditos-Nuevos") ?? 0),
+        },
       });
       if (cooperativasData) setCooperativas(cooperativasData);
     } catch (loadError) {
@@ -424,13 +453,13 @@ export default function RefinanciacionesPage() {
       {success ? <Message tone="success" text={success} /> : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
-        <Metric group="Refinanciaciones" label="Total refinanciaciones" value={counts.hoy + counts.proximos + counts.gestionados + counts.convertidos + counts.pospuestos} />
-        <Metric label="Disponibles ahora" value={counts.hoy} />
-        <Metric label="Proximas" value={counts.proximos} />
-        <Metric label="En gestion" value={counts.gestionados} />
-        <Metric label="Convertidas" value={counts.convertidos} />
-        <Metric label="Pospuestas" value={counts.pospuestos} />
-        <Metric group="Créditos nuevos" label="Candidatos" value={counts.creditosNuevos} />
+        <Metric group="Refinanciaciones" label="Total refinanciaciones" value={counts.hoy + counts.proximos + counts.gestionados + counts.convertidos + counts.pospuestos} people={counts.personas.totalRefinanciaciones} />
+        <Metric label="Disponibles ahora" value={counts.hoy} people={counts.personas.hoy} />
+        <Metric label="Proximas" value={counts.proximos} people={counts.personas.proximos} />
+        <Metric label="En gestion" value={counts.gestionados} people={counts.personas.gestionados} />
+        <Metric label="Convertidas" value={counts.convertidos} people={counts.personas.convertidos} />
+        <Metric label="Pospuestas" value={counts.pospuestos} people={counts.personas.pospuestos} />
+        <Metric group="Créditos nuevos" label="Candidatos" value={counts.creditosNuevos} people={counts.personas.creditosNuevos} />
       </div>
 
       <div className="flex flex-wrap gap-2 border-b pb-3">
@@ -1070,13 +1099,47 @@ function defaultPostponeDate() {
   return date.toISOString().slice(0, 10);
 }
 
-function Metric({ group, label, value }: { group?: string; label: string; value: number }) {
+function Metric({
+  group,
+  label,
+  value,
+  people,
+}: {
+  group?: string;
+  label: string;
+  value: number;
+  people?: number;
+}) {
   return (
     <div className="border-b px-1 py-3">
       {group ? <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500">{group}</p> : null}
       <p className="text-xs uppercase tracking-wider text-stone-500">{label}</p>
       <p className="mt-2 text-xl font-semibold">{value}</p>
+      {typeof people === "number" ? (
+        <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-stone-600">
+          <PersonIcon />
+          <span>{people} personas</span>
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+function PersonIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-3.5 w-3.5 text-teal-700"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
   );
 }
 

@@ -81,6 +81,32 @@ def listar_creditos_elegibles(
         response.headers["X-Count-Creditos-Nuevos"] = str(
             refinanciacion_service.contar_oportunidades_credito_nuevo(db, usuario)
         )
+        personas = len({item["pensionado_id"] for item in items})
+        response.headers["X-Count-Personas-Hoy"] = str(
+            len(
+                {
+                    item["pensionado_id"]
+                    for item in items
+                    if item["estado_refinanciacion"] == "Listo"
+                }
+            )
+        )
+        response.headers["X-Count-Personas-Proximos"] = str(
+            len(
+                {
+                    item["pensionado_id"]
+                    for item in items
+                    if item["estado_refinanciacion"] == "Programado"
+                }
+            )
+        )
+        response.headers["X-Count-Personas-Gestionados"] = "0"
+        response.headers["X-Count-Personas-Convertidos"] = "0"
+        response.headers["X-Count-Personas-Pospuestos"] = "0"
+        response.headers["X-Count-Personas-Total-Refinanciaciones"] = str(personas)
+        response.headers["X-Count-Personas-Creditos-Nuevos"] = response.headers[
+            "X-Count-Creditos-Nuevos"
+        ]
         return items
 
     result = refinanciacion_service.listar_creditos_elegibles_paginados(
@@ -106,6 +132,17 @@ def listar_creditos_elegibles(
     response.headers["X-Count-Convertidos"] = str(result["counts"]["convertidos"])
     response.headers["X-Count-Pospuestos"] = str(result["counts"]["pospuestos"])
     response.headers["X-Count-Creditos-Nuevos"] = str(result["counts"]["creditos_nuevos"])
+    response.headers["X-Count-Personas-Hoy"] = str(result["personas_counts"]["hoy"])
+    response.headers["X-Count-Personas-Proximos"] = str(result["personas_counts"]["proximos"])
+    response.headers["X-Count-Personas-Gestionados"] = str(result["personas_counts"]["gestionados"])
+    response.headers["X-Count-Personas-Convertidos"] = str(result["personas_counts"]["convertidos"])
+    response.headers["X-Count-Personas-Pospuestos"] = str(result["personas_counts"]["pospuestos"])
+    response.headers["X-Count-Personas-Total-Refinanciaciones"] = str(
+        result["personas_counts"]["total_refinanciaciones"]
+    )
+    response.headers["X-Count-Personas-Creditos-Nuevos"] = str(
+        result["personas_counts"]["creditos_nuevos"]
+    )
     return result["items"]
 
 
@@ -127,6 +164,7 @@ def listar_oportunidades_credito_nuevo(
     )
     response.headers["X-Total-Count"] = str(result["total"])
     response.headers["X-Count-Creditos-Nuevos"] = str(result["total"])
+    response.headers["X-Count-Personas-Creditos-Nuevos"] = str(result["total"])
     return result["items"]
 
 

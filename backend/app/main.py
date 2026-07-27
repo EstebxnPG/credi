@@ -40,6 +40,13 @@ app.add_middleware(
         "X-Count-Convertidos",
         "X-Count-Pospuestos",
         "X-Count-Creditos-Nuevos",
+        "X-Count-Personas-Hoy",
+        "X-Count-Personas-Proximos",
+        "X-Count-Personas-Gestionados",
+        "X-Count-Personas-Convertidos",
+        "X-Count-Personas-Pospuestos",
+        "X-Count-Personas-Total-Refinanciaciones",
+        "X-Count-Personas-Creditos-Nuevos",
     ],
 )
 

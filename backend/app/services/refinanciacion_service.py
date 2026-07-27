@@ -695,16 +695,23 @@ def listar_creditos_elegibles_paginados(
         db.commit()
 
     counts = _conteos_oportunidades(base_count_query, disponible_desde_expr, today)
+    personas_counts = _conteos_personas_oportunidades(
+        base_count_query,
+        disponible_desde_expr,
+        today,
+    )
     counts["creditos_nuevos"] = contar_oportunidades_credito_nuevo(
         db,
         usuario_actual,
         texto=texto,
     )
+    personas_counts["creditos_nuevos"] = counts["creditos_nuevos"]
 
     return {
         "items": page_items,
         "total": total,
         "counts": counts,
+        "personas_counts": personas_counts,
     }
 
 
@@ -875,6 +882,38 @@ def _conteos_oportunidades(query, disponible_desde_expr, today: date) -> dict:
         "gestionados": gestionados,
         "convertidos": convertidos,
         "pospuestos": pospuestos,
+    }
+
+
+def _contar_personas(query) -> int:
+    return (
+        query.with_entities(func.count(func.distinct(Credito.pensionado_id))).scalar()
+        or 0
+    )
+
+
+def _conteos_personas_oportunidades(query, disponible_desde_expr, today: date) -> dict:
+    hoy_query = query.filter(
+        disponible_desde_expr <= today,
+        OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+    )
+    proximos_query = query.filter(
+        disponible_desde_expr > today,
+        OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+    )
+    gestionados_query = query.filter(
+        OportunidadRefinanciacion.estado.in_(["contactado", "aceptado", "rechazado"])
+    )
+    convertidos_query = query.filter(OportunidadRefinanciacion.estado == "convertido")
+    pospuestos_query = query.filter(OportunidadRefinanciacion.estado == "pospuesto")
+
+    return {
+        "hoy": _contar_personas(hoy_query),
+        "proximos": _contar_personas(proximos_query),
+        "gestionados": _contar_personas(gestionados_query),
+        "convertidos": _contar_personas(convertidos_query),
+        "pospuestos": _contar_personas(pospuestos_query),
+        "total_refinanciaciones": _contar_personas(query),
     }
 
 
