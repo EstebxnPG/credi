@@ -976,7 +976,7 @@ function PostponeModal({
             className="input-base mt-1 min-h-28"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Ej: Cliente moroso, revisar nuevamente en un año"
+            placeholder="Ej: Cliente moroso, revisar nuevamente en un mes"
           />
         </label>
         <div className="mt-3 flex justify-end gap-2">
@@ -1095,7 +1095,7 @@ function ReturnAvailableModal({
 
 function defaultPostponeDate() {
   const date = new Date();
-  date.setFullYear(date.getFullYear() + 1);
+  date.setMonth(date.getMonth() + 1);
   return date.toISOString().slice(0, 10);
 }
 
