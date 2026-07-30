@@ -532,6 +532,11 @@ def listar_creditos(
         .filter(Credito.is_active == True)  # noqa: E712
     )
 
+    if pensionado_id is None:
+        query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id).filter(
+            Pensionado.is_active == True  # noqa: E712
+        )
+
     if usuario_actual and usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
 
@@ -554,7 +559,8 @@ def listar_creditos(
         query = query.filter(cast(Credito.fecha_registro, Date) <= fecha_hasta)
     if texto:
         term = f"%{texto.strip()}%"
-        query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
+        if pensionado_id is not None:
+            query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
         query = query.outerjoin(Oficina, Oficina.id == Credito.oficina_id)
         query = query.outerjoin(Cooperativa, Cooperativa.id == Credito.cooperativa_id)
         query = query.filter(
@@ -603,6 +609,11 @@ def contar_creditos(
 ) -> int:
     query = db.query(Credito).filter(Credito.is_active == True)  # noqa: E712
 
+    if pensionado_id is None:
+        query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id).filter(
+            Pensionado.is_active == True  # noqa: E712
+        )
+
     if usuario_actual and usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
 
@@ -624,7 +635,8 @@ def contar_creditos(
         query = query.filter(cast(Credito.fecha_registro, Date) <= fecha_hasta)
     if texto:
         term = f"%{texto.strip()}%"
-        query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
+        if pensionado_id is not None:
+            query = query.join(Pensionado, Pensionado.id == Credito.pensionado_id)
         query = query.outerjoin(Oficina, Oficina.id == Credito.oficina_id)
         query = query.outerjoin(Cooperativa, Cooperativa.id == Credito.cooperativa_id)
         query = query.filter(

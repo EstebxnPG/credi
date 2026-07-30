@@ -236,7 +236,9 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
     creditos = db.query(Credito).filter(Credito.is_active == True).all()  # noqa: E712
     for credito in creditos:
         clave = f"documentos-credito-{credito.id}"
-        if credito.tiene_documentos_pendientes:
+        if not credito.pensionado or not credito.pensionado.is_active:
+            _resolver_por_clave(db, clave)
+        elif credito.tiene_documentos_pendientes:
             cambios += _crear_o_actualizar(
                 db,
                 clave=clave,
@@ -261,8 +263,13 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
     pendientes = db.query(PendienteCredito).all()
     for pendiente in pendientes:
         clave = f"pendiente-{pendiente.id}"
-        if pendiente.estado == "pendiente":
-            credito = pendiente.credito
+        credito = pendiente.credito
+        if (
+            pendiente.estado == "pendiente"
+            and credito
+            and credito.pensionado
+            and credito.pensionado.is_active
+        ):
             cambios += _crear_o_actualizar(
                 db,
                 clave=clave,

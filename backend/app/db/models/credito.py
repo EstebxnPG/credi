@@ -57,5 +57,9 @@ class Credito(Base, TimestampMixin, SoftDeleteMixin):
         return self.pensionado.documento if self.pensionado else None
 
     @property
+    def pensionado_is_active(self) -> bool | None:
+        return self.pensionado.is_active if self.pensionado else None
+
+    @property
     def cooperativa_nombre(self) -> str | None:
         return self.cooperativa.nombre if self.cooperativa else None

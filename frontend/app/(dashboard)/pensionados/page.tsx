@@ -648,7 +648,11 @@ export default function PensionadosPage() {
                   <ActionLink href={`/pensionados/${pensionado.id}`} label="Ver">
                     <EyeIcon />
                   </ActionLink>
-                  <ActionButton label="Editar" onClick={() => openEditModal(pensionado)}>
+                  <ActionButton
+                    label="Editar"
+                    disabled={!pensionado.is_active}
+                    onClick={() => openEditModal(pensionado)}
+                  >
                     <EditIcon />
                   </ActionButton>
                   <ActionButton

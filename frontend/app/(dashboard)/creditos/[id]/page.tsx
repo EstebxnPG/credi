@@ -19,6 +19,7 @@ type Credito = {
   id: number;
   is_active: boolean;
   pensionado_id: number;
+  pensionado_is_active: boolean | null;
   asesor_id: number;
   asesor_nombre: string | null;
   oficina_id: number;
@@ -73,6 +74,7 @@ type Pensionado = {
   telefono: string;
   celular: string | null;
   correo: string | null;
+  is_active: boolean;
 };
 
 type PendienteCredito = {
@@ -654,6 +656,8 @@ export default function CreditoDetailPage() {
   const cooperativaActual = cooperativas.find((item) => item.id === credito.cooperativa_id);
   const oficinaActual = oficinas.find((item) => item.id === credito.oficina_id);
   const canRefinance = isReadyToRefinance(refinanceOpportunity);
+  const pensionadoInactive =
+    pensionado?.is_active === false || credito.pensionado_is_active === false;
 
   return (
     <section className="space-y-3">
@@ -692,11 +696,22 @@ export default function CreditoDetailPage() {
                     {pensionado.nombre_completo}
                   </Link>{" "}
                   <span className="text-stone-500">CC {pensionado.documento}</span>
+                  {pensionadoInactive ? (
+                    <span className="ml-2 inline-flex align-middle">
+                      <InactivePensionadoBadge />
+                    </span>
+                  ) : null}
                 </>
               ) : (
                 `Pensionado #${credito.pensionado_id}`
               )}
             </p>
+            {pensionadoInactive ? (
+              <div className="mt-3 rounded-md border border-stone-800/10 bg-stone-100 px-4 py-3 text-sm text-stone-700">
+                El pensionado de este credito esta marcado como inactivo. Este credito se conserva
+                como historico y no debe gestionarse comercialmente.
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="rounded-md border border-stone-800/10 bg-white/70 px-3 py-2 text-sm text-stone-700">
@@ -737,6 +752,11 @@ export default function CreditoDetailPage() {
       <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
         <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
           <h2 className="text-lg font-semibold text-stone-950">Pensionado</h2>
+          {pensionadoInactive ? (
+            <div className="mt-3">
+              <InactivePensionadoBadge />
+            </div>
+          ) : null}
           {pensionado ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <Detail label="Nombre" value={pensionado.nombre_completo} />
@@ -1507,6 +1527,14 @@ function PendingBadge({ estado }: { estado: string }) {
       ].join(" ")}
     >
       {isOpen ? "Pendiente" : "Resuelto"}
+    </span>
+  );
+}
+
+function InactivePensionadoBadge() {
+  return (
+    <span className="inline-flex w-fit items-center justify-center rounded-full border border-stone-800/10 bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700">
+      Pensionado inactivo
     </span>
   );
 }

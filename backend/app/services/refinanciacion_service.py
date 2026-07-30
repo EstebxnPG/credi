@@ -31,7 +31,9 @@ def _today() -> date:
 def _get_credito_activo_or_404(db: Session, credito_id: int) -> Credito:
     credito = (
         db.query(Credito)
+        .join(Pensionado, Pensionado.id == Credito.pensionado_id)
         .filter(Credito.id == credito_id, Credito.is_active == True)  # noqa: E712
+        .filter(Pensionado.is_active == True)  # noqa: E712
         .first()
     )
     if not credito:
@@ -210,6 +212,12 @@ def validar_credito_refinanciable(db: Session, credito: Credito) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Solo los creditos aprobados y activos pueden refinanciarse",
         )
+    pensionado = getattr(credito, "pensionado", None)
+    if hasattr(credito, "pensionado") and (not pensionado or not pensionado.is_active):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El pensionado no esta activo para refinanciacion",
+        )
     if getattr(credito, "motivo_finalizacion", None) == "REFINANCIADO":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -261,7 +269,9 @@ def listar_creditos_elegibles(
         .filter(
             Credito.estado == "Aprobado",
             Credito.is_active == True,  # noqa: E712
+            Pensionado.is_active == True,  # noqa: E712
         )
+        .join(Pensionado, Pensionado.id == Credito.pensionado_id)
         .order_by(Credito.fecha_desembolso.asc())
     )
     if usuario_actual and usuario_actual.rol != "administrador":
@@ -386,7 +396,9 @@ def obtener_credito_elegible(
             Credito.id == credito_id,
             Credito.estado == "Aprobado",
             Credito.is_active == True,  # noqa: E712
+            Pensionado.is_active == True,  # noqa: E712
         )
+        .join(Pensionado, Pensionado.id == Credito.pensionado_id)
     )
     if usuario_actual and usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
@@ -587,6 +599,7 @@ def listar_creditos_elegibles_paginados(
             Credito.estado == "Aprobado",
             Credito.is_active == True,  # noqa: E712
             Cooperativa.is_active == True,  # noqa: E712
+            Pensionado.is_active == True,  # noqa: E712
         )
     )
 
@@ -924,7 +937,13 @@ def _oportunidad_to_elegible_item(
     ahora: datetime,
 ) -> dict | None:
     credito = oportunidad.credito
-    if not credito or not credito.cooperativa or not credito.cooperativa.is_active:
+    if (
+        not credito
+        or not credito.pensionado
+        or not credito.pensionado.is_active
+        or not credito.cooperativa
+        or not credito.cooperativa.is_active
+    ):
         return None
 
     aprobacion = aprobaciones.get(credito.id)
@@ -987,6 +1006,9 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
     if not oportunidad:
         raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
     credito = oportunidad.credito
+    pensionado = getattr(credito, "pensionado", None)
+    if not credito or (hasattr(credito, "pensionado") and (not pensionado or not pensionado.is_active)):
+        raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
     validar_credito_refinanciable(db, credito)
     reactivacion_manual = oportunidad.estado in {"rechazado", "pospuesto"} and data.estado == "disponible"
     correccion_aceptada = oportunidad.estado == "aceptado" and data.estado == "disponible"

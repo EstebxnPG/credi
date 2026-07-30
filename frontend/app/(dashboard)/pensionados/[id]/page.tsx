@@ -456,6 +456,8 @@ export default function PensionadoDetailPage() {
     return <StateMessage tone="error" text={error ?? "Pensionado no encontrado"} />;
   }
 
+  const isInactive = !pensionado.is_active;
+
   return (
     <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
       <div className="space-y-3">
@@ -474,19 +476,30 @@ export default function PensionadoDetailPage() {
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
-              <button type="button" className="button-muted px-4 py-2 text-sm" onClick={openEditModal}>
-                Editar
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded-lg border border-red-500/15 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={deleting || !pensionado.is_active}
-                onClick={() => void handleDelete()}
-              >
-                {deleting ? "Eliminando..." : "Eliminar"}
-              </button>
+              {pensionado.is_active ? (
+                <>
+                  <button type="button" className="button-muted px-4 py-2 text-sm" onClick={openEditModal}>
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-lg border border-red-500/15 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={deleting}
+                    onClick={() => void handleDelete()}
+                  >
+                    {deleting ? "Eliminando..." : "Eliminar"}
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
+
+          {isInactive ? (
+            <div className="mt-3 rounded-md border border-stone-800/10 bg-stone-100 px-4 py-3 text-sm text-stone-700">
+              Esta ficha esta inactiva y se conserva solo como historico. No participa en creditos nuevos,
+              seguimientos, notificaciones ni oportunidades comerciales.
+            </div>
+          ) : null}
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label="Créditos" value={String(resumen.creditos)} />
@@ -516,10 +529,19 @@ export default function PensionadoDetailPage() {
         </article>
 
         {selectedView === "creditos" ? (
-          <CreditosList creditos={creditos} pendientes={pendientes} pensionadoId={pensionado.id} />
+          <CreditosList
+            creditos={creditos}
+            pendientes={pendientes}
+            pensionadoId={pensionado.id}
+            isInactive={isInactive}
+          />
         ) : null}
         {selectedView === "seguimientos" ? (
-          <SeguimientosList seguimientos={seguimientos} onCreate={openSeguimientoModal} />
+          <SeguimientosList
+            seguimientos={seguimientos}
+            onCreate={openSeguimientoModal}
+            isInactive={isInactive}
+          />
         ) : null}
         {selectedView === "actualizaciones" ? (
           <ActualizacionesList
@@ -592,10 +614,12 @@ function CreditosList({
   creditos,
   pendientes,
   pensionadoId,
+  isInactive,
 }: {
   creditos: Credito[];
   pendientes: PendienteCredito[];
   pensionadoId: number;
+  isInactive: boolean;
 }) {
   const pendientesByCreditoId = useMemo(() => {
     const grouped = new Map<number, PendienteCredito[]>();
@@ -610,9 +634,11 @@ function CreditosList({
     <article className="overflow-hidden rounded-lg border border-stone-800/10 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-stone-800/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-stone-950">Créditos del pensionado</h2>
-        <Link href={`/creditos?pensionado=${pensionadoId}`} className="button-primary">
-          Crear crédito
-        </Link>
+        {isInactive ? null : (
+          <Link href={`/creditos?pensionado=${pensionadoId}`} className="button-primary">
+            Crear crédito
+          </Link>
+        )}
       </div>
 
       <div className="hidden grid-cols-[0.7fr_1fr_1.2fr_1fr_1fr_0.8fr_1fr_88px] gap-3 border-b border-stone-800/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 md:grid">
@@ -692,17 +718,21 @@ function CreditosList({
 function SeguimientosList({
   seguimientos,
   onCreate,
+  isInactive,
 }: {
   seguimientos: Seguimiento[];
   onCreate: () => void;
+  isInactive: boolean;
 }) {
   return (
     <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-stone-950">Seguimientos</h2>
-        <button type="button" className="button-primary" onClick={onCreate}>
-          Crear seguimiento
-        </button>
+        {isInactive ? null : (
+          <button type="button" className="button-primary" onClick={onCreate}>
+            Crear seguimiento
+          </button>
+        )}
       </div>
       <div className="mt-4 divide-y divide-stone-800/10">
         {seguimientos.map((seguimiento) => (

@@ -266,6 +266,7 @@ class CreditoRead(BaseModel):
     pensionado_id: int
     pensionado_nombre: Optional[str] = None
     pensionado_documento: Optional[str] = None
+    pensionado_is_active: Optional[bool] = None
     asesor_id: int
     asesor_nombre: Optional[str] = None
     oficina_id: int

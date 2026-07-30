@@ -79,7 +79,17 @@ class PensionadoService:
 
     def obtener_o_404(self, pensionado_id: int, usuario: Usuario):
         oficina_id = None if usuario.rol == "administrador" else usuario.oficina_id
-        pensionado = self.repo.get_by_id(pensionado_id, oficina_id)
+        pensionado = self.repo.get_by_id(pensionado_id, oficina_id, solo_activo=False)
+        if not pensionado:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pensionado no encontrado"
+            )
+        return pensionado
+
+    def obtener_activo_o_404(self, pensionado_id: int, usuario: Usuario):
+        oficina_id = None if usuario.rol == "administrador" else usuario.oficina_id
+        pensionado = self.repo.get_by_id(pensionado_id, oficina_id, solo_activo=True)
         if not pensionado:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -132,7 +142,7 @@ class PensionadoService:
         )
 
     def actualizar(self, pensionado_id: int, data: PensionadoUpdate, usuario: Usuario):
-        pensionado = self.obtener_o_404(pensionado_id, usuario)
+        pensionado = self.obtener_activo_o_404(pensionado_id, usuario)
         cambios = data.model_dump(exclude_unset=True)
         valores_antes = {}
         valores_despues = {}
@@ -157,7 +167,7 @@ class PensionadoService:
         return pensionado
 
     def eliminar(self, pensionado_id: int, usuario: Usuario):
-        pensionado = self.obtener_o_404(pensionado_id, usuario)
+        pensionado = self.obtener_activo_o_404(pensionado_id, usuario)
         pensionado = self.repo.soft_delete(pensionado)
         registrar_log(
             self.repo.db,

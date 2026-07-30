@@ -33,15 +33,26 @@ class PensionadosTests(unittest.TestCase):
         self.assertNotIn("%damian es%", sql)
         self.assertIn("concat", sql)
 
-    def test_obtener_o_404_no_devuelve_pensionado_inactivo(self):
+    def test_obtener_o_404_permite_ficha_historica_inactiva(self):
+        service = PensionadoService(MagicMock())
+        pensionado = SimpleNamespace(id=10, is_active=False)
+        service.repo.get_by_id = MagicMock(return_value=pensionado)
+        usuario = SimpleNamespace(rol="administrador", oficina_id=1)
+
+        result = service.obtener_o_404(10, usuario)
+
+        self.assertEqual(result, pensionado)
+        service.repo.get_by_id.assert_called_once_with(10, None, solo_activo=False)
+
+    def test_obtener_activo_o_404_no_devuelve_pensionado_inactivo(self):
         service = PensionadoService(MagicMock())
         service.repo.get_by_id = MagicMock(return_value=None)
         usuario = SimpleNamespace(rol="administrador", oficina_id=1)
 
         with self.assertRaises(HTTPException):
-            service.obtener_o_404(10, usuario)
+            service.obtener_activo_o_404(10, usuario)
 
-        service.repo.get_by_id.assert_called_once_with(10, None)
+        service.repo.get_by_id.assert_called_once_with(10, None, solo_activo=True)
 
 
 if __name__ == "__main__":

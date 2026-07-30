@@ -20,6 +20,7 @@ type Credito = {
   pensionado_id: number;
   pensionado_nombre: string | null;
   pensionado_documento: string | null;
+  pensionado_is_active: boolean | null;
   asesor_id: number;
   oficina_id: number;
   cooperativa_id: number;
@@ -50,6 +51,7 @@ type Pensionado = {
   id: number;
   nombre_completo: string;
   documento: string;
+  is_active?: boolean;
 };
 
 type PendienteCredito = {
@@ -919,6 +921,8 @@ export default function CreditosPage() {
                 credito.pensionado_nombre ?? pensionado?.nombre_completo ?? `Pensionado #${credito.pensionado_id}`;
               const pensionadoDocumento =
                 credito.pensionado_documento ?? pensionado?.documento ?? "Documento sin cargar";
+              const pensionadoInactive =
+                credito.pensionado_is_active === false || pensionado?.is_active === false;
               const cooperativaNombre =
                 credito.cooperativa_nombre ??
                 cooperativaById.get(credito.cooperativa_id)?.nombre ??
@@ -946,6 +950,11 @@ export default function CreditosPage() {
                     <p className="mt-1 text-xs text-stone-500">
                       {pensionadoDocumento}
                     </p>
+                    {pensionadoInactive ? (
+                      <span className="mt-2 inline-flex">
+                        <InactivePensionadoBadge />
+                      </span>
+                    ) : null}
                     <span className="mt-2 inline-flex md:hidden">
                       <OfficeBadge oficina={oficina} />
                     </span>
@@ -1683,6 +1692,14 @@ function CreditoStatusBadge({ estado }: { estado: string }) {
       ].join(" ")}
     >
       {estado}
+    </span>
+  );
+}
+
+function InactivePensionadoBadge() {
+  return (
+    <span className="inline-flex w-fit items-center justify-center rounded-full border border-stone-800/10 bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700">
+      Pensionado inactivo
     </span>
   );
 }

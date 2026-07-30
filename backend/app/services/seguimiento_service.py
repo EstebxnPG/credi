@@ -276,6 +276,11 @@ def _seguimientos_query(
 ):
     query = db.query(Seguimiento).filter(Seguimiento.is_active == True)  # noqa: E712
 
+    if pensionado_id is None:
+        query = query.join(Pensionado, Pensionado.id == Seguimiento.pensionado_id).filter(
+            Pensionado.is_active == True  # noqa: E712
+        )
+
     if usuario_actual.rol != "administrador":
         query = query.filter(Seguimiento.oficina_id == usuario_actual.oficina_id)
     elif oficina_id is not None:
@@ -323,7 +328,10 @@ def _seguimientos_query(
     if texto:
         term = f"%{texto.strip()}%"
         query = (
-            query.outerjoin(Seguimiento.pensionado)
+            query.outerjoin(Seguimiento.pensionado) if pensionado_id is not None else query
+        )
+        query = (
+            query
             .outerjoin(Seguimiento.oficina)
             .outerjoin(Seguimiento.usuario)
             .filter(
