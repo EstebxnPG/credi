@@ -142,6 +142,15 @@ class CreditosTests(unittest.TestCase):
 
         self.assertEqual(data.motivo_finalizacion, "REFINANCIADO")
 
+    def test_finalizar_acepta_compra_cartera_como_motivo(self):
+        for motivo in ["COMPRA_CARTERA_INTERNA", "COMPRA_CARTERA_EXTERNA"]:
+            data = CreditoCambioEstado(
+                estado_nuevo="Finalizado",
+                motivo_finalizacion=motivo,
+            )
+
+            self.assertEqual(data.motivo_finalizacion, motivo)
+
     def test_aprobar_exige_fecha_fin_exacta_segun_plazo(self):
         from app.services.credito_service import _validar_fecha_fin_por_plazo
 

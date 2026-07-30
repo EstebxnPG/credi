@@ -22,6 +22,8 @@ TIPOS_CREDITO_VALIDOS = {
 MOTIVOS_FINALIZACION_VALIDOS = {
     "PAGO_NORMAL",
     "REFINANCIADO",
+    "COMPRA_CARTERA_INTERNA",
+    "COMPRA_CARTERA_EXTERNA",
     "AJUSTE_MIGRACION",
     "ANULADO",
     "OTRO",
@@ -193,6 +195,7 @@ class CreditoUpdate(BaseModel):
         if v not in MOTIVOS_FINALIZACION_VALIDOS:
             raise ValueError(
                 "motivo_finalizacion debe ser PAGO_NORMAL, REFINANCIADO, "
+                "COMPRA_CARTERA_INTERNA, COMPRA_CARTERA_EXTERNA, "
                 "AJUSTE_MIGRACION, ANULADO u OTRO"
             )
         return v
@@ -253,6 +256,7 @@ class CreditoCambioEstado(BaseModel):
             if self.motivo_finalizacion not in MOTIVOS_FINALIZACION_VALIDOS:
                 raise ValueError(
                     "motivo_finalizacion debe ser PAGO_NORMAL, REFINANCIADO, "
+                    "COMPRA_CARTERA_INTERNA, COMPRA_CARTERA_EXTERNA, "
                     "AJUSTE_MIGRACION, ANULADO u OTRO"
                 )
         if self.monto_aprobado is not None and self.monto_aprobado <= 0:

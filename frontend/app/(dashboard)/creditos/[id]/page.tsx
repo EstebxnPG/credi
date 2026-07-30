@@ -861,6 +861,8 @@ export default function CreditoDetailPage() {
                   options={[
                     { value: "PAGO_NORMAL", label: "Pago normal" },
                     { value: "REFINANCIADO", label: "Refinanciado" },
+                    { value: "COMPRA_CARTERA_INTERNA", label: "Compra de cartera interna" },
+                    { value: "COMPRA_CARTERA_EXTERNA", label: "Compra de cartera externa" },
                     { value: "AJUSTE_MIGRACION", label: "Ajuste migracion" },
                     { value: "ANULADO", label: "Anulado" },
                     { value: "OTRO", label: "Otro" },
@@ -886,9 +888,17 @@ export default function CreditoDetailPage() {
               </div>
             </form>
           ) : (
-            <p className="mt-4 rounded-md border border-stone-800/10 bg-white/65 px-3 py-2 text-sm text-stone-600">
-              Este credito esta en estado final y no tiene mas transiciones.
-            </p>
+            <div className="mt-4 grid gap-3">
+              {credito.estado === "Finalizado" ? (
+                <Detail
+                  label="Motivo de finalizacion"
+                  value={formatFinalizationReason(credito.motivo_finalizacion)}
+                />
+              ) : null}
+              <p className="rounded-md border border-stone-800/10 bg-white/65 px-3 py-2 text-sm text-stone-600">
+                Este credito esta en estado final y no tiene mas transiciones.
+              </p>
+            </div>
           )}
         </article>
       </div>
@@ -1266,6 +1276,8 @@ function EditCreditoModal({
             options={[
               { value: "PAGO_NORMAL", label: "Pago normal" },
               { value: "REFINANCIADO", label: "Refinanciado" },
+              { value: "COMPRA_CARTERA_INTERNA", label: "Compra de cartera interna" },
+              { value: "COMPRA_CARTERA_EXTERNA", label: "Compra de cartera externa" },
               { value: "AJUSTE_MIGRACION", label: "Ajuste migracion" },
               { value: "ANULADO", label: "Anulado" },
               { value: "OTRO", label: "Otro" },
@@ -1580,6 +1592,8 @@ function formatFinalizationReason(value: string | null) {
   const labels: Record<string, string> = {
     PAGO_NORMAL: "Pago normal",
     REFINANCIADO: "Refinanciado",
+    COMPRA_CARTERA_INTERNA: "Compra de cartera interna",
+    COMPRA_CARTERA_EXTERNA: "Compra de cartera externa",
     AJUSTE_MIGRACION: "Ajuste migracion",
     ANULADO: "Anulado",
     OTRO: "Otro",

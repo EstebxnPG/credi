@@ -1272,6 +1272,8 @@ function CreditoModal({
               options={[
                 { value: "PAGO_NORMAL", label: "Pago normal" },
                 { value: "REFINANCIADO", label: "Refinanciado" },
+                { value: "COMPRA_CARTERA_INTERNA", label: "Compra de cartera interna" },
+                { value: "COMPRA_CARTERA_EXTERNA", label: "Compra de cartera externa" },
                 { value: "AJUSTE_MIGRACION", label: "Ajuste migracion" },
                 { value: "ANULADO", label: "Anulado" },
                 { value: "OTRO", label: "Otro" },
