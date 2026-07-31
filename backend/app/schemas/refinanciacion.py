@@ -111,6 +111,9 @@ class RefinanciacionElegibleRead(BaseModel):
     justificacion: str | None = None
     reactivar_en: datetime | None = None
     credito_nuevo_id: int | None = None
+    situacion_credito: str = "NORMAL"
+    fecha_reactivacion_credito: date | None = None
+    observacion_situacion_credito: str | None = None
 
 
 class CreditoNuevoOportunidadRead(BaseModel):

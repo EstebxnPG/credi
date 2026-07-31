@@ -34,7 +34,10 @@ type Credito = {
   monto_aprobado: number | null;
   plazo: number;
   estado: string;
+  situacion_credito: string;
   motivo_finalizacion: string | null;
+  fecha_reactivacion: string | null;
+  observacion_situacion: string | null;
   valor_cuota: number | null;
   fecha_desembolso: string | null;
   fecha_fin_estimada: string | null;
@@ -141,6 +144,13 @@ const emptyForm: FormValues = {
 };
 
 type FormMode = "create" | "edit";
+type SituacionAction = "cerrar" | "inconsistente" | "resolver";
+
+type SituacionForm = {
+  fecha_reactivacion: string;
+  motivo_finalizacion: string;
+  observaciones: string;
+};
 
 type FilterValues = {
   estado: string;
@@ -158,6 +168,12 @@ const emptyFilters: FilterValues = {
   plazoMax: "",
   pendientes: "",
   refinanciacion: "",
+};
+
+const emptySituacionForm: SituacionForm = {
+  fecha_reactivacion: "",
+  motivo_finalizacion: "PAGO_NORMAL",
+  observaciones: "",
 };
 
 const estadosCredito = [
@@ -197,10 +213,16 @@ export default function CreditosPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<FormMode | null>(null);
   const [selected, setSelected] = useState<Credito | null>(null);
   const [form, setForm] = useState<FormValues>(emptyForm);
+  const [situacionAction, setSituacionAction] = useState<SituacionAction | null>(null);
+  const [situacionCredito, setSituacionCredito] = useState<Credito | null>(null);
+  const [situacionForm, setSituacionForm] = useState<SituacionForm>(emptySituacionForm);
+  const [situacionError, setSituacionError] = useState<string | null>(null);
+  const [savingSituacion, setSavingSituacion] = useState(false);
   const session = readSession();
   const canDelete = session?.rol === "administrador";
 
@@ -784,6 +806,97 @@ export default function CreditosPage() {
     }
   }
 
+  function openSituacionModal(credito: Credito, action: SituacionAction) {
+    setSituacionCredito(credito);
+    setSituacionAction(action);
+    setSituacionError(null);
+    setSituacionForm({
+      fecha_reactivacion: credito.fecha_reactivacion ?? "",
+      motivo_finalizacion: credito.motivo_finalizacion ?? "PAGO_NORMAL",
+      observaciones:
+        action === "cerrar"
+          ? ""
+          : action === "resolver"
+            ? "Situacion revisada"
+            : credito.observacion_situacion ?? "",
+    });
+  }
+
+  function closeSituacionModal() {
+    if (savingSituacion) return;
+    setSituacionAction(null);
+    setSituacionCredito(null);
+    setSituacionForm(emptySituacionForm);
+    setSituacionError(null);
+  }
+
+  async function handleSituacionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!situacionCredito || !situacionAction) return;
+
+    const formData = new FormData(event.currentTarget);
+    const fechaReactivacion = String(
+      formData.get("fecha_reactivacion") ?? situacionForm.fecha_reactivacion,
+    ).trim();
+    const motivoFinalizacion = String(
+      formData.get("motivo_finalizacion") ?? situacionForm.motivo_finalizacion,
+    ).trim();
+    const observaciones = String(formData.get("observaciones") ?? situacionForm.observaciones).trim();
+
+    if (situacionAction === "inconsistente" && !fechaReactivacion) {
+      setSituacionError("Selecciona la fecha de reactivacion.");
+      return;
+    }
+    if (situacionAction === "inconsistente" && !observaciones) {
+      setSituacionError("Marcar inconsistente exige una observacion.");
+      return;
+    }
+
+    setSavingSituacion(true);
+    setSituacionError(null);
+    setError(null);
+
+    try {
+      if (situacionAction === "cerrar") {
+        await apiFetch<Credito>(`/api/v1/creditos/${situacionCredito.id}/cerrar-manual`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            motivo_finalizacion: motivoFinalizacion || "PAGO_NORMAL",
+            observaciones: observaciones || null,
+          }),
+        });
+        setSuccess(`Credito #${situacionCredito.id} finalizado manualmente`);
+      }
+      if (situacionAction === "inconsistente") {
+        await apiFetch<Credito>(`/api/v1/creditos/${situacionCredito.id}/marcar-inconsistente`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            fecha_reactivacion: fechaReactivacion,
+            observacion_situacion: observaciones,
+          }),
+        });
+        setSuccess(`Credito #${situacionCredito.id} marcado como activo inconsistente`);
+      }
+      if (situacionAction === "resolver") {
+        await apiFetch<Credito>(`/api/v1/creditos/${situacionCredito.id}/resolver-situacion`, {
+          method: "PATCH",
+          body: JSON.stringify({ observaciones: observaciones || null }),
+        });
+        setSuccess(`Situacion del credito #${situacionCredito.id} resuelta`);
+      }
+      await loadData();
+      setSituacionAction(null);
+      setSituacionCredito(null);
+      setSituacionForm(emptySituacionForm);
+    } catch (submitError) {
+      setSituacionError(
+        submitError instanceof ApiError ? submitError.message : "No se pudo actualizar la situacion",
+      );
+    } finally {
+      setSavingSituacion(false);
+    }
+  }
+
   function openDetail(creditoId: number) {
     router.push(`/creditos/${creditoId}`);
   }
@@ -889,6 +1002,7 @@ export default function CreditosPage() {
       </article>
 
       {loading ? <StateMessage text="Cargando créditos..." /> : null}
+      {success ? <StateMessage tone="success" text={success} /> : null}
       {error ? <StateMessage tone="error" text={error} /> : null}
 
       {!loading && !error ? (
@@ -977,6 +1091,10 @@ export default function CreditosPage() {
                   <span className="text-stone-700">{credito.tipo_credito ?? "Sin tipo"}</span>
                   <span>
                     <CreditoStatusBadge estado={credito.estado} />
+                    <CreditoSituacionBadge
+                      situacion={credito.situacion_credito}
+                      fechaReactivacion={credito.fecha_reactivacion}
+                    />
                   </span>
                   <span className="font-medium text-stone-800">
                     {formatCurrency(credito.monto_solicitado)}
@@ -1002,6 +1120,33 @@ export default function CreditosPage() {
                     >
                       <EditIcon />
                     </ActionButton>
+                    {credito.estado === "Aprobado" && credito.situacion_credito === "PENDIENTE_CIERRE" ? (
+                      <>
+                        <ActionButton
+                          label="Finalizar validado"
+                          disabled={savingSituacion}
+                          onClick={() => openSituacionModal(credito, "cerrar")}
+                        >
+                          <CheckIcon />
+                        </ActionButton>
+                        <ActionButton
+                          label="Marcar inconsistente"
+                          disabled={savingSituacion}
+                          onClick={() => openSituacionModal(credito, "inconsistente")}
+                        >
+                          <AlertIcon />
+                        </ActionButton>
+                      </>
+                    ) : null}
+                    {credito.estado === "Aprobado" && credito.situacion_credito === "ACTIVO_INCONSISTENTE" ? (
+                      <ActionButton
+                        label="Reactivar para validar cierre"
+                        disabled={savingSituacion}
+                        onClick={() => openSituacionModal(credito, "resolver")}
+                      >
+                        <CheckIcon />
+                      </ActionButton>
+                    ) : null}
                     <ActionButton
                       label="Eliminar"
                       tone="danger"
@@ -1048,7 +1193,137 @@ export default function CreditosPage() {
           onSubmit={handleSubmit}
         />
       ) : null}
+      {situacionAction && situacionCredito ? (
+        <SituacionCreditoModal
+          credito={situacionCredito}
+          action={situacionAction}
+          form={situacionForm}
+          error={situacionError}
+          saving={savingSituacion}
+          onChange={setSituacionForm}
+          onClose={closeSituacionModal}
+          onSubmit={handleSituacionSubmit}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function SituacionCreditoModal({
+  credito,
+  action,
+  form,
+  error,
+  saving,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  credito: Credito;
+  action: SituacionAction;
+  form: SituacionForm;
+  error: string | null;
+  saving: boolean;
+  onChange: (form: SituacionForm) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const titles: Record<SituacionAction, string> = {
+    cerrar: "Finalizar cierre validado",
+    inconsistente: "Marcar activo inconsistente",
+    resolver: "Reactivar para validar cierre",
+  };
+  const descriptions: Record<SituacionAction, string> = {
+    cerrar: "Finaliza el credito con el motivo validado y cierra sus oportunidades abiertas.",
+    inconsistente: "Mantiene el credito aprobado y conserva sus oportunidades para seguimiento.",
+    resolver: "Devuelve el credito al radar de refinanciaciones como pendiente de validar cierre.",
+  };
+  const buttonLabels: Record<SituacionAction, string> = {
+    cerrar: "Finalizar credito",
+    inconsistente: "Marcar inconsistente",
+    resolver: "Reactivar",
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-2xl rounded-lg border border-stone-800/10 bg-white p-5 shadow-xl shadow-stone-950/20"
+      >
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+              Credito #{credito.id}
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-stone-950">{titles[action]}</h2>
+            <p className="mt-2 text-sm text-stone-600">{descriptions[action]}</p>
+          </div>
+          <button type="button" className="button-muted px-3 py-2 text-sm" onClick={onClose} disabled={saving}>
+            Cerrar
+          </button>
+        </div>
+
+        {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
+
+        <div className="mt-4 grid gap-4">
+          {action === "cerrar" ? (
+            <label className="block text-sm font-medium text-stone-700">
+              <span>Motivo finalizacion</span>
+              <select
+                className="input-base mt-2"
+                name="motivo_finalizacion"
+                value={form.motivo_finalizacion}
+                onChange={(event) => onChange({ ...form, motivo_finalizacion: event.target.value })}
+                required
+              >
+                <option value="PAGO_NORMAL">Pago normal</option>
+                <option value="REFINANCIADO">Refinanciado</option>
+                <option value="COMPRA_CARTERA_INTERNA">Compra de cartera interna</option>
+                <option value="COMPRA_CARTERA_EXTERNA">Compra de cartera externa</option>
+                <option value="AJUSTE_MIGRACION">Ajuste migracion</option>
+                <option value="ANULADO">Anulado</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </label>
+          ) : null}
+          {action === "inconsistente" ? (
+            <label className="block text-sm font-medium text-stone-700">
+              <span>Fecha de reactivacion</span>
+              <input
+                className="input-base mt-2"
+                type="date"
+                name="fecha_reactivacion"
+                value={form.fecha_reactivacion}
+                onChange={(event) => onChange({ ...form, fecha_reactivacion: event.target.value })}
+                required
+              />
+            </label>
+          ) : null}
+          <label className="block text-sm font-medium text-stone-700">
+            <span>{action === "inconsistente" ? "Motivo de la inconsistencia" : "Observaciones"}</span>
+            <textarea
+              className="input-base mt-2 min-h-24"
+              name="observaciones"
+              value={form.observaciones}
+              onChange={(event) => onChange({ ...form, observaciones: event.target.value })}
+            />
+          </label>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" className="button-muted" onClick={onClose} disabled={saving}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className={action === "cerrar" ? "button-primary" : "button-muted"}
+            disabled={saving}
+          >
+            {saving ? "Guardando..." : buttonLabels[action]}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -1698,6 +1973,35 @@ function CreditoStatusBadge({ estado }: { estado: string }) {
   );
 }
 
+function CreditoSituacionBadge({
+  situacion,
+  fechaReactivacion,
+}: {
+  situacion: string;
+  fechaReactivacion?: string | null;
+}) {
+  if (!["PENDIENTE_CIERRE", "ACTIVO_INCONSISTENTE"].includes(situacion)) return null;
+
+  const labels: Record<string, string> = {
+    PENDIENTE_CIERRE: "Pendiente validar cierre",
+    ACTIVO_INCONSISTENTE: "Activo inconsistente",
+  };
+  const tone = situacion === "ACTIVO_INCONSISTENTE" ? "danger" : "review";
+
+  return (
+    <span
+      className={[
+        "mt-1 inline-flex w-fit items-center justify-center rounded-full border px-2.5 py-1 text-xs font-semibold",
+        tone === "danger" ? "border-red-500/20 bg-red-50 text-red-700" : "",
+        tone === "review" ? "border-yellow-500/45 bg-yellow-100 text-yellow-900" : "",
+      ].join(" ")}
+      title={fechaReactivacion ? `Reactivar: ${formatDate(fechaReactivacion)}` : undefined}
+    >
+      {labels[situacion] ?? situacion}
+    </span>
+  );
+}
+
 function InactivePensionadoBadge() {
   return (
     <span className="inline-flex w-fit items-center justify-center rounded-full border border-stone-800/10 bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-700">
@@ -1809,6 +2113,24 @@ function TrashIcon() {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
 function nullableText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
@@ -1819,7 +2141,7 @@ function StateMessage({
   tone = "default",
 }: {
   text: string;
-  tone?: "default" | "error";
+  tone?: "default" | "error" | "success";
 }) {
   return (
     <div
@@ -1827,6 +2149,8 @@ function StateMessage({
         "rounded-lg border px-5 py-4 text-sm",
         tone === "error"
           ? "border-red-500/20 bg-red-50 text-red-700"
+          : tone === "success"
+            ? "border-teal-700/20 bg-teal-50 text-teal-800"
           : "border-stone-800/10 bg-white/65 text-stone-500",
       ].join(" ")}
     >

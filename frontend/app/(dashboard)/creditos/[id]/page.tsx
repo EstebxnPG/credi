@@ -33,7 +33,10 @@ type Credito = {
   monto_aprobado: number | null;
   plazo: number;
   estado: string;
+  situacion_credito: string;
   motivo_finalizacion: string | null;
+  fecha_reactivacion: string | null;
+  observacion_situacion: string | null;
   valor_cuota: number | null;
   fecha_desembolso: string | null;
   fecha_fin_estimada: string | null;
@@ -120,6 +123,9 @@ type Opportunity = {
   disponible_desde: string;
   meses_transcurridos: number;
   meses_requeridos: number;
+  situacion_credito?: string;
+  fecha_reactivacion_credito?: string | null;
+  observacion_situacion_credito?: string | null;
 };
 
 type EditForm = {
@@ -153,6 +159,14 @@ type ObservacionesForm = {
   observaciones: string;
 };
 
+type SituacionAction = "cerrar" | "inconsistente" | "resolver" | "reabrir";
+
+type SituacionForm = {
+  fecha_reactivacion: string;
+  motivo_finalizacion: string;
+  observaciones: string;
+};
+
 const emptyPendienteForm: PendienteForm = {
   descripcion: "",
   origen: "cooperativa",
@@ -166,6 +180,12 @@ const emptyEstadoForm: EstadoForm = {
   fecha_desembolso: "",
   fecha_fin_estimada: "",
   motivo_finalizacion: "",
+};
+
+const emptySituacionForm: SituacionForm = {
+  fecha_reactivacion: "",
+  motivo_finalizacion: "PAGO_NORMAL",
+  observaciones: "",
 };
 
 const transitionsByStatus: Record<string, string[]> = {
@@ -208,6 +228,10 @@ export default function CreditoDetailPage() {
   const [estadoForm, setEstadoForm] = useState<EstadoForm>(emptyEstadoForm);
   const [estadoError, setEstadoError] = useState<string | null>(null);
   const [savingEstado, setSavingEstado] = useState(false);
+  const [situacionAction, setSituacionAction] = useState<SituacionAction | null>(null);
+  const [situacionForm, setSituacionForm] = useState<SituacionForm>(emptySituacionForm);
+  const [situacionError, setSituacionError] = useState<string | null>(null);
+  const [savingSituacion, setSavingSituacion] = useState(false);
   const [observacionesForm, setObservacionesForm] = useState<ObservacionesForm | null>(null);
   const [observacionesError, setObservacionesError] = useState<string | null>(null);
   const [savingObservaciones, setSavingObservaciones] = useState(false);
@@ -543,6 +567,14 @@ export default function CreditoDetailPage() {
       setEstadoError("Selecciona el nuevo estado.");
       return;
     }
+    if (
+      credito.estado === "Finalizado" &&
+      estadoForm.estado_nuevo === "Aprobado" &&
+      !estadoForm.observaciones.trim()
+    ) {
+      setEstadoError("La observacion es obligatoria para revertir un credito finalizado.");
+      return;
+    }
 
     setSavingEstado(true);
     setEstadoError(null);
@@ -579,6 +611,122 @@ export default function CreditoDetailPage() {
       );
     } finally {
       setSavingEstado(false);
+    }
+  }
+
+  async function refreshCreditoState(creditoId: number) {
+    const [creditoData, historialData, pendientesData, oportunidadesData] = await Promise.all([
+      apiFetch<Credito>(`/api/v1/creditos/${creditoId}`),
+      apiFetch<HistorialCredito[]>(`/api/v1/creditos/${creditoId}/historial`),
+      apiFetch<PendienteCredito[]>(`/api/v1/pendientes-credito/?credito_id=${creditoId}&limit=15`),
+      apiFetch<Opportunity[]>(`/api/v1/refinanciaciones/elegibles/?credito_id=${creditoId}&limit=1`)
+        .catch(() => []),
+    ]);
+    setCredito(creditoData);
+    setHistorial(historialData);
+    setPendientes(pendientesData);
+    setRefinanceOpportunity(oportunidadesData[0] ?? null);
+  }
+
+  function openSituacionModal(action: SituacionAction) {
+    setSituacionAction(action);
+    setSituacionError(null);
+    setSituacionForm({
+      fecha_reactivacion: credito?.fecha_reactivacion ?? "",
+      motivo_finalizacion: credito?.motivo_finalizacion ?? "PAGO_NORMAL",
+      observaciones:
+        action === "cerrar"
+          ? ""
+          : action === "reabrir"
+            ? ""
+          : action === "resolver"
+            ? "Situacion revisada"
+            : credito?.observacion_situacion ?? "",
+    });
+  }
+
+  function closeSituacionModal() {
+    if (savingSituacion) return;
+    setSituacionAction(null);
+    setSituacionError(null);
+    setSituacionForm(emptySituacionForm);
+  }
+
+  async function handleSituacionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!credito || !situacionAction) return;
+
+    const formData = new FormData(event.currentTarget);
+    const fechaReactivacion = String(
+      formData.get("fecha_reactivacion") ?? situacionForm.fecha_reactivacion,
+    ).trim();
+    const motivoFinalizacion = String(
+      formData.get("motivo_finalizacion") ?? situacionForm.motivo_finalizacion,
+    ).trim();
+    const observaciones = String(formData.get("observaciones") ?? situacionForm.observaciones).trim();
+
+    if (situacionAction === "inconsistente" && !fechaReactivacion) {
+      setSituacionError("Selecciona la fecha de reactivacion.");
+      return;
+    }
+    if (situacionAction === "inconsistente" && !observaciones) {
+      setSituacionError("Marcar inconsistente exige una observacion.");
+      return;
+    }
+    if (situacionAction === "reabrir" && !observaciones) {
+      setSituacionError("La observacion es obligatoria para reabrir un cierre validado.");
+      return;
+    }
+
+    setSituacionError(null);
+    setSavingSituacion(true);
+    try {
+      if (situacionAction === "cerrar") {
+        await apiFetch<Credito>(`/api/v1/creditos/${credito.id}/cerrar-manual`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            motivo_finalizacion: motivoFinalizacion || "PAGO_NORMAL",
+            observaciones: observaciones || null,
+          }),
+        });
+      }
+      if (situacionAction === "inconsistente") {
+        await apiFetch<Credito>(`/api/v1/creditos/${credito.id}/marcar-inconsistente`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            fecha_reactivacion: fechaReactivacion,
+            observacion_situacion: observaciones,
+          }),
+        });
+      }
+      if (situacionAction === "resolver") {
+        await apiFetch<Credito>(`/api/v1/creditos/${credito.id}/resolver-situacion`, {
+          method: "PATCH",
+          body: JSON.stringify({ observaciones: observaciones || null }),
+        });
+      }
+      if (situacionAction === "reabrir") {
+        await apiFetch<Credito>(`/api/v1/creditos/${credito.id}/estado`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            estado_nuevo: "Aprobado",
+            observaciones,
+            monto_aprobado: credito.monto_aprobado ?? credito.monto_solicitado,
+            valor_cuota: credito.valor_cuota,
+            fecha_desembolso: credito.fecha_desembolso,
+            fecha_fin_estimada: credito.fecha_fin_estimada,
+          }),
+        });
+      }
+      await refreshCreditoState(credito.id);
+      setSituacionAction(null);
+      setSituacionForm(emptySituacionForm);
+    } catch (submitError) {
+      setSituacionError(
+        submitError instanceof ApiError ? submitError.message : "No se pudo actualizar la situacion",
+      );
+    } finally {
+      setSavingSituacion(false);
     }
   }
 
@@ -652,7 +800,10 @@ export default function CreditoDetailPage() {
     return <StateMessage tone="error" text={error ?? "Credito no encontrado"} />;
   }
 
-  const availableTransitions = getAvailableTransitions(credito.estado);
+  const availableTransitions =
+    credito.situacion_credito === "NORMAL" || credito.estado === "Finalizado"
+      ? getAvailableTransitions(credito.estado)
+      : [];
   const cooperativaActual = cooperativas.find((item) => item.id === credito.cooperativa_id);
   const oficinaActual = oficinas.find((item) => item.id === credito.oficina_id);
   const canRefinance = isReadyToRefinance(refinanceOpportunity);
@@ -676,6 +827,10 @@ export default function CreditoDetailPage() {
             <p className="mt-2 text-sm text-stone-600">
               Estado actual: <span className="font-semibold">{credito.estado}</span>
             </p>
+            <CreditoSituacionBadge
+              situacion={credito.situacion_credito}
+              fechaReactivacion={credito.fecha_reactivacion}
+            />
             <div className="mt-2">
               <OfficeBadge oficina={oficinaActual} />
             </div>
@@ -776,13 +931,71 @@ export default function CreditoDetailPage() {
             <div>
               <h2 className="text-lg font-semibold text-stone-950">Estado del credito</h2>
               <p className="mt-1 text-sm text-stone-600">
-                Cambia el estado segun el flujo permitido del credito.
+                Valida cierres y situaciones internas sin perder oportunidades activas.
               </p>
             </div>
             <span className="rounded-full border border-stone-800/10 bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">
               {credito.estado}
             </span>
           </div>
+          {credito.situacion_credito !== "NORMAL" ? (
+            <div className="mt-4 rounded-md border border-amber-700/20 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <p className="font-semibold">{formatSituacionCredito(credito.situacion_credito)}</p>
+              {credito.fecha_reactivacion ? (
+                <p className="mt-1 text-xs">Reactivar: {formatDate(credito.fecha_reactivacion)}</p>
+              ) : null}
+              {credito.observacion_situacion ? (
+                <p className="mt-1 text-xs">{credito.observacion_situacion}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {credito.estado === "Aprobado" && credito.situacion_credito === "PENDIENTE_CIERRE" ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="button-primary"
+                disabled={savingSituacion}
+                onClick={() => openSituacionModal("cerrar")}
+              >
+                Finalizar validado
+              </button>
+              <button
+                type="button"
+                className="button-muted"
+                disabled={savingSituacion}
+                onClick={() => openSituacionModal("inconsistente")}
+              >
+                Marcar inconsistente
+              </button>
+            </div>
+          ) : null}
+
+          {credito.estado === "Aprobado" && credito.situacion_credito === "ACTIVO_INCONSISTENTE" ? (
+            <div className="mt-4">
+              <button
+                type="button"
+                className="button-muted"
+                disabled={savingSituacion}
+                onClick={() => openSituacionModal("resolver")}
+              >
+                Reactivar para validar cierre
+              </button>
+            </div>
+          ) : null}
+
+          {credito.estado === "Finalizado" ? (
+            <div className="mt-4">
+              <button
+                type="button"
+                className="button-muted border-yellow-500/30 bg-yellow-50 text-yellow-900 hover:bg-yellow-100"
+                disabled={savingSituacion}
+                onClick={() => openSituacionModal("reabrir")}
+              >
+                Reabrir cierre
+              </button>
+            </div>
+          ) : null}
 
           {availableTransitions.length > 0 ? (
             <form onSubmit={handleChangeEstado} className="mt-4 grid gap-3">
@@ -796,11 +1009,23 @@ export default function CreditoDetailPage() {
                       estado_nuevo: value,
                       monto_aprobado:
                         value === "Aprobado"
-                          ? String(credito.monto_solicitado)
+                          ? String(credito.monto_aprobado ?? credito.monto_solicitado)
                           : current.monto_aprobado,
+                      valor_cuota:
+                        value === "Aprobado"
+                          ? String(credito.valor_cuota ?? "")
+                          : current.valor_cuota,
+                      fecha_desembolso:
+                        value === "Aprobado"
+                          ? credito.fecha_desembolso ?? current.fecha_desembolso
+                          : current.fecha_desembolso,
                       fecha_fin_estimada:
-                        value === "Aprobado" && current.fecha_desembolso
-                          ? addMonthsToIsoDate(current.fecha_desembolso, credito.plazo)
+                        value === "Aprobado" && (credito.fecha_fin_estimada || credito.fecha_desembolso || current.fecha_desembolso)
+                          ? credito.fecha_fin_estimada ??
+                            addMonthsToIsoDate(
+                              credito.fecha_desembolso ?? current.fecha_desembolso,
+                              credito.plazo,
+                            )
                           : current.fecha_fin_estimada,
                       motivo_finalizacion:
                         value === "Finalizado" ? current.motivo_finalizacion : "",
@@ -879,6 +1104,12 @@ export default function CreditoDetailPage() {
                 }
               />
 
+              {credito.estado === "Finalizado" && estadoForm.estado_nuevo === "Aprobado" ? (
+                <p className="rounded-md border border-yellow-500/30 bg-yellow-50 px-3 py-2 text-sm text-yellow-900">
+                  Esta correccion devuelve el credito a Aprobado con situacion Pendiente validar cierre y reabre sus oportunidades cerradas.
+                </p>
+              ) : null}
+
               {estadoError ? <StateMessage tone="error" text={estadoError} /> : null}
 
               <div className="flex justify-end">
@@ -896,7 +1127,11 @@ export default function CreditoDetailPage() {
                 />
               ) : null}
               <p className="rounded-md border border-stone-800/10 bg-white/65 px-3 py-2 text-sm text-stone-600">
-                Este credito esta en estado final y no tiene mas transiciones.
+                {credito.estado === "Finalizado" || credito.estado === "Rechazado"
+                  ? credito.estado === "Finalizado"
+                    ? "Este credito esta finalizado. Si fue un error, usa Reabrir cierre."
+                    : "Este credito esta en estado final y no tiene mas transiciones."
+                  : "No hay transiciones manuales disponibles desde este estado."}
               </p>
             </div>
           )}
@@ -1164,6 +1399,17 @@ export default function CreditoDetailPage() {
           onSubmit={handleUpdateObservaciones}
         />
       ) : null}
+      {situacionAction ? (
+        <SituacionCreditoModal
+          action={situacionAction}
+          form={situacionForm}
+          error={situacionError}
+          saving={savingSituacion}
+          onChange={setSituacionForm}
+          onClose={closeSituacionModal}
+          onSubmit={handleSituacionSubmit}
+        />
+      ) : null}
     </section>
   );
 }
@@ -1354,18 +1600,21 @@ function SelectField({
   options,
   onChange,
   required = false,
+  name,
 }: {
   label: string;
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
   required?: boolean;
+  name?: string;
 }) {
   return (
     <label className="block text-sm font-medium text-stone-700">
       <span>{label}</span>
       <select
         className="input-base mt-2"
+        name={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
@@ -1387,12 +1636,14 @@ function Field({
   onChange,
   type = "text",
   required = false,
+  name,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   required?: boolean;
+  name?: string;
 }) {
   return (
     <label className="block text-sm font-medium text-stone-700">
@@ -1400,6 +1651,7 @@ function Field({
       <input
         className="input-base mt-2"
         type={type}
+        name={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required={required}
@@ -1493,22 +1745,147 @@ function ObservacionesModal({
   );
 }
 
+function SituacionCreditoModal({
+  action,
+  form,
+  error,
+  saving,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  action: SituacionAction;
+  form: SituacionForm;
+  error: string | null;
+  saving: boolean;
+  onChange: (form: SituacionForm) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const titles: Record<SituacionAction, string> = {
+    cerrar: "Finalizar cierre validado",
+    inconsistente: "Marcar activo inconsistente",
+    resolver: "Reactivar para validar cierre",
+    reabrir: "Reabrir cierre validado",
+  };
+  const descriptions: Record<SituacionAction, string> = {
+    cerrar: "Finaliza el credito con el motivo validado y cierra sus oportunidades abiertas.",
+    inconsistente: "Mantiene el credito aprobado y conserva sus oportunidades para seguimiento.",
+    resolver: "Devuelve el credito al radar de refinanciaciones como pendiente de validar cierre.",
+    reabrir: "Corrige un cierre validado y devuelve el credito a pendiente de validar cierre.",
+  };
+  const buttonLabels: Record<SituacionAction, string> = {
+    cerrar: "Finalizar credito",
+    inconsistente: "Marcar inconsistente",
+    resolver: "Reactivar",
+    reabrir: "Reabrir cierre",
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-2xl rounded-lg border border-stone-800/10 bg-white p-5 shadow-xl shadow-stone-950/20"
+      >
+        <div className="flex flex-col gap-3 border-b border-stone-800/10 pb-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-stone-500">
+              Situacion credito
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-stone-950">{titles[action]}</h2>
+            <p className="mt-2 text-sm text-stone-600">{descriptions[action]}</p>
+          </div>
+          <button type="button" className="button-muted px-3 py-2 text-sm" onClick={onClose} disabled={saving}>
+            Cerrar
+          </button>
+        </div>
+
+        {error ? <div className="mt-4"><StateMessage tone="error" text={error} /></div> : null}
+
+        <div className="mt-4 grid gap-4">
+          {action === "cerrar" ? (
+            <SelectField
+              label="Motivo finalizacion"
+              name="motivo_finalizacion"
+              value={form.motivo_finalizacion}
+              onChange={(value) => onChange({ ...form, motivo_finalizacion: value })}
+              options={[
+                { value: "PAGO_NORMAL", label: "Pago normal" },
+                { value: "REFINANCIADO", label: "Refinanciado" },
+                { value: "COMPRA_CARTERA_INTERNA", label: "Compra de cartera interna" },
+                { value: "COMPRA_CARTERA_EXTERNA", label: "Compra de cartera externa" },
+                { value: "AJUSTE_MIGRACION", label: "Ajuste migracion" },
+                { value: "ANULADO", label: "Anulado" },
+                { value: "OTRO", label: "Otro" },
+              ]}
+              required
+            />
+          ) : null}
+          {action === "inconsistente" ? (
+            <Field
+              label="Fecha de reactivacion"
+              type="date"
+              name="fecha_reactivacion"
+              value={form.fecha_reactivacion}
+              onChange={(value) => onChange({ ...form, fecha_reactivacion: value })}
+              required
+            />
+          ) : null}
+          <TextareaField
+            label={
+              action === "inconsistente"
+                ? "Motivo de la inconsistencia"
+                : action === "reabrir"
+                  ? "Motivo de la correccion"
+                  : "Observaciones"
+            }
+            name="observaciones"
+            value={form.observaciones}
+            onChange={(value) => onChange({ ...form, observaciones: value })}
+          />
+          {action === "reabrir" ? (
+            <p className="rounded-md border border-yellow-500/30 bg-yellow-50 px-3 py-2 text-sm text-yellow-900">
+              Esta accion vuelve el credito a Aprobado con situacion Pendiente validar cierre y reabre sus oportunidades cerradas.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" className="button-muted" onClick={onClose} disabled={saving}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className={action === "cerrar" ? "button-primary" : "button-muted"}
+            disabled={saving}
+          >
+            {saving ? "Guardando..." : buttonLabels[action]}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function TextareaField({
   label,
   value,
   onChange,
   disabled = false,
+  name,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  name?: string;
 }) {
   return (
     <label className="block text-sm font-medium text-stone-700">
       <span>{label}</span>
       <textarea
         className="input-base mt-2 min-h-24 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500"
+        name={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
@@ -1541,6 +1918,41 @@ function PendingBadge({ estado }: { estado: string }) {
       {isOpen ? "Pendiente" : "Resuelto"}
     </span>
   );
+}
+
+function CreditoSituacionBadge({
+  situacion,
+  fechaReactivacion,
+}: {
+  situacion: string;
+  fechaReactivacion?: string | null;
+}) {
+  if (!situacion || situacion === "NORMAL") return null;
+
+  const danger = situacion === "ACTIVO_INCONSISTENTE";
+  return (
+    <span
+      className={[
+        "mt-2 inline-flex w-fit items-center justify-center rounded-full border px-2.5 py-1 text-xs font-semibold",
+        danger
+          ? "border-red-500/20 bg-red-50 text-red-700"
+          : "border-amber-700/20 bg-amber-50 text-amber-800",
+      ].join(" ")}
+      title={fechaReactivacion ? `Reactivar: ${formatDate(fechaReactivacion)}` : undefined}
+    >
+      {formatSituacionCredito(situacion)}
+    </span>
+  );
+}
+
+function formatSituacionCredito(value: string) {
+  const labels: Record<string, string> = {
+    NORMAL: "Normal",
+    PENDIENTE_CIERRE: "Pendiente validar cierre",
+    ACTIVO_INCONSISTENTE: "Activo inconsistente",
+    CIERRE_VALIDADO: "Cierre validado",
+  };
+  return labels[value] ?? value;
 }
 
 function InactivePensionadoBadge() {

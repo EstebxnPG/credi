@@ -11,9 +11,12 @@ from app.core.dependencies import get_db, get_current_user, solo_admin
 from app.db.models.usuario import Usuario
 from app.schemas.credito import (
     CreditoCambioEstado,
+    CreditoCerrarManual,
     CreditoCreate,
+    CreditoMarcarInconsistente,
     CreditoObservacionesUpdate,
     CreditoRead,
+    CreditoResolverSituacion,
     CreditoUpdate,
 )
 from app.schemas.historial_credito import HistorialCreditoRead
@@ -123,6 +126,36 @@ def cambiar_estado(
     Valida que la transición sea permitida según la máquina de estados.
     """
     return credito_service.cambiar_estado(db, credito_id, data, usuario_actual)
+
+
+@router.patch("/{credito_id}/cerrar-manual", response_model=CreditoRead)
+def cerrar_credito_manual(
+    credito_id: int,
+    data: CreditoCerrarManual,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return credito_service.cerrar_credito_manual(db, credito_id, data, usuario_actual)
+
+
+@router.patch("/{credito_id}/marcar-inconsistente", response_model=CreditoRead)
+def marcar_credito_inconsistente(
+    credito_id: int,
+    data: CreditoMarcarInconsistente,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return credito_service.marcar_credito_inconsistente(db, credito_id, data, usuario_actual)
+
+
+@router.patch("/{credito_id}/resolver-situacion", response_model=CreditoRead)
+def resolver_situacion_credito(
+    credito_id: int,
+    data: CreditoResolverSituacion,
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user),
+):
+    return credito_service.resolver_situacion_credito(db, credito_id, data, usuario_actual)
 
 
 @router.patch("/{credito_id}/observaciones", response_model=CreditoRead)

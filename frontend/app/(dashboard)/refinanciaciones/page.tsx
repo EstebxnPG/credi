@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiFetch, apiFetchWithMeta } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 
-type Estado = "programado" | "disponible" | "contactado" | "aceptado" | "rechazado" | "convertido" | "pospuesto";
+type Estado = "programado" | "disponible" | "contactado" | "aceptado" | "rechazado" | "convertido" | "pospuesto" | "cerrado";
 type Vista = "hoy" | "proximos" | "gestionados" | "convertidos" | "pospuestos" | "creditos_nuevos" | "todos";
 
 type Item = {
@@ -32,6 +32,9 @@ type Item = {
   justificacion: string | null;
   reactivar_en: string | null;
   credito_nuevo_id: number | null;
+  situacion_credito: string;
+  fecha_reactivacion_credito: string | null;
+  observacion_situacion_credito: string | null;
 };
 
 type Cooperativa = {
@@ -695,6 +698,7 @@ export default function RefinanciacionesPage() {
                       </p>
                     </div>
                   ) : null}
+                  <CreditoSituacionNotice item={item} />
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex min-w-72 flex-wrap gap-1.5">
@@ -836,12 +840,30 @@ function Badge({ estado }: { estado: Estado }) {
     rechazado: "bg-rose-50 text-rose-700 border-rose-200",
     convertido: "bg-violet-50 text-violet-700 border-violet-200",
     pospuesto: "bg-stone-100 text-stone-700 border-stone-300",
+    cerrado: "bg-stone-100 text-stone-600 border-stone-300",
   };
 
   return (
     <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${tone[estado]}`}>
       {estado}
     </span>
+  );
+}
+
+function CreditoSituacionNotice({ item }: { item: Item }) {
+  if (!item.situacion_credito || item.situacion_credito === "NORMAL") return null;
+
+  const text =
+    item.situacion_credito === "PENDIENTE_CIERRE"
+      ? "Pendiente validar cierre. Revisar antes de convertir o cerrar."
+      : item.situacion_credito === "ACTIVO_INCONSISTENTE"
+        ? `Activo inconsistente reactivado${item.fecha_reactivacion_credito ? ` desde ${formatDate(item.fecha_reactivacion_credito)}` : ""}. Validar cierre.`
+        : "Cierre validado.";
+
+  return (
+    <p className="mt-2 max-w-xs rounded-md border border-amber-700/20 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800">
+      {text}
+    </p>
   );
 }
 

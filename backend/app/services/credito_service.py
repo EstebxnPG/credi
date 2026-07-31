@@ -21,8 +21,11 @@ from app.db.models.refinanciacion import OportunidadRefinanciacion, HistorialOpo
 from app.db.models.notificacion import Notificacion
 from app.schemas.credito import (
     CreditoCambioEstado,
+    CreditoCerrarManual,
     CreditoCreate,
+    CreditoMarcarInconsistente,
     CreditoObservacionesUpdate,
+    CreditoResolverSituacion,
     CreditoUpdate,
     TRANSICIONES_VALIDAS,
     normalizar_tipo_credito,
@@ -187,8 +190,33 @@ def _sincronizar_creditos_finalizados(
     oficina_id: int | None = None,
 ) -> None:
     hoy = date.today()
+    if usuario_id is not None:
+        reactivar_query = db.query(Credito).filter(
+            Credito.estado == "Aprobado",
+            Credito.situacion_credito == "ACTIVO_INCONSISTENTE",
+            Credito.fecha_reactivacion.isnot(None),
+            Credito.fecha_reactivacion <= hoy,
+            Credito.is_active == True,  # noqa: E712
+        )
+        if oficina_id is not None:
+            reactivar_query = reactivar_query.filter(Credito.oficina_id == oficina_id)
+
+        for credito in reactivar_query.all():
+            credito.situacion_credito = "PENDIENTE_CIERRE"
+            credito.observacion_situacion = "Reactivado por fecha programada; validar cierre o nueva gestion"
+            credito.fecha_reactivacion = None
+            _registrar_historial(
+                db=db,
+                credito_id=credito.id,
+                usuario_id=usuario_id,
+                estado_anterior="Aprobado/ACTIVO_INCONSISTENTE",
+                estado_nuevo="Aprobado/PENDIENTE_CIERRE",
+                observacion="Reactivado automaticamente por fecha programada",
+            )
+
     query = db.query(Credito).filter(
         Credito.estado == "Aprobado",
+        Credito.situacion_credito == "NORMAL",
         Credito.fecha_fin_estimada.isnot(None),
         Credito.fecha_fin_estimada <= hoy,
         Credito.is_active == True,  # noqa: E712
@@ -197,16 +225,20 @@ def _sincronizar_creditos_finalizados(
         query = query.filter(Credito.oficina_id == oficina_id)
 
     for credito in query.all():
-        credito.estado = "Finalizado"
-        credito.motivo_finalizacion = "PAGO_NORMAL"
+        if credito.situacion_credito == "PENDIENTE_CIERRE":
+            continue
+        situacion_anterior = credito.situacion_credito
+        credito.situacion_credito = "PENDIENTE_CIERRE"
+        credito.observacion_situacion = "Credito cumplio fecha fin estimada; requiere validacion manual de cierre"
+        credito.fecha_reactivacion = None
         if usuario_id is not None:
             _registrar_historial(
                 db=db,
                 credito_id=credito.id,
                 usuario_id=usuario_id,
-                estado_anterior="Aprobado",
-                estado_nuevo="Finalizado",
-                observacion="Finalizado automaticamente por fecha fin estimada",
+                estado_anterior=f"Aprobado/{situacion_anterior}",
+                estado_nuevo="Aprobado/PENDIENTE_CIERRE",
+                observacion="Marcado para cierre manual por fecha fin estimada",
             )
 
 
@@ -956,6 +988,73 @@ def actualizar_observaciones_credito(
     return credito
 
 
+def _cerrar_oportunidades_por_cierre_credito(
+    db: Session,
+    credito: Credito,
+    usuario_id: int,
+    motivo: str,
+) -> None:
+    if motivo == "REFINANCIADO":
+        return
+    oportunidades = (
+        db.query(OportunidadRefinanciacion)
+        .filter(
+            OportunidadRefinanciacion.credito_id == credito.id,
+            OportunidadRefinanciacion.estado.notin_(["convertido", "cerrado"]),
+        )
+        .all()
+    )
+    for oportunidad in oportunidades:
+        anterior = oportunidad.estado
+        oportunidad.estado = "cerrado"
+        oportunidad.justificacion = f"Cerrada por finalizacion manual del credito ({motivo})"
+        oportunidad.reactivar_en = None
+        db.add(
+            HistorialOportunidadRefinanciacion(
+                oportunidad_id=oportunidad.id,
+                usuario_id=usuario_id,
+                estado_anterior=anterior,
+                estado_nuevo="cerrado",
+                justificacion=oportunidad.justificacion,
+            )
+        )
+
+
+def _reabrir_oportunidades_por_reversion_cierre(
+    db: Session,
+    credito: Credito,
+    usuario_id: int,
+) -> None:
+    oportunidades = (
+        db.query(OportunidadRefinanciacion)
+        .filter(
+            OportunidadRefinanciacion.credito_id == credito.id,
+            OportunidadRefinanciacion.estado == "cerrado",
+        )
+        .all()
+    )
+    for oportunidad in oportunidades:
+        oportunidad.estado = "disponible"
+        oportunidad.justificacion = "Reabierta por correccion de cierre del credito"
+        db.add(
+            HistorialOportunidadRefinanciacion(
+                oportunidad_id=oportunidad.id,
+                estado_anterior="cerrado",
+                estado_nuevo="disponible",
+                justificacion="Reapertura por reversion de cierre validado",
+            )
+        )
+        registrar_log(
+            db=db,
+            usuario_id=usuario_id,
+            tabla_afectada="oportunidades_refinanciacion",
+            registro_afectado=oportunidad.id,
+            tipo_accion="reabrir_refi",
+            valores_antes={"estado": "cerrado"},
+            valores_despues={"estado": "disponible"},
+        )
+
+
 def cambiar_estado(
     db: Session,
     credito_id: int,
@@ -979,7 +1078,7 @@ def cambiar_estado(
             detail=f"No se permite pasar de '{estado_actual}' a '{estado_nuevo}'",
         )
 
-    if estado_nuevo == "Aprobado" and (
+    if estado_nuevo == "Aprobado" and estado_actual != "Finalizado" and (
         credito.tiene_documentos_pendientes
         or credito_tiene_pendientes_abiertos(db, credito.id)
     ):
@@ -988,8 +1087,15 @@ def cambiar_estado(
             detail="No se puede aprobar un credito con documentos o tareas pendientes",
         )
 
+    if estado_actual == "Finalizado" and estado_nuevo == "Aprobado" and not data.observaciones:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La observacion es obligatoria para revertir un credito finalizado",
+        )
+
     if estado_nuevo == "Aprobado":
-        _validar_fecha_fin_por_plazo(data.fecha_desembolso, data.fecha_fin_estimada, credito.plazo)
+        if estado_actual != "Finalizado":
+            _validar_fecha_fin_por_plazo(data.fecha_desembolso, data.fecha_fin_estimada, credito.plazo)
         _validar_regla_refinanciacion_configurada(credito)
 
     if estado_nuevo == "Finalizado" and credito.estado != "Aprobado":
@@ -1006,8 +1112,26 @@ def cambiar_estado(
         credito.fecha_desembolso = data.fecha_desembolso
         credito.fecha_fin_estimada = data.fecha_fin_estimada
         credito.motivo_finalizacion = None
+        credito.situacion_credito = "PENDIENTE_CIERRE" if estado_actual == "Finalizado" else "NORMAL"
+        credito.fecha_reactivacion = None
+        credito.observacion_situacion = (
+            data.observaciones
+            if estado_actual == "Finalizado"
+            else None
+        )
+        if estado_actual == "Finalizado":
+            _reabrir_oportunidades_por_reversion_cierre(db, credito, usuario_actual.id)
     if estado_nuevo == "Finalizado":
         credito.motivo_finalizacion = data.motivo_finalizacion
+        credito.situacion_credito = "CIERRE_VALIDADO"
+        credito.fecha_reactivacion = None
+        credito.observacion_situacion = data.observaciones
+        _cerrar_oportunidades_por_cierre_credito(
+            db,
+            credito,
+            usuario_actual.id,
+            data.motivo_finalizacion or "OTRO",
+        )
 
     _registrar_historial(
         db=db,
@@ -1040,6 +1164,137 @@ def cambiar_estado(
 
         listar_creditos_elegibles(db, usuario_actual, commit=False, limit=None)
 
+    db.commit()
+    db.refresh(credito)
+    return credito
+
+
+def cerrar_credito_manual(
+    db: Session,
+    credito_id: int,
+    data: CreditoCerrarManual,
+    usuario_actual: Usuario,
+) -> Credito:
+    credito = obtener_credito(db, credito_id, usuario_actual)
+    if credito.estado != "Aprobado":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo un credito aprobado puede cerrarse manualmente",
+        )
+
+    estado_anterior = credito.estado
+    situacion_anterior = credito.situacion_credito
+    credito.estado = "Finalizado"
+    credito.motivo_finalizacion = data.motivo_finalizacion
+    credito.situacion_credito = "CIERRE_VALIDADO"
+    credito.fecha_reactivacion = None
+    credito.observacion_situacion = data.observaciones
+    _cerrar_oportunidades_por_cierre_credito(db, credito, usuario_actual.id, data.motivo_finalizacion)
+
+    _registrar_historial(
+        db=db,
+        credito_id=credito.id,
+        usuario_id=usuario_actual.id,
+        estado_anterior=f"{estado_anterior}/{situacion_anterior}",
+        estado_nuevo="Finalizado/CIERRE_VALIDADO",
+        observacion=data.observaciones or "Cierre manual validado",
+    )
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="cerrar_manual",
+        valores_antes={"estado": estado_anterior, "situacion_credito": situacion_anterior},
+        valores_despues={
+            "estado": credito.estado,
+            "situacion_credito": credito.situacion_credito,
+            "motivo_finalizacion": credito.motivo_finalizacion,
+        },
+    )
+    db.commit()
+    db.refresh(credito)
+    return credito
+
+
+def marcar_credito_inconsistente(
+    db: Session,
+    credito_id: int,
+    data: CreditoMarcarInconsistente,
+    usuario_actual: Usuario,
+) -> Credito:
+    credito = obtener_credito(db, credito_id, usuario_actual)
+    if credito.estado != "Aprobado":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo un credito aprobado puede marcarse inconsistente",
+        )
+
+    situacion_anterior = credito.situacion_credito
+    credito.situacion_credito = "ACTIVO_INCONSISTENTE"
+    credito.fecha_reactivacion = data.fecha_reactivacion
+    credito.observacion_situacion = data.observacion_situacion
+
+    _registrar_historial(
+        db=db,
+        credito_id=credito.id,
+        usuario_id=usuario_actual.id,
+        estado_anterior=f"Aprobado/{situacion_anterior}",
+        estado_nuevo="Aprobado/ACTIVO_INCONSISTENTE",
+        observacion=data.observacion_situacion,
+    )
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="marcar_inconsistente",
+        valores_antes={"situacion_credito": situacion_anterior},
+        valores_despues={
+            "situacion_credito": credito.situacion_credito,
+            "fecha_reactivacion": credito.fecha_reactivacion,
+            "observacion_situacion": credito.observacion_situacion,
+        },
+    )
+    db.commit()
+    db.refresh(credito)
+    return credito
+
+
+def resolver_situacion_credito(
+    db: Session,
+    credito_id: int,
+    data: CreditoResolverSituacion,
+    usuario_actual: Usuario,
+) -> Credito:
+    credito = obtener_credito(db, credito_id, usuario_actual)
+    if credito.estado != "Aprobado":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo un credito aprobado puede volver a pendiente de validar cierre",
+        )
+
+    situacion_anterior = credito.situacion_credito
+    credito.situacion_credito = "PENDIENTE_CIERRE"
+    credito.fecha_reactivacion = None
+    credito.observacion_situacion = data.observaciones
+    _registrar_historial(
+        db=db,
+        credito_id=credito.id,
+        usuario_id=usuario_actual.id,
+        estado_anterior=f"Aprobado/{situacion_anterior}",
+        estado_nuevo="Aprobado/PENDIENTE_CIERRE",
+        observacion=data.observaciones or "Reactivado para validar cierre",
+    )
+    registrar_log(
+        db=db,
+        usuario_id=usuario_actual.id,
+        tabla_afectada="creditos",
+        registro_afectado=credito.id,
+        tipo_accion="resolver_situacion",
+        valores_antes={"situacion_credito": situacion_anterior},
+        valores_despues={"situacion_credito": "PENDIENTE_CIERRE"},
+    )
     db.commit()
     db.refresh(credito)
     return credito

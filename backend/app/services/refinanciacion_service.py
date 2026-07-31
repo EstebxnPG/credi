@@ -44,6 +44,34 @@ def _get_credito_activo_or_404(db: Session, credito_id: int) -> Credito:
     return credito
 
 
+def _sincronizar_situacion_credito_para_refi(
+    db: Session,
+    credito: Credito,
+    usuario_actual: Usuario | None = None,
+) -> bool:
+    hoy = _today()
+    if getattr(credito, "situacion_credito", "NORMAL") != "ACTIVO_INCONSISTENTE":
+        return True
+    fecha_reactivacion = getattr(credito, "fecha_reactivacion", None)
+    if fecha_reactivacion and fecha_reactivacion > hoy:
+        return False
+
+    situacion_anterior = credito.situacion_credito
+    credito.situacion_credito = "PENDIENTE_CIERRE"
+    credito.fecha_reactivacion = None
+    credito.observacion_situacion = "Reactivado por fecha programada; validar cierre"
+    db.add(
+        HistorialCredito(
+            credito_id=credito.id,
+            usuario_id=usuario_actual.id if usuario_actual else None,
+            estado_anterior=f"Aprobado/{situacion_anterior}",
+            estado_nuevo="Aprobado/PENDIENTE_CIERRE",
+            observacion="Reactivado para refinanciaciones por fecha programada",
+        )
+    )
+    return True
+
+
 def _get_or_404(db: Session, refinanciacion_id: int, usuario: Usuario | None = None) -> Refinanciacion:
     query = db.query(Refinanciacion).join(Credito).filter(Refinanciacion.id == refinanciacion_id)
     if usuario and usuario.rol != "administrador":
@@ -223,6 +251,14 @@ def validar_credito_refinanciable(db: Session, credito: Credito) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Un credito finalizado por refinanciacion no puede refinanciarse de nuevo",
         )
+    if not _sincronizar_situacion_credito_para_refi(db, credito):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "El credito esta activo inconsistente y no vuelve a refinanciaciones "
+                f"hasta {credito.fecha_reactivacion.isoformat()}"
+            ),
+        )
     if not credito.cooperativa or not credito.cooperativa.is_active:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -317,6 +353,8 @@ def listar_creditos_elegibles(
                 break
             if not credito.cooperativa or not credito.cooperativa.is_active:
                 continue
+            if not _sincronizar_situacion_credito_para_refi(db, credito, usuario_actual):
+                continue
 
             aprobacion = aprobaciones.get(credito.id)
             criterio = _criterio_refinanciacion(
@@ -367,6 +405,9 @@ def listar_creditos_elegibles(
                     "justificacion": oportunidad.justificacion,
                     "reactivar_en": oportunidad.reactivar_en,
                     "credito_nuevo_id": oportunidad.credito_nuevo_id,
+                    "situacion_credito": credito.situacion_credito,
+                    "fecha_reactivacion_credito": credito.fecha_reactivacion,
+                    "observacion_situacion_credito": credito.observacion_situacion,
                 }
             )
 
@@ -405,6 +446,9 @@ def obtener_credito_elegible(
 
     credito = query.first()
     if not credito or not credito.cooperativa or not credito.cooperativa.is_active:
+        return None
+    if not _sincronizar_situacion_credito_para_refi(db, credito, usuario_actual):
+        db.commit()
         return None
 
     aprobacion = (
@@ -481,6 +525,9 @@ def obtener_credito_elegible(
         "justificacion": oportunidad.justificacion,
         "reactivar_en": oportunidad.reactivar_en,
         "credito_nuevo_id": oportunidad.credito_nuevo_id,
+        "situacion_credito": credito.situacion_credito,
+        "fecha_reactivacion_credito": credito.fecha_reactivacion,
+        "observacion_situacion_credito": credito.observacion_situacion,
     }
 
 
@@ -602,6 +649,14 @@ def listar_creditos_elegibles_paginados(
             Pensionado.is_active == True,  # noqa: E712
         )
     )
+    today = _today()
+    query = query.filter(
+        or_(
+            Credito.situacion_credito != "ACTIVO_INCONSISTENTE",
+            Credito.fecha_reactivacion.is_(None),
+            Credito.fecha_reactivacion <= today,
+        )
+    )
 
     if usuario_actual and usuario_actual.rol != "administrador":
         query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
@@ -634,7 +689,6 @@ def listar_creditos_elegibles_paginados(
 
     base_count_query = query
 
-    today = _today()
     if vista == "gestionados":
         query = query.filter(OportunidadRefinanciacion.estado.in_(["contactado", "aceptado", "rechazado"]))
     elif vista == "convertidos":
@@ -644,15 +698,15 @@ def listar_creditos_elegibles_paginados(
     elif vista == "hoy":
         query = query.filter(
             disponible_desde_expr <= today,
-            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto", "cerrado"]),
         )
     elif vista == "proximos":
         query = query.filter(
             disponible_desde_expr > today,
-            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto", "cerrado"]),
         )
     elif vista == "todos":
-        query = query.filter(OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]))
+        query = query.filter(OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto", "cerrado"]))
     else:
         raise HTTPException(status_code=422, detail="Vista de refinanciacion no valida")
 
@@ -856,7 +910,7 @@ def _conteos_oportunidades(query, disponible_desde_expr, today: date) -> dict:
     hoy = (
         query.filter(
             disponible_desde_expr <= today,
-            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto", "cerrado"]),
         )
         .with_entities(func.count(func.distinct(OportunidadRefinanciacion.id)))
         .scalar()
@@ -865,7 +919,7 @@ def _conteos_oportunidades(query, disponible_desde_expr, today: date) -> dict:
     proximos = (
         query.filter(
             disponible_desde_expr > today,
-            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+            OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto", "cerrado"]),
         )
         .with_entities(func.count(func.distinct(OportunidadRefinanciacion.id)))
         .scalar()
@@ -908,11 +962,11 @@ def _contar_personas(query) -> int:
 def _conteos_personas_oportunidades(query, disponible_desde_expr, today: date) -> dict:
     hoy_query = query.filter(
         disponible_desde_expr <= today,
-        OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+        OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto", "cerrado"]),
     )
     proximos_query = query.filter(
         disponible_desde_expr > today,
-        OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto"]),
+        OportunidadRefinanciacion.estado.notin_(["convertido", "rechazado", "pospuesto", "cerrado"]),
     )
     gestionados_query = query.filter(
         OportunidadRefinanciacion.estado.in_(["contactado", "aceptado", "rechazado"])
@@ -956,6 +1010,23 @@ def _oportunidad_to_elegible_item(
         return None
 
     changed = False
+    if credito.situacion_credito == "ACTIVO_INCONSISTENTE":
+        if credito.fecha_reactivacion and credito.fecha_reactivacion > _today():
+            return None
+        credito.situacion_credito = "PENDIENTE_CIERRE"
+        credito.fecha_reactivacion = None
+        credito.observacion_situacion = "Reactivado por fecha programada; validar cierre"
+        db.add(
+            HistorialCredito(
+                credito_id=credito.id,
+                usuario_id=None,
+                estado_anterior="Aprobado/ACTIVO_INCONSISTENTE",
+                estado_nuevo="Aprobado/PENDIENTE_CIERRE",
+                observacion="Reactivado para refinanciaciones por fecha programada",
+            )
+        )
+        changed = True
+
     if oportunidad.estado in {"rechazado", "pospuesto"} and oportunidad.reactivar_en and oportunidad.reactivar_en <= ahora:
         anterior = oportunidad.estado
         oportunidad.estado = "disponible"
@@ -994,6 +1065,9 @@ def _oportunidad_to_elegible_item(
         "justificacion": oportunidad.justificacion,
         "reactivar_en": oportunidad.reactivar_en,
         "credito_nuevo_id": oportunidad.credito_nuevo_id,
+        "situacion_credito": credito.situacion_credito,
+        "fecha_reactivacion_credito": credito.fecha_reactivacion,
+        "observacion_situacion_credito": credito.observacion_situacion,
         "_changed": changed,
     }
 
@@ -1021,6 +1095,8 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
         raise HTTPException(status_code=409, detail="La oportunidad se reactivara en la fecha programada")
     if oportunidad.estado == "convertido":
         raise HTTPException(status_code=400, detail="Una oportunidad convertida no puede modificarse")
+    if oportunidad.estado == "cerrado":
+        raise HTTPException(status_code=400, detail="Una oportunidad cerrada por cierre del credito no puede modificarse")
     if oportunidad.estado == "rechazado" and data.estado == "disponible":
         data.justificacion = data.justificacion or "Reapertura manual de oportunidad rechazada"
     if (oportunidad.estado == "pospuesto" and data.estado == "disponible") and not data.justificacion:

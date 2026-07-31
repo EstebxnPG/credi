@@ -29,6 +29,13 @@ MOTIVOS_FINALIZACION_VALIDOS = {
     "OTRO",
 }
 
+SITUACIONES_CREDITO_VALIDAS = {
+    "NORMAL",
+    "PENDIENTE_CIERRE",
+    "ACTIVO_INCONSISTENTE",
+    "CIERRE_VALIDADO",
+}
+
 
 def normalizar_tipo_credito(value: str | None) -> str | None:
     if value is None:
@@ -66,7 +73,7 @@ TRANSICIONES_VALIDAS: dict[str, set[str]] = {
     "Reenviado":              {"Devuelto por corrección", "Aprobado", "Rechazado"},
     "Aprobado":               {"Finalizado"},
     "Rechazado":              set(),   # estado final
-    "Finalizado":             set(),   # estado final
+    "Finalizado":             {"Aprobado"},   # correccion controlada de cierre
 }
 
 
@@ -214,6 +221,56 @@ class CreditoObservacionesUpdate(BaseModel):
 
 
 # ─── Cambio de estado ────────────────────────────────────────────────────────
+class CreditoCerrarManual(BaseModel):
+    observaciones: Optional[str] = None
+    motivo_finalizacion: str = "PAGO_NORMAL"
+
+    @field_validator("motivo_finalizacion")
+    @classmethod
+    def motivo_finalizacion_valido(cls, v: str) -> str:
+        v = v.strip().upper()
+        if v not in MOTIVOS_FINALIZACION_VALIDOS:
+            raise ValueError(
+                "motivo_finalizacion debe ser PAGO_NORMAL, REFINANCIADO, "
+                "COMPRA_CARTERA_INTERNA, COMPRA_CARTERA_EXTERNA, "
+                "AJUSTE_MIGRACION, ANULADO u OTRO"
+            )
+        return v
+
+    @field_validator("observaciones")
+    @classmethod
+    def observaciones_limpias(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
+
+class CreditoMarcarInconsistente(BaseModel):
+    fecha_reactivacion: date
+    observacion_situacion: str
+
+    @field_validator("observacion_situacion")
+    @classmethod
+    def observacion_requerida(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("observacion_situacion es obligatoria")
+        return v
+
+
+class CreditoResolverSituacion(BaseModel):
+    observaciones: Optional[str] = None
+
+    @field_validator("observaciones")
+    @classmethod
+    def observaciones_limpias(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
+
 class CreditoCambioEstado(BaseModel):
     """
     Endpoint dedicado para cambiar el estado de un crédito.
@@ -285,7 +342,10 @@ class CreditoRead(BaseModel):
     monto_aprobado: Optional[float]
     plazo: int
     estado: str
+    situacion_credito: str = "NORMAL"
     motivo_finalizacion: Optional[str]
+    fecha_reactivacion: Optional[date]
+    observacion_situacion: Optional[str]
     valor_cuota: Optional[float]
     fecha_desembolso: Optional[date]
     fecha_fin_estimada: Optional[date]
