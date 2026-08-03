@@ -42,11 +42,32 @@ Usa `db` como host porque Superset corre dentro de la misma red de Docker Compos
 
 ## Primeros datasets recomendados
 
-- `creditos`: embudo por estado, valor solicitado, valor aprobado y fechas.
-- `pensionados`: segmentacion comercial por oficina, pagaduria y asesor.
-- `seguimientos`: productividad, estado de gestion y tiempos de respuesta.
-- `refinanciaciones`: oportunidades, entidad origen y resultado.
-- `usuarios` y `oficinas`: dimensiones administrativas para filtros.
+No grafiques directamente las tablas transaccionales si el objetivo es control gerencial. Usa las vistas del schema `analytics`, definidas en [`docs/superset_analytics_views.sql`](./superset_analytics_views.sql):
+
+```bash
+Get-Content docs\superset_analytics_views.sql | docker exec -i credi_db psql -U credi_user -d crediconfiemos
+```
+
+Datasets iniciales para Superset:
+
+- `analytics.ds_creditos_detalle`: dataset principal, un credito activo por fila. Sirve para embudo, cartera viva, cierres, monto de referencia, cooperativa, pagaduria, asesor y oficina.
+- `analytics.ds_originacion_mensual`: dataset agregado por mes y dimensiones comerciales. Sirve para tendencia, mix de producto, ranking y comparativos.
+- `analytics.ds_pensionados_360`: un pensionado activo por fila. Sirve para segmentacion comercial, clientes con credito vivo, clientes historicos y oportunidades activas.
+- `analytics.ds_oportunidades_refinanciacion`: pipeline de refinanciacion. Sirve para oportunidades disponibles, gestionadas, pospuestas, ganadas y alertas por falta de gestion.
+- `analytics.ds_calidad_datos`: tablero de gobierno de datos. Sirve para controlar campos faltantes, cierres pendientes y oportunidades sin actualizacion.
+
+Metricas base sugeridas:
+
+- Creditos activos: `count(credito_id)` filtrando `es_credito_vivo = true`.
+- Creditos cerrados: `count(credito_id)` filtrando `es_credito_cerrado = true`.
+- Monto de referencia: `sum(monto_referencia)`.
+- Ticket promedio: `avg(monto_referencia)`.
+- Oportunidades activas: `count(oportunidad_id)` filtrando `etapa_bi = 'pipeline_activo'`.
+- Oportunidades ganadas: `count(oportunidad_id)` filtrando `es_ganada = true`.
+- Monto de impacto de oportunidades: `sum(monto_impacto_referencia)`.
+- Casos de calidad de datos: `count(*)` por `regla_calidad`.
+
+Nota de negocio: como la empresa no registra comisiones reales por cooperativa, estos datasets no prometen utilidad o ingreso contable. El valor financiero se modela como `monto_referencia`, usando `monto_aprobado` cuando existe y `monto_solicitado` como respaldo.
 
 ## Criterio profesional
 
