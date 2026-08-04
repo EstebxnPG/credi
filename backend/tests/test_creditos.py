@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.schemas.credito import CreditoCambioEstado
 from app.services.credito_service import (
     _validar_regla_refinanciacion_configurada,
+    _validar_alcance_lectura_credito,
     _validar_campos_editables,
     _validar_contexto_creacion,
     _validar_credito_editable,
@@ -17,6 +18,27 @@ from app.services.credito_service import (
 
 
 class CreditosTests(unittest.TestCase):
+    def test_asesora_puede_leer_credito_de_pensionado_hibrido(self):
+        query = MagicMock()
+        query.filter.return_value.first.return_value = (1,)
+        db = MagicMock()
+        db.query.return_value = query
+        credito = SimpleNamespace(id=10, oficina_id=2, pensionado_id=5)
+        usuario = SimpleNamespace(rol="asesora", oficina_id=1)
+
+        _validar_alcance_lectura_credito(db, credito, usuario)
+
+    def test_asesora_no_lee_credito_de_pensionado_no_vinculado(self):
+        query = MagicMock()
+        query.filter.return_value.first.return_value = None
+        db = MagicMock()
+        db.query.return_value = query
+        credito = SimpleNamespace(id=10, oficina_id=2, pensionado_id=5)
+        usuario = SimpleNamespace(rol="asesora", oficina_id=1)
+
+        with self.assertRaises(HTTPException):
+            _validar_alcance_lectura_credito(db, credito, usuario)
+
     def test_credito_aprobado_es_editable_para_correcciones_operativas(self):
         credito = SimpleNamespace(is_active=True, estado="Aprobado")
 

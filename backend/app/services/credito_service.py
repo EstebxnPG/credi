@@ -87,9 +87,46 @@ def _validar_alcance_credito(credito: Credito, usuario_actual: Usuario) -> None:
         )
 
 
+def _pensionado_vinculado_a_oficina(db: Session, pensionado_id: int, oficina_id: int) -> bool:
+    return db.query(PensionadoOficina.id).filter(
+        PensionadoOficina.pensionado_id == pensionado_id,
+        PensionadoOficina.oficina_id == oficina_id,
+        PensionadoOficina.is_active == True,  # noqa: E712
+    ).first() is not None
+
+
+def _validar_alcance_lectura_credito(db: Session, credito: Credito, usuario_actual: Usuario) -> None:
+    if usuario_actual.rol == "administrador":
+        return
+    if credito.oficina_id == usuario_actual.oficina_id:
+        return
+    if _pensionado_vinculado_a_oficina(db, credito.pensionado_id, usuario_actual.oficina_id):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"CrÃ©dito con id {credito.id} no encontrado",
+    )
+
+
 def _obtener_credito_autorizado(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:
     credito = _get_credito_or_404(db, credito_id)
     _validar_alcance_credito(credito, usuario_actual)
+    return credito
+
+
+def _obtener_credito_lectura_autorizada(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:
+    credito = _get_credito_or_404(db, credito_id)
+    _validar_alcance_lectura_credito(db, credito, usuario_actual)
+    return credito
+
+
+def _obtener_credito_operable_activo(db: Session, credito_id: int, usuario_actual: Usuario) -> Credito:
+    credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
+    if not credito.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"CrÃ©dito con id {credito_id} no encontrado",
+        )
     return credito
 
 
@@ -569,11 +606,13 @@ def listar_creditos(
             Pensionado.is_active == True  # noqa: E712
         )
 
-    if usuario_actual and usuario_actual.rol != "administrador":
-        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
-
     if pensionado_id is not None:
         query = query.filter(Credito.pensionado_id == pensionado_id)
+        if usuario_actual and usuario_actual.rol != "administrador":
+            if not _pensionado_vinculado_a_oficina(db, pensionado_id, usuario_actual.oficina_id):
+                query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+    elif usuario_actual and usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
     if asesor_id is not None:
         query = query.filter(Credito.asesor_id == asesor_id)
     if oficina_id is not None:
@@ -646,11 +685,13 @@ def contar_creditos(
             Pensionado.is_active == True  # noqa: E712
         )
 
-    if usuario_actual and usuario_actual.rol != "administrador":
-        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
-
     if pensionado_id is not None:
         query = query.filter(Credito.pensionado_id == pensionado_id)
+        if usuario_actual and usuario_actual.rol != "administrador":
+            if not _pensionado_vinculado_a_oficina(db, pensionado_id, usuario_actual.oficina_id):
+                query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
+    elif usuario_actual and usuario_actual.rol != "administrador":
+        query = query.filter(Credito.oficina_id == usuario_actual.oficina_id)
     if asesor_id is not None:
         query = query.filter(Credito.asesor_id == asesor_id)
     if oficina_id is not None:
@@ -759,7 +800,7 @@ def obtener_credito(db: Session, credito_id: int, usuario_actual: Usuario) -> Cr
     scope_oficina = None if usuario_actual.rol == "administrador" else usuario_actual.oficina_id
     _sincronizar_creditos_finalizados(db, usuario_actual.id, scope_oficina)
     db.commit()
-    credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
+    credito = _obtener_credito_lectura_autorizada(db, credito_id, usuario_actual)
     if not credito.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -771,7 +812,7 @@ def obtener_credito(db: Session, credito_id: int, usuario_actual: Usuario) -> Cr
 def obtener_historial_credito(
     db: Session, credito_id: int, usuario_actual: Usuario
 ) -> list[HistorialCreditoRead]:
-    credito = _obtener_credito_autorizado(db, credito_id, usuario_actual)
+    credito = _obtener_credito_lectura_autorizada(db, credito_id, usuario_actual)
     if not credito.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -867,7 +908,7 @@ def actualizar_credito(
     data: CreditoUpdate,
     usuario_actual: Usuario,
 ) -> Credito:
-    credito = obtener_credito(db, credito_id, usuario_actual)
+    credito = _obtener_credito_operable_activo(db, credito_id, usuario_actual)
     _validar_credito_editable(credito)
 
     cambios = data.model_dump(exclude_unset=True)
@@ -1061,7 +1102,7 @@ def cambiar_estado(
     data: CreditoCambioEstado,
     usuario_actual: Usuario,
 ) -> Credito:
-    credito = obtener_credito(db, credito_id, usuario_actual)
+    credito = _obtener_credito_operable_activo(db, credito_id, usuario_actual)
     estado_actual = credito.estado
     estado_nuevo = data.estado_nuevo
 
@@ -1175,7 +1216,7 @@ def cerrar_credito_manual(
     data: CreditoCerrarManual,
     usuario_actual: Usuario,
 ) -> Credito:
-    credito = obtener_credito(db, credito_id, usuario_actual)
+    credito = _obtener_credito_operable_activo(db, credito_id, usuario_actual)
     if credito.estado != "Aprobado":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1223,7 +1264,7 @@ def marcar_credito_inconsistente(
     data: CreditoMarcarInconsistente,
     usuario_actual: Usuario,
 ) -> Credito:
-    credito = obtener_credito(db, credito_id, usuario_actual)
+    credito = _obtener_credito_operable_activo(db, credito_id, usuario_actual)
     if credito.estado != "Aprobado":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1267,7 +1308,7 @@ def resolver_situacion_credito(
     data: CreditoResolverSituacion,
     usuario_actual: Usuario,
 ) -> Credito:
-    credito = obtener_credito(db, credito_id, usuario_actual)
+    credito = _obtener_credito_operable_activo(db, credito_id, usuario_actual)
     if credito.estado != "Aprobado":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
