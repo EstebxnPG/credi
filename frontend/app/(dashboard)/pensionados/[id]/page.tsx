@@ -35,6 +35,7 @@ type Credito = {
   cooperativa_id: number;
   cooperativa_nombre: string | null;
   pagaduria_id: number;
+  pagaduria_nombre: string | null;
   nro_libranza: string | null;
   tiene_documentos_pendientes: boolean;
   documentos_pendientes: string | null;
@@ -282,6 +283,17 @@ export default function PensionadoDetailPage() {
     };
   }, [creditos, seguimientos]);
 
+  const pagaduriasPensionado = useMemo(() => {
+    const names = new Map<number, string>();
+    creditos.forEach((credito) => {
+      names.set(
+        credito.pagaduria_id,
+        credito.pagaduria_nombre ?? `Pagaduria #${credito.pagaduria_id}`,
+      );
+    });
+    return Array.from(names.values()).join(", ") || "Sin pagaduria registrada";
+  }, [creditos]);
+
   function openEditModal() {
     if (!pensionado) {
       return;
@@ -518,6 +530,7 @@ export default function PensionadoDetailPage() {
               label="Oficina"
               value={oficinaPrincipal?.nombre ?? `Oficina #${pensionado.oficina_id}`}
             />
+            <Detail label="Fondo de pension / pagaduria" value={pagaduriasPensionado} />
             <Detail
               label="Telefono"
               value={pensionado.telefono ?? "Sin telefono fijo"}

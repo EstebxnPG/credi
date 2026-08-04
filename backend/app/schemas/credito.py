@@ -335,6 +335,7 @@ class CreditoRead(BaseModel):
     cooperativa_nombre: Optional[str] = None
     credito_refinanciado_id: Optional[int]
     pagaduria_id: int
+    pagaduria_nombre: Optional[str] = None
     nro_libranza: Optional[str]
     tipo_credito: Optional[str]
     entidad_financiera_origen: Optional[str]

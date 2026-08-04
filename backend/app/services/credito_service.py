@@ -65,6 +65,7 @@ def _get_credito_or_404(db: Session, credito_id: int) -> Credito:
             joinedload(Credito.asesor),
             joinedload(Credito.pensionado),
             joinedload(Credito.cooperativa),
+            joinedload(Credito.pagaduria),
         )
         .filter(Credito.id == credito_id)
         .first()
@@ -597,6 +598,7 @@ def listar_creditos(
             joinedload(Credito.asesor),
             joinedload(Credito.pensionado),
             joinedload(Credito.cooperativa),
+            joinedload(Credito.pagaduria),
         )
         .filter(Credito.is_active == True)  # noqa: E712
     )
