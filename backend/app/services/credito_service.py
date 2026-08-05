@@ -883,6 +883,12 @@ def _validar_fecha_fin_por_plazo(
         )
 
 
+def _situacion_al_reabrir_cierre(credito: Credito) -> str:
+    if credito.fecha_fin_estimada and credito.fecha_fin_estimada <= date.today():
+        return "PENDIENTE_CIERRE"
+    return "NORMAL"
+
+
 def _validar_credito_editable(credito: Credito) -> None:
     if credito.estado in {"Finalizado", "Rechazado"}:
         raise HTTPException(
@@ -1138,6 +1144,16 @@ def cambiar_estado(
 
     if estado_nuevo == "Aprobado":
         if estado_actual != "Finalizado":
+            if not data.fecha_desembolso:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="fecha_desembolso es obligatoria cuando el estado es Aprobado",
+                )
+            if not data.fecha_fin_estimada:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="fecha_fin_estimada es obligatoria cuando el estado es Aprobado",
+                )
             _validar_fecha_fin_por_plazo(data.fecha_desembolso, data.fecha_fin_estimada, credito.plazo)
         _validar_regla_refinanciacion_configurada(credito)
 
@@ -1150,12 +1166,17 @@ def cambiar_estado(
     credito.estado = estado_nuevo
 
     if estado_nuevo == "Aprobado":
-        credito.monto_aprobado = data.monto_aprobado
-        credito.valor_cuota = data.valor_cuota
-        credito.fecha_desembolso = data.fecha_desembolso
-        credito.fecha_fin_estimada = data.fecha_fin_estimada
+        if estado_actual != "Finalizado":
+            credito.monto_aprobado = data.monto_aprobado
+            credito.valor_cuota = data.valor_cuota
+            credito.fecha_desembolso = data.fecha_desembolso
+            credito.fecha_fin_estimada = data.fecha_fin_estimada
         credito.motivo_finalizacion = None
-        credito.situacion_credito = "PENDIENTE_CIERRE" if estado_actual == "Finalizado" else "NORMAL"
+        credito.situacion_credito = (
+            _situacion_al_reabrir_cierre(credito)
+            if estado_actual == "Finalizado"
+            else "NORMAL"
+        )
         credito.fecha_reactivacion = None
         credito.observacion_situacion = (
             data.observaciones

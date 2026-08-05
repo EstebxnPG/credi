@@ -300,11 +300,11 @@ class CreditoCambioEstado(BaseModel):
         if self.estado_nuevo == "Aprobado":
             if not self.monto_aprobado:
                 raise ValueError("monto_aprobado es obligatorio cuando el estado es Aprobado")
-            if not self.fecha_desembolso:
-                raise ValueError("fecha_desembolso es obligatoria cuando el estado es Aprobado")
-            if not self.fecha_fin_estimada:
-                raise ValueError("fecha_fin_estimada es obligatoria cuando el estado es Aprobado")
-            if self.fecha_fin_estimada <= self.fecha_desembolso:
+            if (
+                self.fecha_desembolso
+                and self.fecha_fin_estimada
+                and self.fecha_fin_estimada <= self.fecha_desembolso
+            ):
                 raise ValueError("fecha_fin_estimada debe ser posterior a fecha_desembolso")
         if self.estado_nuevo == "Finalizado":
             if not self.motivo_finalizacion:

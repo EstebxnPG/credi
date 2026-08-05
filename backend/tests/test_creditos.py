@@ -1,12 +1,13 @@
 import unittest
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
 
 from app.schemas.credito import CreditoCambioEstado
 from app.services.credito_service import (
+    cambiar_estado,
     _validar_regla_refinanciacion_configurada,
     _validar_alcance_lectura_credito,
     _validar_campos_editables,
@@ -140,8 +141,109 @@ class CreditosTests(unittest.TestCase):
         self.assertEqual(duplicado_query.filter.call_count, 2)
 
     def test_aprobar_exige_fechas_de_desembolso_y_fin(self):
-        with self.assertRaises(ValueError):
-            CreditoCambioEstado(estado_nuevo="Aprobado", monto_aprobado=1000)
+        credito = SimpleNamespace(
+            id=10,
+            estado="Enviado a cooperativa",
+            plazo=12,
+            tiene_documentos_pendientes=False,
+            cooperativa=SimpleNamespace(
+                reglas_refinanciacion=[
+                    SimpleNamespace(plazo_minimo=1, plazo_maximo=120, meses_para_refinanciar=6)
+                ]
+            ),
+        )
+        data = CreditoCambioEstado(estado_nuevo="Aprobado", monto_aprobado=1000)
+
+        with patch(
+            "app.services.credito_service._obtener_credito_operable_activo",
+            return_value=credito,
+        ), patch(
+            "app.services.credito_service.credito_tiene_pendientes_abiertos",
+            return_value=False,
+        ), self.assertRaises(HTTPException) as exc:
+            cambiar_estado(MagicMock(), 10, data, SimpleNamespace(id=1))
+
+        self.assertEqual(exc.exception.status_code, 400)
+        self.assertIn("fecha_desembolso", exc.exception.detail)
+
+    def test_reabrir_finalizado_sin_cumplir_ciclo_vuelve_a_normal(self):
+        credito = SimpleNamespace(
+            id=10,
+            estado="Finalizado",
+            plazo=12,
+            monto_aprobado=None,
+            monto_solicitado=1000,
+            valor_cuota=None,
+            fecha_desembolso=None,
+            fecha_fin_estimada=date(2026, 12, 1),
+            motivo_finalizacion="ANULADO",
+            situacion_credito="CIERRE_VALIDADO",
+            fecha_reactivacion=None,
+            observacion_situacion=None,
+            cooperativa=SimpleNamespace(
+                reglas_refinanciacion=[
+                    SimpleNamespace(plazo_minimo=1, plazo_maximo=120, meses_para_refinanciar=6)
+                ]
+            ),
+        )
+        data = CreditoCambioEstado(
+            estado_nuevo="Aprobado",
+            monto_aprobado=1000,
+            observaciones="Reapertura por cierre errado",
+        )
+
+        with patch(
+            "app.services.credito_service._obtener_credito_operable_activo",
+            return_value=credito,
+        ), patch("app.services.credito_service._registrar_historial"), patch(
+            "app.services.credito_service.registrar_log"
+        ), patch("app.services.credito_service._reabrir_oportunidades_por_reversion_cierre"), patch(
+            "app.services.refinanciacion_service.listar_creditos_elegibles"
+        ):
+            resultado = cambiar_estado(MagicMock(), 10, data, SimpleNamespace(id=1))
+
+        self.assertEqual(resultado.estado, "Aprobado")
+        self.assertIsNone(resultado.fecha_desembolso)
+        self.assertEqual(resultado.situacion_credito, "NORMAL")
+
+    def test_reabrir_finalizado_con_ciclo_cumplido_queda_pendiente_cierre(self):
+        credito = SimpleNamespace(
+            id=10,
+            estado="Finalizado",
+            plazo=12,
+            monto_aprobado=1000,
+            monto_solicitado=1000,
+            valor_cuota=None,
+            fecha_desembolso=None,
+            fecha_fin_estimada=date(2024, 12, 1),
+            motivo_finalizacion="ANULADO",
+            situacion_credito="CIERRE_VALIDADO",
+            fecha_reactivacion=None,
+            observacion_situacion=None,
+            cooperativa=SimpleNamespace(
+                reglas_refinanciacion=[
+                    SimpleNamespace(plazo_minimo=1, plazo_maximo=120, meses_para_refinanciar=6)
+                ]
+            ),
+        )
+        data = CreditoCambioEstado(
+            estado_nuevo="Aprobado",
+            monto_aprobado=1000,
+            observaciones="Reapertura por cierre errado",
+        )
+
+        with patch(
+            "app.services.credito_service._obtener_credito_operable_activo",
+            return_value=credito,
+        ), patch("app.services.credito_service._registrar_historial"), patch(
+            "app.services.credito_service.registrar_log"
+        ), patch("app.services.credito_service._reabrir_oportunidades_por_reversion_cierre"), patch(
+            "app.services.refinanciacion_service.listar_creditos_elegibles"
+        ):
+            resultado = cambiar_estado(MagicMock(), 10, data, SimpleNamespace(id=1))
+
+        self.assertEqual(resultado.estado, "Aprobado")
+        self.assertEqual(resultado.situacion_credito, "PENDIENTE_CIERRE")
 
     def test_aprobar_exige_fecha_fin_posterior_a_desembolso(self):
         with self.assertRaises(ValueError):
