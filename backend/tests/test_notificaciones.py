@@ -16,6 +16,7 @@ from app.services.notificacion_service import (
     _datos_seguimiento,
     _reactivar,
     sincronizar_reglas,
+    sincronizar_seguimiento,
     cambiar_estado,
 )
 
@@ -241,6 +242,49 @@ class NotificacionesTests(unittest.TestCase):
             _datos_seguimiento(fecha_contacto, hoy),
             ("vencido", "Seguimiento vencido", "alta"),
         )
+
+    def test_sincronizar_seguimiento_materializa_solo_esa_alerta(self):
+        db = MagicMock()
+        seguimiento = SimpleNamespace(
+            id=7,
+            is_active=True,
+            estado="pendiente",
+            fecha_proximo_contacto=datetime(2026, 7, 20, 15, 0, tzinfo=timezone.utc),
+            oficina_id=2,
+            pensionado_id=99,
+            pensionado=SimpleNamespace(nombre_completo="CLIENTE PRUEBA"),
+        )
+
+        with patch("app.services.notificacion_service._crear_o_actualizar", return_value=True) as crear:
+            cambios = sincronizar_seguimiento(
+                db,
+                seguimiento,
+                referencia=datetime(2026, 7, 20, 14, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(cambios, 1)
+        crear.assert_called_once()
+        self.assertEqual(crear.call_args.kwargs["clave"], "seguimiento-7")
+        self.assertEqual(crear.call_args.kwargs["mensaje"], "Seguimiento de CLIENTE PRUEBA")
+
+    def test_sincronizar_seguimiento_resuelve_si_no_debe_alertar(self):
+        db = MagicMock()
+        seguimiento = SimpleNamespace(
+            id=7,
+            is_active=True,
+            estado="cerrado",
+            fecha_proximo_contacto=datetime(2026, 7, 20, 15, 0, tzinfo=timezone.utc),
+        )
+
+        with patch("app.services.notificacion_service._resolver_por_clave") as resolver:
+            cambios = sincronizar_seguimiento(
+                db,
+                seguimiento,
+                referencia=datetime(2026, 7, 20, 14, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(cambios, 0)
+        resolver.assert_called_once_with(db, "seguimiento-7")
 
     def test_cumpleanos_usa_fecha_de_negocio_colombia(self):
         pensionado = SimpleNamespace(

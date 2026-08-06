@@ -141,6 +141,53 @@ def _datos_seguimiento(fecha_contacto: datetime, hoy) -> tuple[str, str, str]:
         return "hoy", "Seguimiento para hoy", "alta"
     return "vencido", "Seguimiento vencido", "alta"
 
+def sincronizar_seguimiento(
+    db: Session,
+    seguimiento: Seguimiento,
+    referencia: datetime | None = None,
+) -> int:
+    """Materializa solo la alerta asociada a un seguimiento."""
+    ahora = referencia or _ahora()
+    clave = f"seguimiento-{seguimiento.id}"
+    debe_alertar = (
+        getattr(seguimiento, "is_active", True)
+        and seguimiento.estado in ("abierto", "pendiente")
+        and seguimiento.fecha_proximo_contacto is not None
+        and seguimiento.fecha_proximo_contacto <= ahora + timedelta(days=1)
+    )
+
+    if not debe_alertar:
+        _resolver_por_clave(db, clave)
+        return 0
+
+    hoy = business_date(ahora)
+    etapa, titulo, prioridad = _datos_seguimiento(seguimiento.fecha_proximo_contacto, hoy)
+    nombre = (
+        seguimiento.pensionado.nombre_completo
+        if seguimiento.pensionado
+        else f"Pensionado #{seguimiento.pensionado_id}"
+    )
+    return int(
+        _crear_o_actualizar(
+            db,
+            clave=clave,
+            oficina_id=seguimiento.oficina_id,
+            responsable_id=None,
+            tipo=f"seguimiento_{etapa}",
+            clase="accion",
+            estado="pendiente",
+            titulo=titulo,
+            mensaje=f"Seguimiento de {nombre}",
+            prioridad=prioridad,
+            href=f"/seguimientos/{seguimiento.id}",
+            entidad_tipo="seguimiento",
+            entidad_id=seguimiento.id,
+            pensionado_id=seguimiento.pensionado_id,
+            fecha=ahora,
+            leida=False,
+        )
+    )
+
 
 def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: bool = True) -> int:
     """Materializa alertas de negocio sin depender de lecturas GET."""

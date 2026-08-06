@@ -151,9 +151,9 @@ def crear_seguimiento(
         },
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_seguimiento
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_seguimiento(db, seguimiento)
     db.commit()
     db.refresh(seguimiento)
     return obtener_seguimiento(db, seguimiento.id, usuario_actual)
@@ -395,9 +395,9 @@ def actualizar_seguimiento(
         },
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_seguimiento
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_seguimiento(db, seguimiento)
     db.commit()
     db.refresh(seguimiento)
     return obtener_seguimiento(db, seguimiento.id, usuario_actual)
@@ -463,8 +463,8 @@ def agregar_solucion(
         },
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_seguimiento
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_seguimiento(db, seguimiento)
     db.commit()
     return obtener_seguimiento(db, seguimiento.id, usuario_actual)
