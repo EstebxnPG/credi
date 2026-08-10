@@ -27,6 +27,7 @@ from app.schemas.credito import (
     CreditoObservacionesUpdate,
     CreditoResolverSituacion,
     CreditoUpdate,
+    SITUACIONES_CREDITO_VALIDAS,
     TRANSICIONES_VALIDAS,
     normalizar_tipo_credito,
 )
@@ -573,6 +574,7 @@ def listar_creditos(
     asesor_id: int | None = None,
     oficina_id: int | None = None,
     estado: str | None = None,
+    situacion_credito: str | None = None,
     tipo_credito: str | None = None,
     refinanciacion: str | None = None,
     fecha_desde: date | None = None,
@@ -623,6 +625,11 @@ def listar_creditos(
         if estado == "Devuelto por correccion":
             estado = "Devuelto por corrección"
         query = query.filter(Credito.estado == estado)
+    if situacion_credito is not None:
+        situacion_credito = situacion_credito.strip().upper()
+        if situacion_credito not in SITUACIONES_CREDITO_VALIDAS:
+            raise HTTPException(status_code=422, detail="Filtro de situacion_credito no valido")
+        query = query.filter(Credito.situacion_credito == situacion_credito)
 
     if tipo_credito is not None:
         query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
@@ -673,6 +680,7 @@ def contar_creditos(
     asesor_id: int | None = None,
     oficina_id: int | None = None,
     estado: str | None = None,
+    situacion_credito: str | None = None,
     tipo_credito: str | None = None,
     refinanciacion: str | None = None,
     fecha_desde: date | None = None,
@@ -702,6 +710,11 @@ def contar_creditos(
         if estado == "Devuelto por correccion":
             estado = "Devuelto por correcciÃ³n"
         query = query.filter(Credito.estado == estado)
+    if situacion_credito is not None:
+        situacion_credito = situacion_credito.strip().upper()
+        if situacion_credito not in SITUACIONES_CREDITO_VALIDAS:
+            raise HTTPException(status_code=422, detail="Filtro de situacion_credito no valido")
+        query = query.filter(Credito.situacion_credito == situacion_credito)
     if tipo_credito is not None:
         query = query.filter(Credito.tipo_credito.ilike(tipo_credito))
     if fecha_desde is not None:

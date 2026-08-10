@@ -133,6 +133,43 @@ def sincronizar_documentos_credito(db: Session, credito: Credito, ahora: datetim
     return False
 
 
+def sincronizar_pendiente_credito(
+    db: Session,
+    pendiente: PendienteCredito,
+    ahora: datetime | None = None,
+) -> bool:
+    """Materializa solo la alerta asociada a un pendiente operativo."""
+    clave = f"pendiente-{pendiente.id}"
+    credito = pendiente.credito
+    if (
+        pendiente.estado == "pendiente"
+        and credito
+        and credito.pensionado
+        and credito.pensionado.is_active
+    ):
+        return _crear_o_actualizar(
+            db,
+            clave=clave,
+            oficina_id=credito.oficina_id,
+            responsable_id=None,
+            tipo="pendiente_operativo",
+            clase="accion",
+            estado="pendiente",
+            titulo="Pendiente operativo",
+            mensaje=pendiente.descripcion,
+            prioridad="alta",
+            href=f"/creditos/{credito.id}",
+            entidad_tipo="pendiente_credito",
+            entidad_id=pendiente.id,
+            pensionado_id=credito.pensionado_id,
+            fecha=pendiente.created_at or ahora or _ahora(),
+            leida=False,
+        )
+
+    _resolver_por_clave(db, clave)
+    return False
+
+
 def _datos_seguimiento(fecha_contacto: datetime, hoy) -> tuple[str, str, str]:
     fecha = fecha_contacto.date()
     if fecha > hoy:
@@ -309,34 +346,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
 
     pendientes = db.query(PendienteCredito).all()
     for pendiente in pendientes:
-        clave = f"pendiente-{pendiente.id}"
-        credito = pendiente.credito
-        if (
-            pendiente.estado == "pendiente"
-            and credito
-            and credito.pensionado
-            and credito.pensionado.is_active
-        ):
-            cambios += _crear_o_actualizar(
-                db,
-                clave=clave,
-                oficina_id=credito.oficina_id,
-                responsable_id=None,
-                tipo="pendiente_operativo",
-                clase="accion",
-                estado="pendiente",
-                titulo="Pendiente operativo",
-                mensaje=pendiente.descripcion,
-                prioridad="alta",
-                href=f"/creditos/{credito.id}",
-                entidad_tipo="pendiente_credito",
-                entidad_id=pendiente.id,
-                pensionado_id=credito.pensionado_id,
-                fecha=pendiente.created_at,
-                leida=False,
-            )
-        else:
-            _resolver_por_clave(db, clave)
+        cambios += sincronizar_pendiente_credito(db, pendiente, ahora=ahora)
 
     for elegible in listar_creditos_elegibles(db, commit=False, limit=None):
         if elegible["disponible_desde"] > hoy:

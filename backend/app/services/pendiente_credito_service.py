@@ -186,9 +186,9 @@ def crear_pendiente(
         valores_despues=data.model_dump(),
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_pendiente_credito
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_pendiente_credito(db, pendiente)
     db.commit()
     db.refresh(pendiente)
     return pendiente
@@ -229,9 +229,9 @@ def actualizar_pendiente(
         valores_despues=cambios,
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_pendiente_credito
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_pendiente_credito(db, pendiente)
     db.commit()
     db.refresh(pendiente)
     return pendiente
@@ -273,9 +273,9 @@ def resolver_pendiente(
         },
     )
 
-    from app.services.notificacion_service import sincronizar_reglas
+    from app.services.notificacion_service import sincronizar_pendiente_credito
 
-    sincronizar_reglas(db, commit=False)
+    sincronizar_pendiente_credito(db, pendiente)
     db.commit()
     db.refresh(pendiente)
     return pendiente

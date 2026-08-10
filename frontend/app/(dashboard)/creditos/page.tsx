@@ -154,6 +154,7 @@ type SituacionForm = {
 
 type FilterValues = {
   estado: string;
+  situacionCredito: string;
   tipoCredito: string;
   plazoMin: string;
   plazoMax: string;
@@ -163,6 +164,7 @@ type FilterValues = {
 
 const emptyFilters: FilterValues = {
   estado: "",
+  situacionCredito: "",
   tipoCredito: "",
   plazoMin: "",
   plazoMax: "",
@@ -241,6 +243,9 @@ export default function CreditosPage() {
       if (filters.estado) {
         creditosParams.set("estado", filters.estado);
       }
+      if (filters.situacionCredito) {
+        creditosParams.set("situacion_credito", filters.situacionCredito);
+      }
       if (filters.tipoCredito) {
         creditosParams.set("tipo_credito", filters.tipoCredito);
       }
@@ -314,7 +319,15 @@ export default function CreditosPage() {
     } finally {
       setLoading(false);
     }
-  }, [filters.estado, filters.refinanciacion, filters.tipoCredito, page, query, registroOrder]);
+  }, [
+    filters.estado,
+    filters.refinanciacion,
+    filters.situacionCredito,
+    filters.tipoCredito,
+    page,
+    query,
+    registroOrder,
+  ]);
 
   useEffect(() => {
     void loadData();
@@ -364,6 +377,9 @@ export default function CreditosPage() {
       const pendientesAbiertos = pendientesByCreditoId.get(credito.id) ?? [];
 
       if (filters.estado && credito.estado !== filters.estado) {
+        return false;
+      }
+      if (filters.situacionCredito && credito.situacion_credito !== filters.situacionCredito) {
         return false;
       }
       if (
@@ -942,12 +958,23 @@ export default function CreditosPage() {
       </article>
 
       <article className="rounded-lg border border-stone-800/10 bg-white p-3 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_0.8fr_0.8fr_1fr_1fr_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_0.8fr_0.8fr_1fr_1fr_auto] md:items-end">
           <SelectField
             label="Estado"
             value={filters.estado}
             onChange={(value) => updateFilters({ ...filters, estado: value })}
             options={estadosDisponibles.map((estado) => ({ value: estado, label: estado }))}
+          />
+          <SelectField
+            label="Situacion"
+            value={filters.situacionCredito}
+            onChange={(value) => updateFilters({ ...filters, situacionCredito: value })}
+            options={[
+              { value: "PENDIENTE_CIERRE", label: "Pendiente validar cierre" },
+              { value: "ACTIVO_INCONSISTENTE", label: "Activo inconsistente" },
+              { value: "CIERRE_VALIDADO", label: "Cierre validado" },
+              { value: "NORMAL", label: "Normal" },
+            ]}
           />
           <SelectField
             label="Tipo de credito"

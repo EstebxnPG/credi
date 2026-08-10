@@ -15,6 +15,7 @@ from app.services.notificacion_service import (
     _crear_si_falta,
     _datos_seguimiento,
     _reactivar,
+    sincronizar_pendiente_credito,
     sincronizar_reglas,
     sincronizar_seguimiento,
     cambiar_estado,
@@ -285,6 +286,40 @@ class NotificacionesTests(unittest.TestCase):
 
         self.assertEqual(cambios, 0)
         resolver.assert_called_once_with(db, "seguimiento-7")
+
+    def test_sincronizar_pendiente_materializa_solo_esa_alerta(self):
+        db = MagicMock()
+        pendiente = SimpleNamespace(
+            id=11,
+            estado="pendiente",
+            descripcion="Falta respuesta de cooperativa",
+            created_at=datetime(2026, 7, 20, 15, 0, tzinfo=timezone.utc),
+            credito=SimpleNamespace(
+                id=3801,
+                oficina_id=2,
+                pensionado_id=99,
+                pensionado=SimpleNamespace(is_active=True),
+            ),
+        )
+
+        with patch("app.services.notificacion_service._crear_o_actualizar", return_value=True) as crear:
+            cambio = sincronizar_pendiente_credito(db, pendiente)
+
+        self.assertTrue(cambio)
+        crear.assert_called_once()
+        self.assertEqual(crear.call_args.kwargs["clave"], "pendiente-11")
+        self.assertEqual(crear.call_args.kwargs["href"], "/creditos/3801")
+        self.assertEqual(crear.call_args.kwargs["entidad_tipo"], "pendiente_credito")
+
+    def test_sincronizar_pendiente_resuelve_si_no_esta_abierto(self):
+        db = MagicMock()
+        pendiente = SimpleNamespace(id=11, estado="resuelto", credito=None)
+
+        with patch("app.services.notificacion_service._resolver_por_clave") as resolver:
+            cambio = sincronizar_pendiente_credito(db, pendiente)
+
+        self.assertFalse(cambio)
+        resolver.assert_called_once_with(db, "pendiente-11")
 
     def test_cumpleanos_usa_fecha_de_negocio_colombia(self):
         pensionado = SimpleNamespace(
