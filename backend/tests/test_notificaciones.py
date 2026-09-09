@@ -134,6 +134,34 @@ class NotificacionesTests(unittest.TestCase):
         self.assertEqual(item.leida_en, leida_en)
         self.assertEqual(item.titulo, "Nueva")
 
+    def test_reactivar_preserva_fecha_en_alerta_abierta(self):
+        fecha_original = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
+        item = SimpleNamespace(
+            estado="pendiente",
+            leida=False,
+            leida_en=None,
+            resuelta_en=None,
+            resuelta_por=None,
+            pospuesta_hasta=None,
+            responsable_id=None,
+            titulo="Anterior",
+            fecha=fecha_original,
+        )
+
+        cambio = _reactivar(
+            item,
+            {
+                "estado": "pendiente",
+                "titulo": "Nueva",
+                "fecha": datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc),
+            },
+            False,
+        )
+
+        self.assertTrue(cambio)
+        self.assertEqual(item.fecha, fecha_original)
+        self.assertEqual(item.titulo, "Nueva")
+
     def test_reactivar_preserva_responsable_manual_si_regla_no_asigna(self):
         item = SimpleNamespace(
             estado="pendiente",
@@ -267,6 +295,7 @@ class NotificacionesTests(unittest.TestCase):
         crear.assert_called_once()
         self.assertEqual(crear.call_args.kwargs["clave"], "seguimiento-7")
         self.assertEqual(crear.call_args.kwargs["mensaje"], "Seguimiento de CLIENTE PRUEBA")
+        self.assertEqual(crear.call_args.kwargs["fecha"], seguimiento.fecha_proximo_contacto)
 
     def test_sincronizar_seguimiento_resuelve_si_no_debe_alertar(self):
         db = MagicMock()

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_
@@ -32,6 +32,10 @@ def _ahora() -> datetime:
     return now_utc()
 
 
+def _inicio_dia_utc(value: date) -> datetime:
+    return datetime.combine(value, time.min, tzinfo=timezone.utc)
+
+
 def _reactivar(item: Notificacion, data: dict, forzar_reapertura: bool) -> bool:
     if item.estado == "descartada" and not forzar_reapertura:
         return False
@@ -44,6 +48,8 @@ def _reactivar(item: Notificacion, data: dict, forzar_reapertura: bool) -> bool:
 
     cambio = False
     for campo, valor in data.items():
+        if campo == "fecha" and not estaba_cerrada:
+            continue
         if esta_pospuesta and campo in {"estado", "leida", "leida_en", "pospuesta_hasta"}:
             continue
         if campo == "responsable_id" and valor is None and item.responsable_id is not None:
@@ -125,7 +131,7 @@ def sincronizar_documentos_credito(db: Session, credito: Credito, ahora: datetim
             entidad_tipo="credito",
             entidad_id=credito.id,
             pensionado_id=credito.pensionado_id,
-            fecha=ahora,
+            fecha=credito.fecha_registro or ahora,
             leida=False,
         )
 
@@ -220,7 +226,7 @@ def sincronizar_seguimiento(
             entidad_tipo="seguimiento",
             entidad_id=seguimiento.id,
             pensionado_id=seguimiento.pensionado_id,
-            fecha=ahora,
+            fecha=seguimiento.fecha_proximo_contacto,
             leida=False,
         )
     )
@@ -300,7 +306,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
             entidad_tipo="seguimiento",
             entidad_id=seguimiento.id,
             pensionado_id=seguimiento.pensionado_id,
-            fecha=ahora,
+            fecha=seguimiento.fecha_proximo_contacto,
             leida=False,
         )
 
@@ -338,7 +344,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
                 entidad_tipo="credito",
                 entidad_id=credito.id,
                 pensionado_id=credito.pensionado_id,
-                fecha=ahora,
+                fecha=credito.fecha_registro or ahora,
                 leida=False,
             )
         else:
@@ -374,7 +380,7 @@ def sincronizar_reglas(db: Session, referencia: datetime | None = None, commit: 
             entidad_tipo="credito",
             entidad_id=credito.id,
             pensionado_id=credito.pensionado_id,
-            fecha=ahora,
+            fecha=_inicio_dia_utc(elegible["disponible_desde"]),
             leida=False,
         )
 

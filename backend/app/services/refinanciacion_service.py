@@ -1152,7 +1152,7 @@ def cambiar_estado_oportunidad(db: Session, oportunidad_id: int, data: Oportunid
             entidad_tipo="credito",
             entidad_id=credito.id,
             pensionado_id=credito.pensionado_id,
-            fecha=ahora,
+            fecha=oportunidad.created_at or ahora,
             leida=False,
         ))
     db.add(HistorialOportunidadRefinanciacion(oportunidad_id=oportunidad.id, usuario_id=usuario.id, estado_anterior=anterior, estado_nuevo=data.estado, justificacion=data.justificacion))

@@ -295,7 +295,11 @@ export default function CreditosPage() {
 
       setCreditos(creditosResponse.data);
       setTotalCreditos(Number.isFinite(total) ? total : creditosResponse.data.length);
-      setPensionados(pensionadosData);
+      setPensionados((current) => {
+        const byId = new Map(current.map((pensionado) => [pensionado.id, pensionado]));
+        pensionadosData.forEach((pensionado) => byId.set(pensionado.id, pensionado));
+        return Array.from(byId.values());
+      });
       setPendientes(pendientesData);
       setCooperativas(cooperativasData);
       setPagadurias(pagaduriasData);
@@ -368,6 +372,40 @@ export default function CreditosPage() {
         usuario.is_active && (usuario.rol === "asesora" || usuario.rol === "administrador"),
     );
   }, [usuarios]);
+
+  const getCreateAssignmentDefaults = useCallback(
+    function getCreateAssignmentDefaults(source?: Credito | null) {
+      const session = readSession();
+      const userId = readSessionUserId();
+
+      if (session?.rol === "administrador") {
+        return {
+          asesorId: source?.asesor_id
+            ? String(source.asesor_id)
+            : asesores[0]?.id
+              ? String(asesores[0].id)
+              : userId
+                ? String(userId)
+                : "",
+          oficinaId: source?.oficina_id
+            ? String(source.oficina_id)
+            : asesores[0]?.oficina_id
+              ? String(asesores[0].oficina_id)
+              : session?.oficinaId
+                ? String(session.oficinaId)
+              : oficinas[0]?.id
+                ? String(oficinas[0].id)
+                : "",
+        };
+      }
+
+      return {
+        asesorId: userId ? String(userId) : "",
+        oficinaId: session?.oficinaId ? String(session.oficinaId) : "",
+      };
+    },
+    [asesores, oficinas],
+  );
 
   const filtered = useMemo(() => {
     const plazoMin = filters.plazoMin ? Number(filters.plazoMin) : null;
@@ -482,18 +520,13 @@ export default function CreditosPage() {
   );
 
   function openCreateModal() {
-    const session = readSession();
-    const userId = readSessionUserId();
-    const defaultAsesor =
-      session?.rol === "administrador" ? asesores[0] : asesores.find((asesor) => asesor.id === userId);
-    const defaultOficinaId =
-      defaultAsesor?.oficina_id || session?.oficinaId || oficinas[0]?.id || "";
+    const defaults = getCreateAssignmentDefaults();
 
     setSelected(null);
     setForm({
       ...emptyForm,
-      asesor_id: defaultAsesor?.id ? String(defaultAsesor.id) : userId ? String(userId) : "",
-      oficina_id: defaultOficinaId ? String(defaultOficinaId) : "",
+      asesor_id: defaults.asesorId,
+      oficina_id: defaults.oficinaId,
     });
     setFormError(null);
     setModalMode("create");
@@ -516,6 +549,7 @@ export default function CreditosPage() {
         }
 
         refinanceOpened.current = true;
+        const defaults = getCreateAssignmentDefaults(source);
         setCreditos((current) =>
           current.some((item) => item.id === source.id) ? current : [source, ...current],
         );
@@ -537,8 +571,8 @@ export default function CreditosPage() {
         setForm({
           ...emptyForm,
           pensionado_id: String(source.pensionado_id),
-          asesor_id: String(source.asesor_id),
-          oficina_id: String(source.oficina_id),
+          asesor_id: defaults.asesorId,
+          oficina_id: defaults.oficinaId,
           cooperativa_id: String(source.cooperativa_id),
           pagaduria_id: String(source.pagaduria_id),
           tipo_credito: "REFINANCIACION",
@@ -563,7 +597,7 @@ export default function CreditosPage() {
     return () => {
       ignore = true;
     };
-  }, [creditos, loading, searchParams]);
+  }, [creditos, getCreateAssignmentDefaults, loading, searchParams]);
 
   useEffect(() => {
     const pensionadoId = Number(searchParams.get("pensionado"));
@@ -581,14 +615,7 @@ export default function CreditosPage() {
           return;
         }
 
-        const session = readSession();
-        const userId = readSessionUserId();
-        const defaultAsesor =
-          session?.rol === "administrador"
-            ? asesores[0]
-            : asesores.find((asesor) => asesor.id === userId);
-        const defaultOficinaId =
-          defaultAsesor?.oficina_id || session?.oficinaId || oficinas[0]?.id || "";
+        const defaults = getCreateAssignmentDefaults();
 
         newCreditOpened.current = true;
         setPensionados((current) =>
@@ -598,8 +625,8 @@ export default function CreditosPage() {
         setForm({
           ...emptyForm,
           pensionado_id: String(pensionado.id),
-          asesor_id: defaultAsesor?.id ? String(defaultAsesor.id) : userId ? String(userId) : "",
-          oficina_id: defaultOficinaId ? String(defaultOficinaId) : "",
+          asesor_id: defaults.asesorId,
+          oficina_id: defaults.oficinaId,
           tipo_credito: "NUEVO",
         });
         setFormError(null);
@@ -620,7 +647,7 @@ export default function CreditosPage() {
     return () => {
       ignore = true;
     };
-  }, [asesores, loading, oficinas, pensionados, searchParams]);
+  }, [getCreateAssignmentDefaults, loading, pensionados, searchParams]);
 
   function openEditModal(credito: Credito) {
     setSelected(credito);
@@ -704,6 +731,16 @@ export default function CreditosPage() {
           !form.oficina_id
         ) {
           setFormError("Selecciona pensionado, cooperativa, pagaduria, asesor y oficina.");
+          setSaving(false);
+          return;
+        }
+        if (form.tipo_credito === "REFINANCIACION" && !form.credito_refinanciado_id) {
+          setFormError("Selecciona el credito anterior que se va a refinanciar.");
+          setSaving(false);
+          return;
+        }
+        if (form.tipo_credito === "COMPRA CARTERA" && !nullableText(form.entidad_financiera_origen)) {
+          setFormError("Indica la entidad financiera de origen.");
           setSaving(false);
           return;
         }

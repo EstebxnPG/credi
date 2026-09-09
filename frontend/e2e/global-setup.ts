@@ -32,6 +32,7 @@ async function waitForHttp(url: string) {
         await context.dispose();
         return;
       }
+      lastError = `HTTP ${response.status()} ${response.statusText()}`;
     } catch (error) {
       lastError = error;
     }
@@ -91,7 +92,9 @@ office_one = upsert_office(1, "E2E oficina principal", "teal")
 office_two = upsert_office(2, "E2E oficina dos", "blue")
 
 def upsert_user(correo, password, nombre, documento, rol, oficina_id):
-    user = db.query(Usuario).filter(Usuario.correo == correo).first()
+    user = db.query(Usuario).filter(
+        (Usuario.correo == correo) | (Usuario.documento == documento)
+    ).first()
     if not user:
         user = Usuario(
             oficina_id=oficina_id,
@@ -106,6 +109,8 @@ def upsert_user(correo, password, nombre, documento, rol, oficina_id):
         db.add(user)
     else:
         user.nombre = nombre
+        user.documento = documento
+        user.correo = correo
         user.contrasena = hash_password(password)
         user.rol = rol
         user.oficina_id = oficina_id
